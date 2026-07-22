@@ -32,6 +32,12 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
+      - name: Install Android SDK packages
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "platforms;android-35" \
+            "build-tools;35.0.0"
+
       - name: Build debug APK
         run: gradle assembleDebug --no-daemon --stacktrace
 
