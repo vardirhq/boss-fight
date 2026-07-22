@@ -3,7 +3,6 @@ package no.vardir.bossfight
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -203,12 +202,10 @@ private fun BossCard(
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Fit,
                 )
-                AnimatedVisibility(
-                    visible = defeated,
-                    modifier = Modifier.align(Alignment.Center),
-                ) {
+                if (defeated) {
                     Text(
                         text = "VICTORY",
+                        modifier = Modifier.align(Alignment.Center),
                         color = Gold,
                         fontSize = 42.sp,
                         fontWeight = FontWeight.Black,
