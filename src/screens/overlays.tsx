@@ -95,7 +95,7 @@ export function Splash() {
   return (
     <div onClick={actions.dismissSplash} style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'radial-gradient(120% 90% at 50% 22%,#1a2338,#0c0f16 60%,#070910)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', overflow: 'hidden', padding: 24 }}>
       <div style={{ position: 'absolute', inset: 0, backgroundImage: 'linear-gradient(rgba(91,155,232,.08) 1px,transparent 1px),linear-gradient(90deg,rgba(91,155,232,.08) 1px,transparent 1px)', backgroundSize: '34px 34px', maskImage: 'linear-gradient(180deg,#000,transparent 85%)', WebkitMaskImage: 'linear-gradient(180deg,#000,transparent 85%)' }} />
-      <img src="/uploads/sock-void-boss-transparent.png" alt="" style={{ position: 'absolute', bottom: -50, left: '50%', transform: 'translateX(-50%)', width: 'min(94vw,480px)', opacity: .09, filter: 'grayscale(1)', pointerEvents: 'none' }} />
+      <img src="/uploads/sock-void-boss-transparent.webp" alt="" style={{ position: 'absolute', bottom: -50, left: '50%', transform: 'translateX(-50%)', width: 'min(94vw,480px)', opacity: .09, filter: 'grayscale(1)', pointerEvents: 'none' }} />
       <div style={{ position: 'relative', zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20, animation: 'introSlam .8s cubic-bezier(.2,.9,.2,1) both' }}>
         <SwordCrest size={92} />
         <div style={{ textAlign: 'center', lineHeight: 1 }}>
@@ -142,7 +142,7 @@ export function Onboarding() {
             <StepBody>{t.ob1Body}</StepBody>
           </Step>
           <Step>
-            <img src="/uploads/crumb-colossus-boss-transparent.png" alt="" style={{ width: 'min(56vw,220px)', animation: 'idleBob 3.2s ease-in-out infinite', filter: 'drop-shadow(0 18px 22px rgba(0,0,0,.5))' }} />
+            <img src="/uploads/crumb-colossus-boss-transparent.webp" alt="" style={{ width: 'min(56vw,220px)', animation: 'idleBob 3.2s ease-in-out infinite', filter: 'drop-shadow(0 18px 22px rgba(0,0,0,.5))' }} />
             <StepTitle color="#E0564A">{t.ob2Title}</StepTitle>
             <StepBody>{t.ob2Body}</StepBody>
           </Step>

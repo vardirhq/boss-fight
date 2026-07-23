@@ -126,19 +126,48 @@ cycle and re-rolls when the cycle rolls over. Effects:
 
 You get this for free on every non-rare boss. No fields to set.
 
+### Bespoke enraged art (optional)
+
+A boss can have a dedicated "enraged" sprite that replaces the base art (and the
+red CSS tint) while it's elite. It's keyed by **base sprite**, not boss id, via the
+`ELITE_SPRITE` map in `seed.ts`:
+
+```ts
+export const ELITE_SPRITE: Record<string, string> = {
+  [SPRITE.laundry]: SPRITE.laundryElite,
+};
+```
+
+To add one: drop a transparent WebP in `public/uploads/`, add it to the `SPRITE`
+map, and add a `base → elite` entry to `ELITE_SPRITE`. That's it — no schema
+change, no per-boss field. Any boss (seeded or parent-created) using that base
+sprite automatically shows the art when it rolls elite; bosses without an entry
+fall back to the generic red tint. Keep the elite sprite **out of `SPRITE_POOL`**
+so parents don't pick it as a base. When bespoke art is present, the Battle screen
+also drops the generic red aura (`hasEliteArt`) so the art's own effects read
+cleanly. Rendering resolves the swap in `BossSprite` (via `eliteSpriteFor`) and in
+the Home `BossCard`.
+
 ## Art: new sprite vs. palette variant
 
 You have two ways to give a boss a look:
 
-**A. New sprite art.** Drop the file in `public/uploads/` (or `public/sprites/`),
-then in `seed.ts`:
-1. add a key to the `SPRITE` map, e.g. `broom: '/uploads/broom-wraith-transparent.png'`
+**A. New sprite art.** Ship boss art as **WebP with alpha**, not PNG — the roster
+was converted for a ~6x size drop (a transparent boss PNG is ~1.5–2 MB; the WebP
+is ~200–300 KB). Convert a source PNG with `sharp`:
+`sharp(inPng).webp({ quality: 82, alphaQuality: 90, effort: 6 })` — use
+`{ quality: 92 }` for animated sprite-sheets to keep frames crisp. Drop the `.webp`
+in `public/uploads/` (or `public/sprites/`), then in `seed.ts`:
+1. add a key to the `SPRITE` map, e.g. `broom: '/uploads/broom-wraith-transparent.webp'`
 2. reference it as `sprite: SPRITE.broom`
 3. add it to `SPRITE_POOL` so the Boss Manager's "cycle sprite" button can reach it
    (skip the pool for one-off rare/animated sprites like the Golden sheet).
 
 Art lives outside the Workbox precache on purpose (runtime cache-first) — don't
-move it into the precache glob in `vite.config.ts`.
+move it into the precache glob in `vite.config.ts`. If you ever rename or
+re-encode an existing sprite, remember its path may be persisted in players'
+saves: `remapSprite()` (derived from `SPRITE`) rewrites old `/uploads/*.png` paths
+to their current file on load, so keep that mechanism in mind.
 
 **B. Reuse a sprite with a `hue` shift (no new art).** Set `hue` to a degree value
 and the same silhouette reads as a distinct "frost / mold / shadow" creature. This

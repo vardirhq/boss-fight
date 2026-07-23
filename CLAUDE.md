@@ -73,7 +73,7 @@ src/
   ui/
     common.tsx        useT() strings hook, BossSprite, Avatar, shared color constants
 public/
-  sprites/, uploads/  Boss art (png/webp); runtime-cached, kept out of the precache
+  sprites/, uploads/  Boss art (WebP w/ alpha); runtime-cached, kept out of the precache
   icons/              PWA icons
 ```
 
