@@ -3,20 +3,20 @@ import type { Boss, Chore, RewardDef, Trigger } from './types';
 /** Sprite paths as served from /public. */
 export const SPRITE = {
   laundry: '/sprites/laundry_dragon.webp',
-  socks: '/uploads/sock-void-boss-transparent.png',
-  dishes: '/uploads/dish-hydra-boss-transparent.png',
-  fridge: '/uploads/fridge-rot-colossus-boss-transparent.png',
-  crumb: '/uploads/crumb-colossus-boss-transparent.png',
-  toys: '/uploads/toyquake-titan-boss-transparent.png',
-  paper: '/uploads/paper-kraken-boss-transparent.png',
-  trash: '/uploads/trash-heap-behemoth-boss-transparent.png',
-  mirror: '/uploads/mirror-smudge-phantom-boss-transparent.png',
-  backpack: '/uploads/backpack-avalanche-boss-transparent.png',
-  schedule: '/uploads/schedule-specter-boss-transparent.png',
-  cable: '/uploads/cable-serpent-boss-transparent.png',
-  golem: '/uploads/chore-golem-boss-transparent.png',
-  todo: '/uploads/todo-swarm-boss-transparent.png',
-  golden: '/uploads/the-golden-done-idle-sprite-sheet-transparent.png',
+  socks: '/uploads/sock-void-boss-transparent.webp',
+  dishes: '/uploads/dish-hydra-boss-transparent.webp',
+  fridge: '/uploads/fridge-rot-colossus-boss-transparent.webp',
+  crumb: '/uploads/crumb-colossus-boss-transparent.webp',
+  toys: '/uploads/toyquake-titan-boss-transparent.webp',
+  paper: '/uploads/paper-kraken-boss-transparent.webp',
+  trash: '/uploads/trash-heap-behemoth-boss-transparent.webp',
+  mirror: '/uploads/mirror-smudge-phantom-boss-transparent.webp',
+  backpack: '/uploads/backpack-avalanche-boss-transparent.webp',
+  schedule: '/uploads/schedule-specter-boss-transparent.webp',
+  cable: '/uploads/cable-serpent-boss-transparent.webp',
+  golem: '/uploads/chore-golem-boss-transparent.webp',
+  todo: '/uploads/todo-swarm-boss-transparent.webp',
+  golden: '/uploads/the-golden-done-idle-sprite-sheet-transparent.webp',
   laundryElite: '/uploads/laundry-dragon-elite-transparent.webp',
 } as const;
 
@@ -33,6 +33,22 @@ export const ELITE_SPRITE: Record<string, string> = {
 /** The dedicated enraged sprite for a boss, if one exists for its base sprite. */
 export function eliteSpriteFor(boss: { sprite: string }): string | undefined {
   return ELITE_SPRITE[boss.sprite];
+}
+
+/**
+ * Boss art was migrated from PNG to WebP. Saved bosses (and user edits) store the
+ * old `/uploads/*-transparent.png` paths, so remap them to the WebP file on load.
+ * Derived from `SPRITE` so future sprites are covered automatically.
+ */
+export const SPRITE_RENAMES: Record<string, string> = Object.fromEntries(
+  Object.values(SPRITE)
+    .filter((p) => p.startsWith('/uploads/') && p.endsWith('.webp'))
+    .map((p) => [p.replace(/\.webp$/, '.png'), p]),
+);
+
+/** Map a stored sprite path to its current file (identity if already current). */
+export function remapSprite(path: string): string {
+  return SPRITE_RENAMES[path] ?? path;
 }
 
 /** Pool of sprites cycled through in the boss manager. */

@@ -1,6 +1,6 @@
 import type { Db } from './sqlite';
 import { ALL_TABLES, SCHEMA_VERSION, ensureSchema, readSchemaVersion, writeSchemaVersion } from './schema';
-import { seedBosses, extraSeedBosses } from '../game/seed';
+import { seedBosses, extraSeedBosses, remapSprite } from '../game/seed';
 import type {
   Boss, Chore, Fighter, GameState, Lang, LogEntry, Redemption, Settings, Trigger, TriggerType,
 } from '../game/types';
@@ -70,7 +70,7 @@ export function loadState(db: Db): GameState {
     return {
       id: String(r.id),
       name: String(r.name),
-      sprite: String(r.sprite),
+      sprite: remapSprite(String(r.sprite)),
       frames: Number(r.frames) || 0,
       rare: !!Number(r.rare),
       trigger,
