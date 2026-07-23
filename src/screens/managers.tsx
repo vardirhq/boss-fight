@@ -1,6 +1,6 @@
 import { useGame } from '../store/GameContext';
 import { useT, Avatar, initialOf, GOLD } from '../ui/common';
-import { maxHpOf } from '../game/logic';
+import { maxHpOf, bossFilter } from '../game/logic';
 import { FIGHTER_COLORS } from '../game/seed';
 import { DAY_SHORT } from '../game/i18n';
 import type { TriggerType } from '../game/types';
@@ -13,6 +13,8 @@ const doneBtn: React.CSSProperties = { flex: 'none', padding: '12px 20px', borde
 const textInput: React.CSSProperties = { flex: 1, minWidth: 0, background: '#0f1420', border: '1px solid #333c50', borderRadius: 10, padding: '11px 12px', color: '#F6EBDD', fontSize: 15, fontWeight: 700, outline: 'none' };
 const delBtn: React.CSSProperties = { flex: 'none', width: 38, height: 38, borderRadius: 10, background: '#241518', border: '1px solid rgba(224,86,74,.4)', color: '#E0564A', fontSize: 20, lineHeight: 1, cursor: 'pointer', display: 'grid', placeItems: 'center' };
 const dashedAdd: React.CSSProperties = { border: '1px dashed #38425a', background: 'none', borderRadius: 14, padding: 15, color: '#A8B0BF', fontSize: 13, fontWeight: 600, cursor: 'pointer' };
+const sleepBtn: React.CSSProperties = { flex: 'none', padding: '8px 14px', borderRadius: 10, background: '#232c3e', border: '1px solid #333c50', color: '#A8B0BF', fontSize: 12, fontWeight: 700, cursor: 'pointer' };
+const wakeBtn: React.CSSProperties = { flex: 'none', padding: '8px 14px', borderRadius: 10, background: 'rgba(103,211,145,.14)', border: '1px solid rgba(103,211,145,.45)', color: '#67D391', fontSize: 12, fontWeight: 700, cursor: 'pointer' };
 
 function seg(active: boolean): React.CSSProperties {
   return active
@@ -46,8 +48,8 @@ export function BossManager() {
           return (
             <div key={b.id} style={{ background: '#1b2130', border: '1px solid #2b3346', borderRadius: 16, padding: 14 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <button onClick={() => actions.cycleSprite(b.id)} title="Bytt bilde" style={{ flex: 'none', width: 52, height: 52, borderRadius: 13, background: '#0f1420', border: '1px solid #333c50', overflow: 'hidden', cursor: 'pointer', padding: 3 }}>
-                  <img src={b.sprite} alt={b.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                <button onClick={() => actions.cycleSprite(b.id)} title="Bytt bilde" style={{ flex: 'none', width: 52, height: 52, borderRadius: 13, background: '#0f1420', border: '1px solid #333c50', overflow: 'hidden', cursor: 'pointer', padding: 3, opacity: b.dormant ? .55 : 1 }}>
+                  <img src={b.sprite} alt={b.name} style={{ width: '100%', height: '100%', objectFit: 'contain', ...(bossFilter(b) ? { filter: bossFilter(b) } : {}) }} />
                 </button>
                 <input value={b.name} onChange={(e) => actions.editBoss(b.id, { name: e.target.value })} placeholder={t.bossNamePh} style={textInput} />
                 <button onClick={() => actions.deleteBoss(b.id)} style={delBtn}>×</button>
@@ -74,7 +76,15 @@ export function BossManager() {
                 </div>
               )}
               <input value={tr.note ?? ''} onChange={(e) => actions.setTrigger(b.id, { note: e.target.value })} placeholder={t.notePh} style={{ marginTop: 10, width: '100%', background: '#0f1420', border: '1px solid #333c50', borderRadius: 10, padding: '10px 12px', color: '#A8B0BF', fontSize: 13, outline: 'none' }} />
-              <button onClick={() => actions.openEditChores(b.id)} style={{ marginTop: 12, width: '100%', background: '#232c3e', border: '1px solid #333c50', borderRadius: 10, padding: 11, color: '#F6EBDD', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>{t.editChoresBtn.replace('{n}', String(b.chores.length))}</button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: b.dormant ? '#8b93a5' : '#67D391' }}>
+                  {b.dormant ? t.mgrAsleep : t.mgrActive}
+                  {b.dormant && b.unlockAt > 0 && <span style={{ color: '#6C7486', fontWeight: 500 }}> · {t.mgrUnlockAt.replace('{v}', String(b.unlockAt))}</span>}
+                </span>
+                <div style={{ flex: 1 }} />
+                <button onClick={() => actions.toggleDormant(b.id)} style={b.dormant ? wakeBtn : sleepBtn}>{b.dormant ? t.mgrWake : t.mgrSleep}</button>
+              </div>
+              <button onClick={() => actions.openEditChores(b.id)} style={{ marginTop: 10, width: '100%', background: '#232c3e', border: '1px solid #333c50', borderRadius: 10, padding: 11, color: '#F6EBDD', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>{t.editChoresBtn.replace('{n}', String(b.chores.length))}</button>
             </div>
           );
         })}

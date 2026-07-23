@@ -1,6 +1,6 @@
 import type { Db } from './sqlite';
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS meta (
@@ -20,7 +20,10 @@ CREATE TABLE IF NOT EXISTS bosses (
   trigger_note  TEXT,
   hp            INTEGER NOT NULL DEFAULT 0,
   cleared_cycle TEXT NOT NULL DEFAULT '',
-  sort          INTEGER NOT NULL DEFAULT 0
+  sort          INTEGER NOT NULL DEFAULT 0,
+  dormant       INTEGER NOT NULL DEFAULT 0,
+  unlock_at     INTEGER NOT NULL DEFAULT 0,
+  hue           INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS chores (
@@ -74,9 +77,31 @@ export const ALL_TABLES = [
   'meta', 'bosses', 'chores', 'used_chores', 'fighters', 'battle_log', 'redemptions',
 ];
 
-/** Create tables if they don't exist yet (idempotent DDL). */
+/** Columns added to existing tables after v1 (name → column DDL). */
+const ADDED_COLUMNS: Record<string, [string, string][]> = {
+  bosses: [
+    ['dormant', 'INTEGER NOT NULL DEFAULT 0'],
+    ['unlock_at', 'INTEGER NOT NULL DEFAULT 0'],
+    ['hue', 'INTEGER'],
+  ],
+};
+
+/** Add any columns missing from an already-created table (SQLite lacks IF NOT EXISTS on ADD COLUMN). */
+function ensureColumns(db: Db): void {
+  for (const [table, cols] of Object.entries(ADDED_COLUMNS)) {
+    const present = new Set(
+      db.query<{ name: string }>(`PRAGMA table_info(${table})`).map((r) => String(r.name)),
+    );
+    for (const [name, ddl] of cols) {
+      if (!present.has(name)) db.run(`ALTER TABLE ${table} ADD COLUMN ${name} ${ddl}`);
+    }
+  }
+}
+
+/** Create tables if they don't exist yet (idempotent DDL) and backfill added columns. */
 export function ensureSchema(db: Db): void {
   db.execScript(SCHEMA_SQL);
+  ensureColumns(db);
 }
 
 /** Stored schema version, or 0 if the database has never been stamped. */

@@ -21,6 +21,61 @@ export function cycleKey(boss: Boss, now = new Date()): string {
   return 'alltid';
 }
 
+/** Small stable string hash (djb2), used for deterministic per-cycle rolls. */
+export function hashStr(s: string): number {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return h >>> 0;
+}
+
+/**
+ * Whether a dormant boss has woken up. Non-dormant bosses are always awake;
+ * a dormant boss awakens once the family reaches its `unlockAt` victory count.
+ * A parent-slept boss (dormant with unlockAt 0) stays asleep until woken by hand.
+ */
+export function isAwake(boss: Boss, victories: number): boolean {
+  return !boss.dormant || (boss.unlockAt > 0 && victories >= boss.unlockAt);
+}
+
+/** Number of still-slumbering bosses, and the next victory milestone that wakes one. */
+export function slumberInfo(bosses: Boss[], victories: number): { count: number; next: number | null } {
+  const locked = bosses.filter((b) => !isAwake(b, victories));
+  const thresholds = locked
+    .map((b) => b.unlockAt)
+    .filter((v) => v > victories)
+    .sort((a, b) => a - b);
+  return { count: locked.length, next: thresholds[0] ?? null };
+}
+
+/** Percentage chance that any given active-boss cycle spawns an enraged "elite" variant. */
+export const ELITE_CHANCE = 22;
+/** Coin multiplier awarded for defeating an elite (enraged) boss. */
+export const ELITE_COIN_MULT = 1.5;
+
+/** Stable key for the window an elite roll belongs to (daily for always-on bosses). */
+function eliteKey(boss: Boss, now: Date): string {
+  if (boss.trigger.type === 'alltid') return boss.id + '|d' + now.toDateString();
+  return boss.id + '|' + cycleKey(boss, now);
+}
+
+/**
+ * Deterministic per-cycle "enraged" roll. Same boss + same cycle always agrees,
+ * and it re-rolls when the cycle rolls over. Rare (Golden) bosses are never elite —
+ * they are already their own spectacle.
+ */
+export function isElite(boss: Boss, now = new Date()): boolean {
+  if (boss.rare) return false;
+  return hashStr(eliteKey(boss, now)) % 100 < ELITE_CHANCE;
+}
+
+/** Composed CSS filter for a boss sprite: permanent hue variant + optional enraged tint. */
+export function bossFilter(boss: Boss, elite = false): string {
+  const parts: string[] = [];
+  if (boss.hue) parts.push(`hue-rotate(${boss.hue}deg)`, 'saturate(1.25)');
+  if (elite) parts.push('saturate(1.6)', 'contrast(1.12)', 'drop-shadow(0 0 12px rgba(224,86,74,.6))');
+  return parts.join(' ');
+}
+
 /** Whether a boss is currently due (spawned) for its schedule. */
 export function isDue(boss: Boss, goldenRevealed: boolean, now = new Date()): boolean {
   const t = boss.trigger;

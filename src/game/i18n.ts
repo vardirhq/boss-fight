@@ -7,7 +7,9 @@ export interface Strings {
   turnPrefix: string; turnSuffix: string;
   level: string; statLine: string; dmgNow: string;
   tierLight: string; tierMed: string; tierCrit: string; badgeDone: string; badgeRepeat: string; badgeCrit: string;
-  stAktiv: string; stBeseiret: string; stPlanlagt: string; stRare: string;
+  stAktiv: string; stBeseiret: string; stPlanlagt: string; stRare: string; stElite: string;
+  eliteBonus: string; bossesSleeping: string; nextWakes: string; bossAwoke: string;
+  mgrAsleep: string; mgrActive: string; mgrSleep: string; mgrWake: string; mgrUnlockAt: string;
   editChoresTitle: string; editChoresSub: string; chorePlaceholder: string; dmgWord: string;
   repMulti: string; repOnce: string; addChore: string; bossHpSum: string; hpWord: string;
   bossMgrTitle: string; bossMgrSub: string; bossNamePh: string; appearsWhen: string;
@@ -49,7 +51,9 @@ export const STRINGS: Record<Lang, Strings> = {
     turnPrefix: '', turnSuffix: ' er på tur',
     level: 'NV', statLine: '{h} angrep nå · {x}', dmgNow: 'skade nå',
     tierLight: 'LETT', tierMed: 'MIDDELS', tierCrit: 'KRITISK', badgeDone: '✓ GJORT', badgeRepeat: '↻ GJENTAS', badgeCrit: 'KRIT',
-    stAktiv: 'AKTIV', stBeseiret: 'BESEIRET', stPlanlagt: 'PLANLAGT', stRare: 'SJELDEN BOSS',
+    stAktiv: 'AKTIV', stBeseiret: 'BESEIRET', stPlanlagt: 'PLANLAGT', stRare: 'SJELDEN BOSS', stElite: 'RASENDE',
+    eliteBonus: 'RASENDE BOSS · BONUSMYNTER!', bossesSleeping: '{n} BOSSER SOVER', nextWakes: 'Neste våkner ved {v} seire', bossAwoke: 'Ny boss vekket: {name}!',
+    mgrAsleep: 'Sover', mgrActive: 'Aktiv', mgrSleep: 'La sove', mgrWake: 'Vekk nå', mgrUnlockAt: 'våkner ved {v} seire',
     editChoresTitle: 'REDIGER GJØREMÅL', editChoresSub: '{boss} · sett skade og hvor ofte', chorePlaceholder: 'Navn på gjøremål', dmgWord: 'Skade',
     repMulti: '↻ Gjentas flere ganger', repOnce: '✓ Kun én gang', addChore: '+ Legg til gjøremål', bossHpSum: 'Boss-HP = sum av all skade', hpWord: 'HP',
     bossMgrTitle: 'REDIGER BOSSER', bossMgrSub: 'Foreldremodus · navn, når de dukker opp og gjøremål', bossNamePh: 'Bossnavn', appearsWhen: 'DUKKER OPP',
@@ -93,7 +97,9 @@ export const STRINGS: Record<Lang, Strings> = {
     turnPrefix: '', turnSuffix: '’s turn',
     level: 'LV', statLine: '{h} attacks now · {x}', dmgNow: 'dmg now',
     tierLight: 'LIGHT', tierMed: 'MEDIUM', tierCrit: 'CRITICAL', badgeDone: '✓ DONE', badgeRepeat: '↻ REPEATS', badgeCrit: 'CRIT',
-    stAktiv: 'ACTIVE', stBeseiret: 'DEFEATED', stPlanlagt: 'SCHEDULED', stRare: 'RARE BOSS',
+    stAktiv: 'ACTIVE', stBeseiret: 'DEFEATED', stPlanlagt: 'SCHEDULED', stRare: 'RARE BOSS', stElite: 'ENRAGED',
+    eliteBonus: 'ENRAGED BOSS · BONUS COINS!', bossesSleeping: '{n} BOSSES ASLEEP', nextWakes: 'Next wakes at {v} wins', bossAwoke: 'New boss awakened: {name}!',
+    mgrAsleep: 'Asleep', mgrActive: 'Active', mgrSleep: 'Put to sleep', mgrWake: 'Wake now', mgrUnlockAt: 'wakes at {v} wins',
     editChoresTitle: 'EDIT CHORES', editChoresSub: '{boss} · set damage and how often', chorePlaceholder: 'Chore name', dmgWord: 'Damage',
     repMulti: '↻ Repeats multiple times', repOnce: '✓ Once only', addChore: '+ Add chore', bossHpSum: 'Boss HP = sum of all damage', hpWord: 'HP',
     bossMgrTitle: 'EDIT BOSSES', bossMgrSub: 'Parent mode · name, when they appear and chores', bossNamePh: 'Boss name', appearsWhen: 'APPEARS',

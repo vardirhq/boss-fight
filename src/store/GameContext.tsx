@@ -4,8 +4,9 @@ import {
 } from 'react';
 import { Db } from '../db/sqlite';
 import { resetState, saveState } from '../db/repository';
-import { maxHpOf, cycleKey, statusOf, todayShort } from '../game/logic';
+import { maxHpOf, cycleKey, statusOf, todayShort, isElite, isAwake, ELITE_COIN_MULT } from '../game/logic';
 import { FIGHTER_COLORS, SPRITE_POOL, sumDamage } from '../game/seed';
+import { STRINGS } from '../game/i18n';
 import { AudioEngine, buzz } from './audio';
 import type {
   Boss, Chore, Fighter, GameState, RewardDef, Settings, Tab, Trigger,
@@ -115,6 +116,7 @@ export interface GameActions {
   editBoss(id: string, patch: Partial<Pick<Boss, 'name' | 'sprite'>>): void;
   setTrigger(id: string, patch: Partial<Trigger>): void;
   cycleSprite(id: string): void;
+  toggleDormant(id: string): void;
   addBoss(): void;
   deleteBoss(id: string): void;
   openEditChores(id?: string): void;
@@ -274,6 +276,7 @@ export function GameProvider({ db, initial, children }: { db: Db; initial: GameS
       const boss = g.bosses.find((b) => b.id === g.currentBossId);
       if (!boss) return g;
       const ck = cycleKey(boss);
+      const elite = isElite(boss);
       const gained: Record<string, number> = {};
       for (const f of g.fighters) {
         gained[f.id] = g.log
@@ -282,7 +285,9 @@ export function GameProvider({ db, initial, children }: { db: Db; initial: GameS
       }
       let total = 0;
       const fighters = g.fighters.map((f) => {
-        const earned = Math.round((gained[f.id] || 0) / 4);
+        // Coins reward effort; an enraged boss pays a bonus. Career XP tracks the
+        // real damage dealt and is never multiplied.
+        const earned = Math.round(((gained[f.id] || 0) / 4) * (elite ? ELITE_COIN_MULT : 1));
         total += earned;
         return {
           ...f,
@@ -291,10 +296,19 @@ export function GameProvider({ db, initial, children }: { db: Db; initial: GameS
         };
       });
       patchUi((u) => ({ ...u, lastRewardTotal: total }));
+
+      // A milestone win can awaken slumbering bosses — celebrate the reveal by name.
+      const victories = g.victories + 1;
+      const woke = g.bosses.filter((b) => !isAwake(b, g.victories) && isAwake(b, victories));
+      if (woke.length) {
+        const s = STRINGS[g.settings.lang];
+        flash(s.bossAwoke.replace('{name}', woke.map((b) => b.name).join(', ')));
+      }
+
       return {
         ...g,
         fighters,
-        victories: g.victories + 1,
+        victories,
         goldenRevealed: boss.rare ? true : g.goldenRevealed,
         bosses: g.bosses.map((b) => (b.id === boss.id ? { ...b, clearedCycle: ck } : b)),
       };
@@ -503,6 +517,16 @@ export function GameProvider({ db, initial, children }: { db: Db; initial: GameS
             return { ...b, sprite: SPRITE_POOL[(i + 1) % SPRITE_POOL.length] };
           }),
         })),
+      toggleDormant: (id) =>
+        patchGame((g) => ({
+          ...g,
+          bosses: g.bosses.map((b) => {
+            if (b.id !== id) return b;
+            // Sleeping a boss clears its auto-wake milestone (a deliberate parent choice);
+            // waking one just clears the dormant flag.
+            return b.dormant ? { ...b, dormant: false } : { ...b, dormant: true, unlockAt: 0 };
+          }),
+        })),
       addBoss: () =>
         patchGame((g) => {
           const id = 'b' + Date.now();
@@ -510,6 +534,7 @@ export function GameProvider({ db, initial, children }: { db: Db; initial: GameS
           const boss: Boss = {
             id, name: 'Ny boss', sprite: SPRITE_POOL[0], frames: 0, rare: false,
             trigger: { type: 'daglig', note: '' }, chores: [chore], hp: 20, clearedCycle: '', usedChores: [],
+            dormant: false, unlockAt: 0,
           };
           return { ...g, bosses: [...g.bosses, boss] };
         }),

@@ -30,3 +30,4 @@ input { font-family: inherit; }
 @keyframes raySpin { to { transform: rotate(360deg); } }
 @keyframes twinkle { 0%, 100% { opacity: .15; transform: rotate(45deg) scale(.6); } 50% { opacity: 1; transform: rotate(45deg) scale(1.15); } }
 @keyframes rareGlow { 0%, 100% { filter: drop-shadow(0 0 10px rgba(244,185,66,.55)) drop-shadow(0 12px 18px rgba(0,0,0,.5)); } 50% { filter: drop-shadow(0 0 22px rgba(255,215,120,.9)) drop-shadow(0 12px 18px rgba(0,0,0,.5)); } }
+@keyframes emberPulse { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }

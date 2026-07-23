@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useGame } from '../store/GameContext';
 import { useT, BossSprite, Avatar, initialOf, GOLD } from '../ui/common';
-import { maxHpOf, scheduleLabel, statusOf, hexA } from '../game/logic';
+import { maxHpOf, scheduleLabel, statusOf, hexA, isElite } from '../game/logic';
 
 const PS = "'Press Start 2P'";
 
@@ -19,6 +19,7 @@ export function BattleScreen() {
   const defeated = hp <= 0;
   const status = statusOf(boss, g.goldenRevealed);
   const statusLabel = status === 'aktiv' ? t.stAktiv : status === 'beseiret' ? t.stBeseiret : t.stPlanlagt;
+  const elite = isElite(boss);
 
   const activeFighter = g.fighters.find((f) => f.id === g.activeFighterId);
   const activeName = activeFighter?.name ?? '—';
@@ -61,13 +62,22 @@ export function BattleScreen() {
             <div style={{ position: 'absolute', inset: 0, borderRadius: 24, boxShadow: 'inset 0 0 70px rgba(244,185,66,.28)', zIndex: 13, pointerEvents: 'none' }} />
           </>
         )}
+        {elite && !boss.rare && (
+          <>
+            <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(120% 95% at 50% 42%,rgba(224,86,74,.28) 0%,rgba(150,30,25,.12) 44%,transparent 72%)', zIndex: 2, pointerEvents: 'none', animation: 'emberPulse 2.4s ease-in-out infinite' }} />
+            <div style={{ position: 'absolute', inset: 0, borderRadius: 24, boxShadow: 'inset 0 0 60px rgba(224,86,74,.30)', zIndex: 13, pointerEvents: 'none' }} />
+          </>
+        )}
         <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 118, background: 'linear-gradient(0deg,rgba(9,12,20,.97) 30%,rgba(9,12,20,.6) 70%,transparent)', zIndex: 14, pointerEvents: 'none' }} />
 
         {/* HP bar */}
         <div style={{ position: 'absolute', bottom: 16, left: 16, right: 16, zIndex: 15 }}>
           <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 6 }}>
             <div style={{ fontFamily: PS, fontSize: 11, color: boss.rare ? '#ffe08a' : '#F6EBDD', textShadow: '0 2px 0 rgba(0,0,0,.6)', letterSpacing: .5, textTransform: 'uppercase' }}>{boss.name}</div>
-            <div style={boss.rare ? rareBadge : normalBadge}>{statusLabel}</div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {elite && !boss.rare && <div style={eliteBadge}>{t.stElite}</div>}
+              <div style={boss.rare ? rareBadge : normalBadge}>{statusLabel}</div>
+            </div>
           </div>
           <div style={{ position: 'relative', height: 16, borderRadius: 8, background: '#0b0e16', border: '1.5px solid #000', boxShadow: 'inset 0 2px 4px rgba(0,0,0,.6),0 1px 0 rgba(255,255,255,.06)', overflow: 'hidden' }}>
             <div style={{ position: 'absolute', inset: 0, width: `${pct}%`, background: boss.rare ? 'linear-gradient(180deg,#ffe9a8,#F4B942 52%,#c8901c)' : 'linear-gradient(180deg,#ff7a6e,#E0564A 55%,#b83b31)', transition: 'width .5s cubic-bezier(.2,.8,.2,1)', borderRadius: 6 }}>
@@ -94,6 +104,7 @@ export function BattleScreen() {
             <BossSprite
               ref={actions.setSpriteRef}
               boss={boss}
+              elite={elite}
               style={boss.frames ? { height: 340, width: 170 } : { width: 'min(58vw,224px)' }}
             />
           </div>
@@ -106,7 +117,7 @@ export function BattleScreen() {
           <div key={d.id} style={{ position: 'absolute', top: '44%', left: `${d.x}%`, transform: 'translateX(-50%)', fontFamily: PS, fontSize: d.crit ? 30 : 21, color: d.crit ? GOLD : '#fff', textShadow: `0 2px 0 #000,0 0 14px ${d.crit ? 'rgba(244,185,66,.7)' : 'rgba(0,0,0,.6)'}`, animation: 'floatDmg .95s ease-out forwards', pointerEvents: 'none', zIndex: 22, whiteSpace: 'nowrap' }}>{d.label}</div>
         ))}
 
-        {ui.won && <VictoryOverlay mvp={mvpName} coins={ui.lastRewardTotal} />}
+        {ui.won && <VictoryOverlay mvp={mvpName} coins={ui.lastRewardTotal} elite={elite} />}
         {ui.intro && (
           <div onClick={actions.startFight} style={{ position: 'absolute', inset: 0, zIndex: 35, background: 'rgba(7,9,13,.72)', backdropFilter: 'blur(3px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 20 }}>
             <div style={{ fontFamily: PS, fontSize: 9, color: '#E0564A', letterSpacing: 2, animation: 'victoryPop .4s ease-out both' }}>{t.introAppears}</div>
@@ -189,7 +200,7 @@ export function BattleScreen() {
   );
 }
 
-function VictoryOverlay({ mvp, coins }: { mvp: string; coins: number }) {
+function VictoryOverlay({ mvp, coins, elite }: { mvp: string; coins: number; elite: boolean }) {
   const { actions } = useGame();
   const { confetti } = useGame();
   const t = useT();
@@ -200,6 +211,7 @@ function VictoryOverlay({ mvp, coins }: { mvp: string; coins: number }) {
       ))}
       <div style={{ fontFamily: PS, fontSize: 12, color: '#67D391', letterSpacing: 2, animation: 'victoryPop .5s ease-out both' }}>{t.bossDefeated}</div>
       <div style={{ fontFamily: PS, fontSize: 34, color: GOLD, textShadow: '0 4px 0 rgba(0,0,0,.6),0 0 22px rgba(244,185,66,.55)', marginTop: 16, textAlign: 'center', animation: 'victoryPop .6s .08s ease-out both' }}>{t.victory}</div>
+      {elite && <div style={{ fontFamily: PS, fontSize: 8, color: '#E0564A', letterSpacing: 1, marginTop: 12, textAlign: 'center', animation: 'victoryPop .6s .14s ease-out both' }}>{t.eliteBonus}</div>}
       <div style={{ marginTop: 22, background: 'rgba(255,255,255,.05)', border: '1px solid #333c50', borderRadius: 16, padding: '16px 24px', display: 'flex', gap: 28, animation: 'victoryPop .6s .18s ease-out both' }}>
         <div style={{ textAlign: 'center' }}><div style={{ fontFamily: PS, fontSize: 16, color: GOLD }}>+{coins}</div><div style={{ fontSize: 10, color: '#6C7486', marginTop: 5, letterSpacing: .5 }}>{t.coinsLabel}</div></div>
         <div style={{ width: 1, background: '#333c50' }} />
@@ -230,6 +242,7 @@ const iconBtn: React.CSSProperties = { width: 40, height: 40, borderRadius: 13, 
 const railBtn: React.CSSProperties = { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', padding: 0 };
 const rareBadge: React.CSSProperties = { fontFamily: PS, fontSize: 8, color: GOLD, background: 'rgba(244,185,66,.16)', border: '1px solid rgba(244,185,66,.55)', padding: '3px 6px', borderRadius: 5, boxShadow: '0 0 10px rgba(244,185,66,.4)' };
 const normalBadge: React.CSSProperties = { fontFamily: PS, fontSize: 8, color: '#E0564A', background: 'rgba(224,86,74,.14)', border: '1px solid rgba(224,86,74,.4)', padding: '3px 6px', borderRadius: 5 };
+const eliteBadge: React.CSSProperties = { fontFamily: PS, fontSize: 8, color: '#ffd0c8', background: 'rgba(224,86,74,.28)', border: '1px solid rgba(224,86,74,.7)', padding: '3px 6px', borderRadius: 5, boxShadow: '0 0 10px rgba(224,86,74,.45)' };
 
 export function EditIcon({ size = 16 }: { size?: number }) {
   return (
