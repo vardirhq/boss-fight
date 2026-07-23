@@ -12,6 +12,10 @@ export const SPRITE = {
   trash: '/uploads/trash-heap-behemoth-boss-transparent.png',
   mirror: '/uploads/mirror-smudge-phantom-boss-transparent.png',
   backpack: '/uploads/backpack-avalanche-boss-transparent.png',
+  schedule: '/uploads/schedule-specter-boss-transparent.png',
+  cable: '/uploads/cable-serpent-boss-transparent.png',
+  golem: '/uploads/chore-golem-boss-transparent.png',
+  todo: '/uploads/todo-swarm-boss-transparent.png',
   golden: '/uploads/the-golden-done-idle-sprite-sheet-transparent.png',
 } as const;
 
@@ -27,6 +31,10 @@ export const SPRITE_POOL: string[] = [
   SPRITE.trash,
   SPRITE.mirror,
   SPRITE.backpack,
+  SPRITE.schedule,
+  SPRITE.cable,
+  SPRITE.golem,
+  SPRITE.todo,
 ];
 
 export const FIGHTER_COLORS = [
@@ -102,32 +110,66 @@ const SEED_BOSSES: SeedBoss[] = [
     ] },
 ];
 
+// Newer bosses — kept separate so a migration can add them to existing saves.
+const EXTRA_BOSSES: SeedBoss[] = [
+  { id: 'schedule', name: 'Kalendergjenferdet', sprite: SPRITE.schedule, trigger: { type: 'månedlig', date: 15, note: 'Planleggingsdag' },
+    attacks: [
+      { title: 'Planlegg uka', damage: 16 }, { title: 'Book legetimer', damage: 18 }, { title: 'Sett opp middagsplan', damage: 22 },
+      { title: 'Meld på aktiviteter', damage: 20 }, { title: 'Synk kalenderen', damage: 14 }, { title: 'Betal faste regninger', damage: 34 },
+    ] },
+  { id: 'cable', name: 'Kabelslangen', sprite: SPRITE.cable, trigger: { type: 'ukentlig', day: 5, note: 'Teknologirydding' },
+    attacks: [
+      { title: 'Kveil opp ledninger', damage: 14 }, { title: 'Samle løse ladere', damage: 16 }, { title: 'Merk kablene', damage: 18 },
+      { title: 'Lad alle enheter', damage: 12 }, { title: 'Rydd skrivebordet', damage: 24 }, { title: 'Koble fra ubrukte', damage: 20 },
+    ] },
+  { id: 'golem', name: 'Gjøremålsgolemen', sprite: SPRITE.golem, trigger: { type: 'ukentlig', day: 1, note: 'Storrydding' },
+    attacks: [
+      { title: 'Rydd hvert rom', damage: 20 }, { title: 'Ta all vasken', damage: 30 }, { title: 'Tøm all søpla', damage: 24 },
+      { title: 'Støvsug hele huset', damage: 34 }, { title: 'Vask badet', damage: 32 }, { title: 'Skift alt sengetøy', damage: 36 },
+    ] },
+  { id: 'todo', name: 'Huskelistehæren', sprite: SPRITE.todo, trigger: { type: 'daglig', note: 'Dagens liste' },
+    attacks: [
+      { title: 'Kryss av én ting', damage: 12 }, { title: 'Ta den minste jobben', damage: 14 }, { title: 'Gjør det du utsetter', damage: 22 },
+      { title: 'Rydd én overflate', damage: 16 }, { title: 'Fullfør en påbegynt ting', damage: 20 }, { title: 'Rydd fem ting', damage: 18 },
+    ] },
+];
+
+/** Every boss the game seeds on a fresh install. */
+const ALL_SEED_BOSSES: SeedBoss[] = [...SEED_BOSSES, ...EXTRA_BOSSES];
+
 export function sumDamage(chores: Chore[]): number {
   return chores.reduce((s, c) => s + (Number(c.damage) || 0), 0);
 }
 
+function buildBoss(b: SeedBoss): Boss {
+  const chores: Chore[] = b.attacks.map((a, i) => ({
+    id: `${b.id}-${i}`,
+    title: a.title,
+    damage: a.damage,
+    repeatable: i === 0,
+  }));
+  return {
+    id: b.id,
+    name: b.name,
+    sprite: b.sprite,
+    frames: b.frames ?? 0,
+    rare: !!b.rare,
+    trigger: { ...b.trigger },
+    chores,
+    hp: sumDamage(chores),
+    clearedCycle: '',
+    usedChores: [],
+  };
+}
+
 /** Build the initial boss list with derived HP and chore ids. */
 export function seedBosses(): Boss[] {
-  return SEED_BOSSES.map((b) => {
-    const chores: Chore[] = b.attacks.map((a, i) => ({
-      id: `${b.id}-${i}`,
-      title: a.title,
-      damage: a.damage,
-      repeatable: i === 0,
-    }));
-    return {
-      id: b.id,
-      name: b.name,
-      sprite: b.sprite,
-      frames: b.frames ?? 0,
-      rare: !!b.rare,
-      trigger: { ...b.trigger },
-      chores,
-      hp: sumDamage(chores),
-      clearedCycle: '',
-      usedChores: [],
-    };
-  });
+  return ALL_SEED_BOSSES.map(buildBoss);
+}
+
+/** Bosses added after v1 — used by migrations to backfill existing saves. */
+export function extraSeedBosses(): Boss[] {
+  return EXTRA_BOSSES.map(buildBoss);
 }
 
 export const REWARDS_PERSONAL: RewardDef[] = [

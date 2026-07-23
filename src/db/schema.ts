@@ -1,6 +1,6 @@
 import type { Db } from './sqlite';
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS meta (
@@ -74,18 +74,22 @@ export const ALL_TABLES = [
   'meta', 'bosses', 'chores', 'used_chores', 'fighters', 'battle_log', 'redemptions',
 ];
 
-/** Create tables if missing and stamp the schema version. */
-export function migrate(db: Db): void {
+/** Create tables if they don't exist yet (idempotent DDL). */
+export function ensureSchema(db: Db): void {
   db.execScript(SCHEMA_SQL);
-  const rows = db.query<{ value: string }>(
-    'SELECT value FROM meta WHERE key = ?',
-    ['schema_version'],
+}
+
+/** Stored schema version, or 0 if the database has never been stamped. */
+export function readSchemaVersion(db: Db): number {
+  const rows = db.query<{ value: string }>('SELECT value FROM meta WHERE key = ?', ['schema_version']);
+  if (rows.length === 0) return 0;
+  const n = Number(rows[0].value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+export function writeSchemaVersion(db: Db, version: number): void {
+  db.run(
+    'INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+    ['schema_version', String(version)],
   );
-  if (rows.length === 0) {
-    db.run('INSERT INTO meta (key, value) VALUES (?, ?)', [
-      'schema_version',
-      String(SCHEMA_VERSION),
-    ]);
-  }
-  // Future migrations would branch on the stored version here.
 }

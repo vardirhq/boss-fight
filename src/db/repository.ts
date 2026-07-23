@@ -1,6 +1,6 @@
 import type { Db } from './sqlite';
-import { ALL_TABLES, migrate } from './schema';
-import { seedBosses } from '../game/seed';
+import { ALL_TABLES, SCHEMA_VERSION, ensureSchema, readSchemaVersion, writeSchemaVersion } from './schema';
+import { seedBosses, extraSeedBosses } from '../game/seed';
 import type {
   Boss, Chore, Fighter, GameState, Lang, LogEntry, Redemption, Settings, Trigger, TriggerType,
 } from '../game/types';
@@ -20,14 +20,22 @@ function meta(db: Db, key: string): string | null {
 
 /** Load the whole game state, seeding a fresh database on first run. */
 export function loadState(db: Db): GameState {
-  migrate(db);
+  ensureSchema(db);
 
-  const bossRows = db.query('SELECT * FROM bosses ORDER BY sort, rowid');
+  let bossRows = db.query('SELECT * FROM bosses ORDER BY sort, rowid');
   if (bossRows.length === 0) {
     // First boot: seed bosses and default scalars.
     const state = freshState();
     saveState(db, state);
+    writeSchemaVersion(db, SCHEMA_VERSION);
     return state;
+  }
+
+  // Existing database: run version-gated data migrations, then re-read.
+  if (readSchemaVersion(db) < SCHEMA_VERSION) {
+    runMigrations(db);
+    writeSchemaVersion(db, SCHEMA_VERSION);
+    bossRows = db.query('SELECT * FROM bosses ORDER BY sort, rowid');
   }
 
   const choreRows = db.query('SELECT * FROM chores ORDER BY sort, rowid');
@@ -201,12 +209,47 @@ export function saveState(db: Db, state: GameState): void {
   db.flush();
 }
 
+/** Apply data migrations for an existing (already-seeded) database. */
+function runMigrations(db: Db): void {
+  // v2: backfill bosses added after the initial release, preserving any
+  // existing progress. Skips bosses the player already has or has deleted-then-
+  // re-added; a boss deliberately removed by the user will reappear once here.
+  const existing = new Set(db.query('SELECT id FROM bosses').map((r) => String(r.id)));
+  const nextSort = (db.query<{ n: number }>('SELECT COALESCE(MAX(sort), -1) + 1 AS n FROM bosses')[0]?.n) ?? 0;
+  let sort = Number(nextSort);
+  db.transaction(() => {
+    for (const boss of extraSeedBosses()) {
+      if (existing.has(boss.id)) continue;
+      insertBoss(db, boss, sort++);
+    }
+  });
+}
+
+function insertBoss(db: Db, b: Boss, sort: number): void {
+  db.run(
+    `INSERT INTO bosses
+       (id, name, sprite, frames, rare, trigger_type, trigger_day, trigger_date, trigger_note, hp, cleared_cycle, sort)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [
+      b.id, b.name, b.sprite, b.frames, b.rare ? 1 : 0,
+      b.trigger.type, b.trigger.day ?? null, b.trigger.date ?? null, b.trigger.note ?? null,
+      b.hp, b.clearedCycle, sort,
+    ],
+  );
+  b.chores.forEach((c, ci) => {
+    db.run('INSERT INTO chores (id, boss_id, title, damage, repeatable, sort) VALUES (?,?,?,?,?,?)', [
+      c.id, b.id, c.title, c.damage, c.repeatable ? 1 : 0, ci,
+    ]);
+  });
+}
+
 /** Delete everything and reseed from scratch. */
 export function resetState(db: Db): GameState {
   db.wipe(ALL_TABLES);
-  migrate(db);
+  ensureSchema(db);
   const state = freshState();
   saveState(db, state);
+  writeSchemaVersion(db, SCHEMA_VERSION);
   return state;
 }
 
