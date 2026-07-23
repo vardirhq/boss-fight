@@ -17,7 +17,23 @@ export const SPRITE = {
   golem: '/uploads/chore-golem-boss-transparent.png',
   todo: '/uploads/todo-swarm-boss-transparent.png',
   golden: '/uploads/the-golden-done-idle-sprite-sheet-transparent.png',
+  laundryElite: '/uploads/laundry-dragon-elite-transparent.webp',
 } as const;
+
+/**
+ * Bespoke "enraged" art keyed by base sprite. When a boss using one of these
+ * sprites rolls elite for the cycle, we swap in the dedicated art instead of the
+ * generic red CSS tint. Keyed by sprite (not boss id) so it also covers parent-
+ * created bosses that pick the same sprite, and existing saves, with no migration.
+ */
+export const ELITE_SPRITE: Record<string, string> = {
+  [SPRITE.laundry]: SPRITE.laundryElite,
+};
+
+/** The dedicated enraged sprite for a boss, if one exists for its base sprite. */
+export function eliteSpriteFor(boss: { sprite: string }): string | undefined {
+  return ELITE_SPRITE[boss.sprite];
+}
 
 /** Pool of sprites cycled through in the boss manager. */
 export const SPRITE_POOL: string[] = [

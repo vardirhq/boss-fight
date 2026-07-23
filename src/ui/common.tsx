@@ -2,6 +2,7 @@ import { forwardRef, type CSSProperties } from 'react';
 import { useGame } from '../store/GameContext';
 import { STRINGS, type Strings } from '../game/i18n';
 import { bossFilter } from '../game/logic';
+import { eliteSpriteFor } from '../game/seed';
 import type { Boss, Fighter } from '../game/types';
 
 export function useT(): Strings {
@@ -19,7 +20,10 @@ export const BossSprite = forwardRef<HTMLDivElement | HTMLImageElement, {
   imgStyle?: CSSProperties;
   elite?: boolean;
 }>(function BossSprite({ boss, style, imgStyle, elite }, ref) {
-  const filter = bossFilter(boss, elite);
+  // Dedicated enraged art wins over the generic CSS tint when present.
+  const eliteArt = elite ? eliteSpriteFor(boss) : undefined;
+  const src = eliteArt ?? boss.sprite;
+  const filter = eliteArt ? '' : bossFilter(boss, elite);
   if (boss.frames > 0) {
     return (
       <div
@@ -27,7 +31,7 @@ export const BossSprite = forwardRef<HTMLDivElement | HTMLImageElement, {
         style={{ position: 'relative', overflow: 'hidden', aspectRatio: '362 / 724', ...style }}
       >
         <img
-          src={boss.sprite}
+          src={src}
           alt={boss.name}
           style={{
             height: '100%', width: 'auto', maxWidth: 'none', display: 'block',
@@ -41,7 +45,7 @@ export const BossSprite = forwardRef<HTMLDivElement | HTMLImageElement, {
   return (
     <img
       ref={ref as React.Ref<HTMLImageElement>}
-      src={boss.sprite}
+      src={src}
       alt={boss.name}
       style={{ display: 'block', ...style, ...imgStyle, ...(filter ? { filter } : {}) }}
     />

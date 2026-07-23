@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useGame } from '../store/GameContext';
 import { useT, BossSprite, Avatar, initialOf, GOLD } from '../ui/common';
 import { maxHpOf, scheduleLabel, statusOf, hexA, isElite } from '../game/logic';
+import { eliteSpriteFor } from '../game/seed';
 
 const PS = "'Press Start 2P'";
 
@@ -20,6 +21,7 @@ export function BattleScreen() {
   const status = statusOf(boss, g.goldenRevealed);
   const statusLabel = status === 'aktiv' ? t.stAktiv : status === 'beseiret' ? t.stBeseiret : t.stPlanlagt;
   const elite = isElite(boss);
+  const hasEliteArt = elite && !!eliteSpriteFor(boss);
 
   const activeFighter = g.fighters.find((f) => f.id === g.activeFighterId);
   const activeName = activeFighter?.name ?? '—';
@@ -62,7 +64,7 @@ export function BattleScreen() {
             <div style={{ position: 'absolute', inset: 0, borderRadius: 24, boxShadow: 'inset 0 0 70px rgba(244,185,66,.28)', zIndex: 13, pointerEvents: 'none' }} />
           </>
         )}
-        {elite && !boss.rare && (
+        {elite && !boss.rare && !hasEliteArt && (
           <>
             <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(120% 95% at 50% 42%,rgba(224,86,74,.28) 0%,rgba(150,30,25,.12) 44%,transparent 72%)', zIndex: 2, pointerEvents: 'none', animation: 'emberPulse 2.4s ease-in-out infinite' }} />
             <div style={{ position: 'absolute', inset: 0, borderRadius: 24, boxShadow: 'inset 0 0 60px rgba(224,86,74,.30)', zIndex: 13, pointerEvents: 'none' }} />

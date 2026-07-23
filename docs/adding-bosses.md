@@ -126,6 +126,28 @@ cycle and re-rolls when the cycle rolls over. Effects:
 
 You get this for free on every non-rare boss. No fields to set.
 
+### Bespoke enraged art (optional)
+
+A boss can have a dedicated "enraged" sprite that replaces the base art (and the
+red CSS tint) while it's elite. It's keyed by **base sprite**, not boss id, via the
+`ELITE_SPRITE` map in `seed.ts`:
+
+```ts
+export const ELITE_SPRITE: Record<string, string> = {
+  [SPRITE.laundry]: SPRITE.laundryElite,
+};
+```
+
+To add one: drop a transparent PNG in `public/uploads/`, add it to the `SPRITE`
+map, and add a `base → elite` entry to `ELITE_SPRITE`. That's it — no schema
+change, no per-boss field. Any boss (seeded or parent-created) using that base
+sprite automatically shows the art when it rolls elite; bosses without an entry
+fall back to the generic red tint. Keep the elite sprite **out of `SPRITE_POOL`**
+so parents don't pick it as a base. When bespoke art is present, the Battle screen
+also drops the generic red aura (`hasEliteArt`) so the art's own effects read
+cleanly. Rendering resolves the swap in `BossSprite` (via `eliteSpriteFor`) and in
+the Home `BossCard`.
+
 ## Art: new sprite vs. palette variant
 
 You have two ways to give a boss a look:
