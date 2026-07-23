@@ -1,31 +1,67 @@
-# Boss Fight
+# Boss Kamp
 
-Boss Fight turns big household chores into tiny co-op battles.
+Turn household chores into epic co-op battles. **Boss Kamp** is an offline-first
+PWA arcade-RPG for the whole family: every chore is an attack, every finished
+step deals damage, and recurring life mess becomes a boss you fight together
+instead of another beige checklist.
 
-Instead of tracking `Clean the house`, you fight a boss like **Laundry Dragon**. Every chore is an attack, every finished step deals damage, and recurring life mess becomes a game loop instead of another beige checklist.
+Built with **Vite + React + TypeScript**, persisted with **SQLite** running in
+the browser (WebAssembly), and installable as a **Progressive Web App**.
 
-## MVP
+## Features
 
-- Kotlin + Jetpack Compose Android app
-- Single playable boss battle
-- Laundry Dragon sprite asset
-- HP bar, attacks, victory state, and quick reset
-- Party progress panel for lightweight family/shared-house flavor
+- **Battle** any of 11 chore bosses (plus a rare "Golden Done" legendary boss),
+  with an HP bar, combos, crits, damage numbers, victory confetti, and a small
+  WebAudio SFX synth.
+- **Bosses / Home** — weekly plan calendar, active/defeated boss cards, and a
+  parent-mode boss manager (name, schedule, sprite, chores).
+- **Team** — family fighters with colors, photo avatars, XP levels, and MVP
+  tracking per battle.
+- **Rewards** — earn coins from damage dealt; spend your own or pool them for
+  big shared family prizes.
+- **Bag** — redeemed reward vouchers, used whenever you like.
+- **Norwegian + English**, sound / haptics / reduced-motion settings.
+- **Offline-first**: installable, works with no network, and all progress is
+  stored locally.
 
-## Product Direction
+## Tech & architecture
 
-Boss Fight should feel like a small game first and a chore tracker second.
+| Concern        | Choice |
+| -------------- | ------ |
+| Build / dev    | Vite 5 |
+| UI             | React 18 + TypeScript (strict) |
+| Persistence    | `@sqlite.org/sqlite-wasm` — a real SQLite DB in the browser |
+| PWA            | `vite-plugin-pwa` (Workbox) with a web manifest + service worker |
 
-Near-term ideas:
+```
+src/
+  db/          SQLite: wasm init (OPFS with in-memory fallback), schema, repository
+  game/        Pure domain: types, seed data, i18n strings, game logic
+  store/       React context store, game actions, WebAudio engine
+  screens/     Battle, Home, Party, Rewards, Bag, managers, overlays, nav
+  ui/          Shared components (boss sprite, avatar, strings hook)
+```
 
-- Custom bosses for laundry, dishes, paperwork, packing, and toy cleanup
-- Recurring bosses that regenerate on a schedule
-- Local persistence for active battles
-- Player profiles and contribution history
-- Optional silly boss/task generator later
+### SQLite in the browser
+
+`src/db/sqlite.ts` boots the official SQLite WebAssembly build and prefers the
+**OPFS SAHPool** VFS, which stores a genuine on-disk SQLite database in the
+browser's Origin Private File System — persistent across reloads and needing no
+special cross-origin-isolation headers. Where OPFS is unavailable it transparently
+falls back to an in-memory database that is exported to `localStorage` on each
+save, so the app stays fully functional and persistent everywhere. The schema
+(`src/db/schema.ts`) is normalized into `bosses`, `chores`, `fighters`,
+`redemptions`, and related tables; `src/db/repository.ts` maps between those rows
+and the in-memory game state.
 
 ## Development
 
-Open the project in Android Studio and run the `app` configuration.
+```bash
+npm install
+npm run dev       # start the dev server
+npm run build     # type-check + production build
+npm run preview   # preview the production build (service worker active)
+```
 
-This repo does not currently include a generated Gradle wrapper. Android Studio can create one from the checked-in Gradle project files, or you can run `gradle wrapper` locally if Gradle is installed.
+The PWA service worker is only active in the production build (`build` +
+`preview`), not in `dev`.
