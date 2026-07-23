@@ -35,6 +35,12 @@ export interface Boss {
   clearedCycle: string;
   /** Ids of used (non-repeatable) chores in the current cycle. */
   usedChores: string[];
+  /** Asleep: hidden from the roster and schedule until awakened. */
+  dormant: boolean;
+  /** Family victory count that auto-awakens a dormant boss (0 = never on its own). */
+  unlockAt: number;
+  /** Optional permanent hue-rotation (deg) for palette-swapped sprite variants. */
+  hue?: number;
 }
 
 export interface Fighter {

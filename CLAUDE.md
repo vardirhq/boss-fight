@@ -132,6 +132,8 @@ in try/catch (private-mode safe).
 - To ship a **new default boss to existing users**: add it to `EXTRA_BOSSES` in
   `seed.ts` and bump `SCHEMA_VERSION` so the backfill migration picks it up.
   Bosses in `SEED_BOSSES` only appear on fresh installs.
+- **Adding bosses** (schedules, dormancy/milestone unlocks, elite cycles, palette
+  variants): see the full field guide in `docs/adding-bosses.md`.
 
 ## Domain model (`game/types.ts`)
 

@@ -78,6 +78,9 @@ export function loadState(db: Db): GameState {
       hp: Number(r.hp) || 0,
       clearedCycle: String(r.cleared_cycle ?? ''),
       usedChores: usedByBoss.get(String(r.id)) ?? [],
+      dormant: !!Number(r.dormant),
+      unlockAt: Number(r.unlock_at) || 0,
+      hue: r.hue == null ? undefined : Number(r.hue),
     };
   });
 
@@ -150,12 +153,12 @@ export function saveState(db: Db, state: GameState): void {
     state.bosses.forEach((b, bi) => {
       db.run(
         `INSERT INTO bosses
-           (id, name, sprite, frames, rare, trigger_type, trigger_day, trigger_date, trigger_note, hp, cleared_cycle, sort)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+           (id, name, sprite, frames, rare, trigger_type, trigger_day, trigger_date, trigger_note, hp, cleared_cycle, sort, dormant, unlock_at, hue)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [
           b.id, b.name, b.sprite, b.frames, b.rare ? 1 : 0,
           b.trigger.type, b.trigger.day ?? null, b.trigger.date ?? null, b.trigger.note ?? null,
-          b.hp, b.clearedCycle, bi,
+          b.hp, b.clearedCycle, bi, b.dormant ? 1 : 0, b.unlockAt ?? 0, b.hue ?? null,
         ],
       );
       b.chores.forEach((c, ci) => {
@@ -228,12 +231,12 @@ function runMigrations(db: Db): void {
 function insertBoss(db: Db, b: Boss, sort: number): void {
   db.run(
     `INSERT INTO bosses
-       (id, name, sprite, frames, rare, trigger_type, trigger_day, trigger_date, trigger_note, hp, cleared_cycle, sort)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+       (id, name, sprite, frames, rare, trigger_type, trigger_day, trigger_date, trigger_note, hp, cleared_cycle, sort, dormant, unlock_at, hue)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     [
       b.id, b.name, b.sprite, b.frames, b.rare ? 1 : 0,
       b.trigger.type, b.trigger.day ?? null, b.trigger.date ?? null, b.trigger.note ?? null,
-      b.hp, b.clearedCycle, sort,
+      b.hp, b.clearedCycle, sort, b.dormant ? 1 : 0, b.unlockAt ?? 0, b.hue ?? null,
     ],
   );
   b.chores.forEach((c, ci) => {

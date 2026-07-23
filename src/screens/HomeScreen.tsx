@@ -1,7 +1,7 @@
 import { useGame } from '../store/GameContext';
 import { useT, GOLD } from '../ui/common';
 import { EditIcon } from './BattleScreen';
-import { maxHpOf, scheduleLabel, statusOf, whenText, hexA, type BossStatus } from '../game/logic';
+import { maxHpOf, scheduleLabel, statusOf, whenText, hexA, isAwake, isElite, slumberInfo, bossFilter, type BossStatus } from '../game/logic';
 import { DAY_SHORT } from '../game/i18n';
 import type { Boss } from '../game/types';
 
@@ -14,13 +14,15 @@ export function HomeScreen() {
   const lang = g.settings.lang;
   const now = new Date();
 
-  const active = g.bosses.filter((b) => statusOf(b, g.goldenRevealed, now) === 'aktiv');
-  const cleared = g.bosses.filter((b) => statusOf(b, g.goldenRevealed, now) === 'beseiret');
+  const awake = g.bosses.filter((b) => isAwake(b, g.victories));
+  const active = awake.filter((b) => statusOf(b, g.goldenRevealed, now) === 'aktiv');
+  const cleared = awake.filter((b) => statusOf(b, g.goldenRevealed, now) === 'beseiret');
+  const slumber = slumberInfo(g.bosses, g.victories);
 
   const weekOrder = [1, 2, 3, 4, 5, 6, 0];
   const shortDays = DAY_SHORT[lang];
   const todayDow = now.getDay();
-  const daily = g.bosses.filter((b) => b.trigger.type === 'daglig' || b.trigger.type === 'alltid');
+  const daily = awake.filter((b) => b.trigger.type === 'daglig' || b.trigger.type === 'alltid');
 
   return (
     <div style={{ maxWidth: 560, margin: '0 auto', width: '100%', padding: '24px 18px 20px' }}>
@@ -48,7 +50,7 @@ export function HomeScreen() {
       <SectionLabel color="#8fc0ff">{t.weekPlan}</SectionLabel>
       <div style={{ display: 'flex', gap: 5 }}>
         {weekOrder.map((di) => {
-          const list = g.bosses.filter((b) => {
+          const list = awake.filter((b) => {
             if (b.trigger.type === 'ukentlig') return (b.trigger.day ?? 0) === di;
             if (b.trigger.type === 'månedlig') return new Date(now.getFullYear(), now.getMonth(), b.trigger.date ?? 1).getDay() === di;
             return false;
@@ -70,6 +72,16 @@ export function HomeScreen() {
           <span style={{ fontFamily: PS, fontSize: 7, color: '#67D391', letterSpacing: .5, whiteSpace: 'nowrap' }}>{t.everyDay}</span>
           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', flex: 1 }}>
             {daily.map((b) => <Thumb key={b.id} boss={b} size={26} />)}
+          </div>
+        </div>
+      )}
+
+      {slumber.count > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 9, background: '#161c2b', border: '1px dashed #38425a', borderRadius: 12, padding: '10px 13px' }}>
+          <span style={{ fontSize: 17 }}>😴</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: PS, fontSize: 7, color: '#8b93a5', letterSpacing: .5 }}>{t.bossesSleeping.replace('{n}', String(slumber.count))}</div>
+            {slumber.next != null && <div style={{ fontSize: 11, color: '#6C7486', marginTop: 5, fontWeight: 500 }}>{t.nextWakes.replace('{v}', String(slumber.next))}</div>}
           </div>
         </div>
       )}
@@ -96,6 +108,8 @@ function BossCard({ boss, status }: { boss: Boss; status: BossStatus }) {
   const lang = state.game.settings.lang;
   const mh = maxHpOf(boss.chores);
   const note = boss.trigger.note || '';
+  const elite = status === 'aktiv' && !boss.rare && isElite(boss);
+  const filter = bossFilter(boss, elite);
 
   let statusLabel: string, statusColor: string, ctaLabel: string, metaLine: string, onTap: () => void, opacity: number, bg: string, border: string, hoverInfo = false;
   if (status === 'aktiv') {
@@ -114,10 +128,13 @@ function BossCard({ boss, status }: { boss: Boss; status: BossStatus }) {
   return (
     <div onClick={onTap} style={{ position: 'relative', borderRadius: 22, overflow: 'hidden', background: bg, border: `1px solid ${border}`, cursor: 'pointer', padding: 18, marginBottom: 12, opacity }}>
       <div style={{ position: 'absolute', right: -26, bottom: -22, width: 180, opacity: status === 'aktiv' ? .9 : .5, filter: status === 'aktiv' ? 'drop-shadow(0 12px 18px rgba(0,0,0,.5))' : 'grayscale(.5) drop-shadow(0 12px 18px rgba(0,0,0,.5))' }}>
-        <img src={boss.sprite} alt={boss.name} style={{ width: '100%', display: 'block', ...(boss.rare ? { animation: 'rareGlow 2s ease-in-out infinite' } : {}) }} />
+        <img src={boss.sprite} alt={boss.name} style={{ width: '100%', display: 'block', ...(boss.rare ? { animation: 'rareGlow 2s ease-in-out infinite' } : filter ? { filter } : {}) }} />
       </div>
       <div style={{ position: 'relative', zIndex: 2, maxWidth: '64%' }}>
-        <div style={{ display: 'inline-block', fontFamily: PS, fontSize: 7, color: statusColor, background: hexA(statusColor, .14), border: `1px solid ${hexA(statusColor, .4)}`, padding: '4px 7px', borderRadius: 5, letterSpacing: 1 }}>{statusLabel}</div>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {elite && <div style={{ display: 'inline-block', fontFamily: PS, fontSize: 7, color: '#ffd0c8', background: 'rgba(224,86,74,.28)', border: '1px solid rgba(224,86,74,.7)', padding: '4px 7px', borderRadius: 5, letterSpacing: 1 }}>{t.stElite}</div>}
+          <div style={{ display: 'inline-block', fontFamily: PS, fontSize: 7, color: statusColor, background: hexA(statusColor, .14), border: `1px solid ${hexA(statusColor, .4)}`, padding: '4px 7px', borderRadius: 5, letterSpacing: 1 }}>{statusLabel}</div>
+        </div>
         <div style={{ fontFamily: PS, fontSize: 13, color: '#F6EBDD', marginTop: 14, lineHeight: 1.5, textShadow: '0 2px 0 rgba(0,0,0,.5)', textTransform: 'uppercase' }}>{boss.name}</div>
         <div style={{ fontSize: 12, color: '#A8B0BF', marginTop: 10, fontWeight: 500 }}>{metaLine}</div>
         {hoverInfo && (
@@ -137,9 +154,10 @@ function BossCard({ boss, status }: { boss: Boss; status: BossStatus }) {
 }
 
 function Thumb({ boss, size }: { boss: Boss; size: number }) {
+  const hue = bossFilter(boss);
   return (
     <div title={boss.name} style={{ width: size, height: size }}>
-      <img src={boss.sprite} alt={boss.name} style={{ width: '100%', height: '100%', objectFit: 'contain', filter: 'drop-shadow(0 1px 2px rgba(0,0,0,.5))' }} />
+      <img src={boss.sprite} alt={boss.name} style={{ width: '100%', height: '100%', objectFit: 'contain', filter: (hue ? hue + ' ' : '') + 'drop-shadow(0 1px 2px rgba(0,0,0,.5))' }} />
     </div>
   );
 }
