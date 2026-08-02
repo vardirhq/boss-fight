@@ -10,6 +10,7 @@ on:
       - 'package-lock.json'
       - 'vite.config.ts'
       - 'deploid.config.mjs'
+      - 'capacitor.config.json'
       - '.github/workflows/android-debug.yml'
   push:
     branches: [main]
@@ -20,6 +21,7 @@ on:
       - 'package-lock.json'
       - 'vite.config.ts'
       - 'deploid.config.mjs'
+      - 'capacitor.config.json'
       - '.github/workflows/android-debug.yml'
 
 permissions:
