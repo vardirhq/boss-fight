@@ -9,7 +9,7 @@ on:
       - 'package.json'
       - 'package-lock.json'
       - 'vite.config.ts'
-      - 'deploid.config.ts'
+      - 'deploid.config.mjs'
       - '.github/workflows/android-debug.yml'
   push:
     branches: [main]
@@ -19,7 +19,7 @@ on:
       - 'package.json'
       - 'package-lock.json'
       - 'vite.config.ts'
-      - 'deploid.config.ts'
+      - 'deploid.config.mjs'
       - '.github/workflows/android-debug.yml'
 
 permissions:
