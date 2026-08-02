@@ -1,8 +1,7 @@
 import { useGame } from '../store/GameContext';
-import { useT, GOLD } from '../ui/common';
+import { BossSprite, useT, GOLD } from '../ui/common';
 import { EditIcon } from './BattleScreen';
 import { maxHpOf, scheduleLabel, statusOf, whenText, hexA, isAwake, isElite, slumberInfo, bossFilter, type BossStatus } from '../game/logic';
-import { eliteSpriteFor } from '../game/seed';
 import { DAY_SHORT } from '../game/i18n';
 import type { Boss } from '../game/types';
 
@@ -110,9 +109,6 @@ function BossCard({ boss, status }: { boss: Boss; status: BossStatus }) {
   const mh = maxHpOf(boss.chores);
   const note = boss.trigger.note || '';
   const elite = status === 'aktiv' && !boss.rare && isElite(boss);
-  const eliteArt = elite ? eliteSpriteFor(boss) : undefined;
-  const spriteSrc = eliteArt ?? boss.sprite;
-  const filter = eliteArt ? '' : bossFilter(boss, elite);
 
   let statusLabel: string, statusColor: string, ctaLabel: string, metaLine: string, onTap: () => void, opacity: number, bg: string, border: string, hoverInfo = false;
   if (status === 'aktiv') {
@@ -131,7 +127,13 @@ function BossCard({ boss, status }: { boss: Boss; status: BossStatus }) {
   return (
     <div onClick={onTap} style={{ position: 'relative', borderRadius: 22, overflow: 'hidden', background: bg, border: `1px solid ${border}`, cursor: 'pointer', padding: 18, marginBottom: 12, opacity }}>
       <div style={{ position: 'absolute', right: -26, bottom: -22, width: 180, opacity: status === 'aktiv' ? .9 : .5, filter: status === 'aktiv' ? 'drop-shadow(0 12px 18px rgba(0,0,0,.5))' : 'grayscale(.5) drop-shadow(0 12px 18px rgba(0,0,0,.5))' }}>
-        <img src={spriteSrc} alt={boss.name} style={{ width: '100%', display: 'block', ...(boss.rare ? { animation: 'rareGlow 2s ease-in-out infinite' } : filter ? { filter } : {}) }} />
+        <BossSprite
+          boss={boss}
+          elite={elite}
+          style={boss.frames > 0
+            ? { width: '100%', height: 360, ...(boss.rare ? { animation: 'rareGlow 2s ease-in-out infinite' } : {}) }
+            : { width: '100%', ...(boss.rare ? { animation: 'rareGlow 2s ease-in-out infinite' } : {}) }}
+        />
       </div>
       <div style={{ position: 'relative', zIndex: 2, maxWidth: '64%' }}>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
