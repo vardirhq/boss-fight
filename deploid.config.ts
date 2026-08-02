@@ -1,6 +1,6 @@
 export default {
   appName: 'Boss Kamp',
-  appId: 'com.vardir.bosskamp',
+  appId: 'no.vardir.bosskamp',
   web: {
     framework: 'vite',
     buildCommand: 'npm run build',
