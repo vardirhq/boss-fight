@@ -20,7 +20,7 @@ export default {
     },
   },
   assets: {
-    source: 'public/icons/icon-512.png',
+    source: 'public/icons/icon-source.jpg',
     output: 'assets-gen/',
   },
 };

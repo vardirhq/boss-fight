@@ -6,6 +6,12 @@ body {
   color: #f6ebdd;
   -webkit-tap-highlight-color: transparent;
 }
+html.native-app body {
+  padding-top: 12px;
+}
+html.native-app #root {
+  height: calc(100dvh - 12px);
+}
 #root { height: 100dvh; }
 a { color: #f4b942; text-decoration: none; }
 a:hover { color: #ffcf6b; }
