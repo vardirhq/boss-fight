@@ -2,21 +2,30 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import {
   ApiError,
   bootstrapHousehold as bootstrapHouseholdRequest,
+  claimHouseholdDevice as claimHouseholdDeviceRequest,
   getHouseholdConfig,
   getMe,
   loginAdult as loginAdultRequest,
   loginChild as loginChildRequest,
+  loginChildWithPairing as loginChildWithPairingRequest,
   logoutOnline,
+  pullSyncState,
+  pushSyncMutations,
   registerAdult as registerAdultRequest,
   type AuthSession,
   type BootstrapResult,
   type BootstrapSnapshot,
   type HouseholdRole,
   type OnlineUser,
+  type PendingMutation,
   type ServerHouseholdConfig,
+  type ServerSyncState,
+  type SyncMutationType,
 } from './api';
+import type { Fighter } from '../game/types';
 
 const STORAGE_KEY = 'boss-kamp-online-state-v2';
+const MUTATIONS_KEY = 'boss-kamp-pending-mutations-v1';
 
 export type OnlineMode = 'local' | 'adult-account' | 'household-device' | 'fighter-account';
 export type OnlineStatus = 'idle' | 'restoring' | 'authenticated' | 'syncing' | 'offline' | 'error';
@@ -26,6 +35,7 @@ export interface OnlineState {
   mode: OnlineMode;
   status: OnlineStatus;
   sessionToken: string | null;
+  householdDeviceToken: string | null;
   sessionExpiresAt: string | null;
   userId: string | null;
   deviceId: string | null;
@@ -45,14 +55,15 @@ export interface OnlineState {
 interface PersistedOnlineState {
   version: 2;
   mode: Exclude<OnlineMode, 'local'>;
-  sessionToken: string;
-  sessionExpiresAt: string;
-  userId: string;
+  sessionToken: string | null;
+  householdDeviceToken: string | null;
+  sessionExpiresAt: string | null;
+  userId: string | null;
   deviceId: string | null;
   householdId: string | null;
   fighterId: string | null;
   role: HouseholdRole | null;
-  account: OnlineUser;
+  account: OnlineUser | null;
   householdName: string | null;
   lastSyncCursor: string | number | null;
   lastSuccessfulSyncAt: string | null;
@@ -64,11 +75,15 @@ interface OnlineActions {
   registerAdult(email: string, password: string, displayName: string): Promise<void>;
   loginAdult(email: string, password: string): Promise<void>;
   loginChild(householdId: string, fighterId: string, pin: string, deviceName: string, platform: string): Promise<void>;
+  loginChildWithPairing(code: string, pin: string, deviceName: string, platform: string): Promise<void>;
+  pairHouseholdDevice(code: string, deviceName: string, platform: string): Promise<void>;
   logout(): Promise<void>;
   createHousehold(name: string, snapshot: BootstrapSnapshot): Promise<ServerHouseholdConfig>;
   getConfiguration(): Promise<ServerHouseholdConfig>;
+  enqueueMutation(type: SyncMutationType, payload: Record<string, unknown>): string;
+  flushMutations(): Promise<ServerSyncState | null>;
   refreshIdentity(): Promise<void>;
-  syncNow(): Promise<void>;
+  syncNow(): Promise<ServerSyncState | null>;
 }
 
 interface OnlineContextValue {
@@ -77,7 +92,7 @@ interface OnlineContextValue {
 }
 
 const localState: OnlineState = {
-  mode: 'local', status: 'idle', sessionToken: null, sessionExpiresAt: null,
+  mode: 'local', status: 'idle', sessionToken: null, householdDeviceToken: null, sessionExpiresAt: null,
   userId: null, deviceId: null, householdId: null, fighterId: null, role: null,
   account: null, householdName: null, lastSyncCursor: null,
   lastSuccessfulSyncAt: null, pendingMutationCount: 0,
@@ -88,6 +103,26 @@ function clearPersistedState() {
   localStorage.removeItem(STORAGE_KEY);
   // Remove the short-lived key used by PR #18 after its data has been superseded.
   localStorage.removeItem('boss-kamp-online-session-v1');
+}
+
+function loadPendingMutations(): PendingMutation[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(MUTATIONS_KEY) ?? '[]') as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((item): item is PendingMutation => Boolean(
+      item && typeof item === 'object'
+      && typeof (item as PendingMutation).id === 'string'
+      && typeof (item as PendingMutation).householdId === 'string'
+      && typeof (item as PendingMutation).type === 'string'
+      && (item as PendingMutation).payload && typeof (item as PendingMutation).payload === 'object',
+    ));
+  } catch {
+    return [];
+  }
+}
+
+function persistPendingMutations(mutations: PendingMutation[]) {
+  localStorage.setItem(MUTATIONS_KEY, JSON.stringify(mutations));
 }
 
 function isOnlineUser(value: unknown): value is OnlineUser {
@@ -142,14 +177,14 @@ function loadPersistedState(): OnlineState {
       return migrated;
     }
     const value = JSON.parse(raw) as Partial<PersistedOnlineState>;
+    const householdDevice = value.mode === 'household-device';
     const expiresAt = typeof value.sessionExpiresAt === 'string' ? Date.parse(value.sessionExpiresAt) : Number.NaN;
     if (
       value.version !== 2
-      || typeof value.sessionToken !== 'string'
-      || typeof value.userId !== 'string'
-      || !isOnlineUser(value.account)
-      || !Number.isFinite(expiresAt)
-      || expiresAt <= Date.now()
+      || (householdDevice
+        ? typeof value.householdDeviceToken !== 'string' || typeof value.deviceId !== 'string' || typeof value.householdId !== 'string'
+        : typeof value.sessionToken !== 'string' || typeof value.userId !== 'string' || !isOnlineUser(value.account)
+          || !Number.isFinite(expiresAt) || expiresAt <= Date.now())
     ) {
       clearPersistedState();
       return localState;
@@ -158,14 +193,15 @@ function loadPersistedState(): OnlineState {
       ...localState,
       mode: value.mode === 'fighter-account' ? 'fighter-account' : value.mode === 'household-device' ? 'household-device' : 'adult-account',
       status: 'restoring',
-      sessionToken: value.sessionToken,
-      sessionExpiresAt: value.sessionExpiresAt!,
-      userId: value.userId,
+      sessionToken: value.sessionToken ?? null,
+      householdDeviceToken: value.householdDeviceToken ?? null,
+      sessionExpiresAt: value.sessionExpiresAt ?? null,
+      userId: value.userId ?? null,
       deviceId: value.deviceId ?? null,
       householdId: value.householdId ?? null,
       fighterId: value.fighterId ?? null,
       role: value.role ?? null,
-      account: value.account,
+      account: value.account ?? null,
       householdName: value.householdName ?? null,
       lastSyncCursor: value.lastSyncCursor ?? null,
       lastSuccessfulSyncAt: value.lastSuccessfulSyncAt ?? null,
@@ -179,7 +215,9 @@ function loadPersistedState(): OnlineState {
 }
 
 function persistState(state: OnlineState) {
-  if (!state.sessionToken || !state.sessionExpiresAt || !state.userId || !state.account || state.mode === 'local') {
+  const validUser = Boolean(state.sessionToken && state.sessionExpiresAt && state.userId && state.account);
+  const validHouseholdDevice = Boolean(state.mode === 'household-device' && state.householdDeviceToken && state.deviceId && state.householdId);
+  if (state.mode === 'local' || (!validUser && !validHouseholdDevice)) {
     clearPersistedState();
     return;
   }
@@ -187,6 +225,7 @@ function persistState(state: OnlineState) {
     version: 2,
     mode: state.mode,
     sessionToken: state.sessionToken,
+    householdDeviceToken: state.householdDeviceToken,
     sessionExpiresAt: state.sessionExpiresAt,
     userId: state.userId,
     deviceId: state.deviceId,
@@ -232,6 +271,14 @@ const OnlineContext = createContext<OnlineContextValue | null>(null);
 
 export function OnlineProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<OnlineState>(loadPersistedState);
+  const [pendingMutations, setPendingMutations] = useState<PendingMutation[]>(loadPendingMutations);
+
+  useEffect(() => {
+    setState((current) => ({
+      ...current,
+      pendingMutationCount: pendingMutations.filter((mutation) => mutation.householdId === current.householdId).length,
+    }));
+  }, [pendingMutations, state.householdId]);
 
   const replaceState = useCallback((next: OnlineState) => {
     setState(next);
@@ -239,6 +286,10 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refreshIdentity = useCallback(async () => {
+    if (state.mode === 'household-device' && state.householdDeviceToken && state.householdId) {
+      setState((current) => ({ ...current, status: 'authenticated', error: null }));
+      return;
+    }
     const token = state.sessionToken;
     if (!token) return;
     setState((current) => ({ ...current, status: 'restoring', error: null }));
@@ -277,7 +328,7 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
         error: errorCode(error, 'restore'),
       }));
     }
-  }, [state.sessionToken]);
+  }, [state.householdDeviceToken, state.householdId, state.mode, state.sessionToken]);
 
   useEffect(() => {
     if (state.status === 'restoring') void refreshIdentity();
@@ -287,35 +338,132 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const reconnect = () => {
-      if (state.sessionToken && state.status === 'offline') void refreshIdentity();
+      if ((state.sessionToken || state.householdDeviceToken) && state.status === 'offline') void refreshIdentity();
     };
     window.addEventListener('online', reconnect);
     return () => window.removeEventListener('online', reconnect);
-  }, [refreshIdentity, state.sessionToken, state.status]);
+  }, [refreshIdentity, state.householdDeviceToken, state.sessionToken, state.status]);
 
   const authenticate = useCallback(async (request: () => Promise<AuthSession>) => {
     setState((current) => ({ ...current, status: 'syncing', error: null }));
+    let authenticated: OnlineState | null = null;
     try {
       const session = await request();
+      authenticated = stateFromAuth(session);
+      replaceState({ ...authenticated, status: 'restoring' });
       const me = await getMe(session.token);
       const membership = me.households[0] ?? null;
       replaceState({
-        ...stateFromAuth(session),
+        ...authenticated,
         householdId: membership?.id ?? null,
         householdName: membership?.name ?? null,
         role: membership?.role ?? null,
         configurationConnectedAt: membership ? new Date().toISOString() : null,
       });
     } catch (error) {
-      setState((current) => ({ ...current, status: 'error', error: errorCode(error, 'auth') }));
+      if (authenticated && error instanceof ApiError && error.isTransient) {
+        replaceState({ ...authenticated, status: 'offline', error: errorCode(error, 'other') });
+      } else {
+        setState((current) => ({ ...current, status: 'error', error: errorCode(error, 'auth') }));
+      }
       throw error;
     }
   }, [replaceState]);
+
+  const enqueueMutation = useCallback((type: SyncMutationType, payload: Record<string, unknown>) => {
+    if (!state.householdId) throw new ApiError('Household connection required', 'validation');
+    const id = crypto.randomUUID();
+    const mutation: PendingMutation = {
+      id,
+      householdId: state.householdId,
+      type,
+      payload,
+      createdAt: new Date().toISOString(),
+      attempts: 0,
+    };
+    setPendingMutations((current) => {
+      const retained = type === 'configuration_replace'
+        ? current.filter((item) => item.householdId !== mutation.householdId || item.type !== 'configuration_replace')
+        : current;
+      const next = [...retained, mutation];
+      persistPendingMutations(next);
+      setState((online) => ({ ...online, pendingMutationCount: next.length }));
+      return next;
+    });
+    return id;
+  }, [state.householdId]);
+
+  const flushMutations = useCallback(async (): Promise<ServerSyncState | null> => {
+    const token = state.sessionToken;
+    const householdDeviceToken = state.householdDeviceToken;
+    const householdId = state.householdId;
+    if ((!token && !householdDeviceToken) || !householdId) return null;
+    // Read durable storage so a mutation enqueued immediately before this call
+    // is included even if React has not committed the state update yet.
+    const pending = loadPendingMutations().filter((mutation) => mutation.householdId === householdId);
+    setState((current) => ({ ...current, status: 'syncing', error: null }));
+    try {
+      if (pending.length > 0) await pushSyncMutations(token, householdId, pending, householdDeviceToken);
+      const pulled = await pullSyncState(token, householdId, householdDeviceToken);
+      const sentIds = new Set(pending.map((mutation) => mutation.id));
+      setPendingMutations((current) => {
+        const next = current.filter((mutation) => !sentIds.has(mutation.id));
+        persistPendingMutations(next);
+        return next;
+      });
+      const syncedAt = new Date().toISOString();
+      setState((current) => {
+        const next = {
+          ...current,
+          status: 'authenticated' as const,
+          pendingMutationCount: Math.max(0, current.pendingMutationCount - sentIds.size),
+          lastSuccessfulSyncAt: syncedAt,
+          error: null,
+        };
+        persistState(next);
+        return next;
+      });
+      return pulled;
+    } catch (error) {
+      setPendingMutations((current) => {
+        const next = current.map((mutation) => sentIdsForHousehold(mutation, householdId)
+          ? { ...mutation, attempts: mutation.attempts + 1, lastError: error instanceof Error ? error.message : String(error) }
+          : mutation);
+        persistPendingMutations(next);
+        return next;
+      });
+      setState((current) => ({
+        ...current,
+        status: error instanceof ApiError && error.isTransient ? 'offline' : 'error',
+        error: errorCode(error, 'other'),
+      }));
+      throw error;
+    }
+  }, [pendingMutations, state.householdDeviceToken, state.householdId, state.sessionToken]);
 
   const actions = useMemo<OnlineActions>(() => ({
     registerAdult: (email, password, displayName) => authenticate(() => registerAdultRequest(email, password, displayName)),
     loginAdult: (email, password) => authenticate(() => loginAdultRequest(email, password)),
     loginChild: (householdId, fighterId, pin, deviceName, platform) => authenticate(() => loginChildRequest(householdId, fighterId, pin, deviceName, platform)),
+    loginChildWithPairing: (code, pin, deviceName, platform) => authenticate(() => loginChildWithPairingRequest(code, pin, deviceName, platform)),
+    pairHouseholdDevice: async (code, deviceName, platform) => {
+      setState((current) => ({ ...current, status: 'syncing', error: null }));
+      try {
+        const claimed = await claimHouseholdDeviceRequest(code, deviceName, platform);
+        replaceState({
+          ...localState,
+          mode: 'household-device',
+          status: 'authenticated',
+          householdDeviceToken: claimed.deviceToken,
+          deviceId: claimed.deviceId,
+          householdId: claimed.householdId,
+          configurationConnectedAt: new Date().toISOString(),
+        });
+      } catch (error) {
+        setState((current) => ({ ...current, status: 'error', error: errorCode(error, 'auth') }));
+        throw error;
+      }
+    },
     logout: async () => {
       const token = state.sessionToken;
       try {
@@ -360,16 +508,35 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
       if (!state.sessionToken || !state.householdId) throw new ApiError('Household connection required', 'validation');
       return getHouseholdConfig(state.sessionToken, state.householdId);
     },
+    enqueueMutation,
+    flushMutations,
     refreshIdentity,
-    syncNow: refreshIdentity,
-  }), [authenticate, refreshIdentity, replaceState, state]);
+    syncNow: flushMutations,
+  }), [authenticate, enqueueMutation, flushMutations, refreshIdentity, replaceState, state]);
 
   const value = useMemo(() => ({ state, actions }), [actions, state]);
   return <OnlineContext.Provider value={value}>{children}</OnlineContext.Provider>;
+}
+
+function sentIdsForHousehold(mutation: PendingMutation, householdId: string) {
+  return mutation.householdId === householdId;
 }
 
 export function useOnline() {
   const value = useContext(OnlineContext);
   if (!value) throw new Error('useOnline must be used inside OnlineProvider');
   return value;
+}
+
+export function mayActAsFighter(state: OnlineState, fighter: Fighter) {
+  if (state.mode === 'local') return true;
+  const ownsFighter = Boolean(state.userId && fighter.userId === state.userId);
+  if (state.mode === 'fighter-account') return ownsFighter;
+  if (state.mode === 'household-device') return !fighter.requireOwnDevice;
+  if (ownsFighter) return true;
+  return (state.role === 'owner' || state.role === 'parent') && !fighter.requireOwnDevice;
+}
+
+export function mayManageHousehold(state: OnlineState) {
+  return state.mode === 'local' || (state.mode === 'adult-account' && (state.role === 'owner' || state.role === 'parent'));
 }
