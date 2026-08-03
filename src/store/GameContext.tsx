@@ -8,6 +8,9 @@ import { maxHpOf, cycleKey, statusOf, todayShort, isElite, isAwake, ELITE_COIN_M
 import { FIGHTER_COLORS, SPRITE_POOL, sumDamage } from '../game/seed';
 import { STRINGS } from '../game/i18n';
 import { AudioEngine, buzz } from './audio';
+import { mayActAsFighter, mayManageHousehold, useOnline } from '../online/OnlineContext';
+import { createBootstrapSnapshot, serverSyncToGameState } from '../online/gameSync';
+import type { SyncMutationType } from '../online/api';
 import type {
   Boss, Chore, Fighter, GameState, RewardDef, Settings, Tab, Trigger,
 } from '../game/types';
@@ -149,11 +152,15 @@ export function useGame(): GameContextValue {
 }
 
 export function GameProvider({ db, initial, children }: { db: Db; initial: GameState; children: ReactNode }) {
+  const online = useOnline();
   const [state, setState] = useState<AppState>(() => ({ game: initial, ui: initialUi() }));
 
   // Refs to always read the latest state inside timers/closures.
   const stateRef = useRef(state);
   stateRef.current = state;
+  const onlineRef = useRef(online);
+  onlineRef.current = online;
+  const configurationSignature = useRef<string | null>(null);
 
   const audio = useRef(new AudioEngine()).current;
   const confetti = useRef<ConfettiPiece[]>([]);
@@ -180,6 +187,44 @@ export function GameProvider({ db, initial, children }: { db: Db; initial: GameS
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
   }, [db, state.game]);
+
+  // Once connected, configuration edits are local-first but no longer local-only.
+  // A compact signature prevents battle HP/log changes from uploading the whole
+  // configuration, while a debounce coalesces typing into one atomic replace.
+  useEffect(() => {
+    if (!online.state.householdId || !online.state.configurationConnectedAt
+      || (online.state.role !== 'owner' && online.state.role !== 'parent')) {
+      configurationSignature.current = null;
+      return;
+    }
+    const signature = gameConfigurationSignature(state.game);
+    if (configurationSignature.current === null) {
+      configurationSignature.current = signature;
+      return;
+    }
+    if (configurationSignature.current === signature) return;
+    configurationSignature.current = signature;
+    const timer = setTimeout(() => {
+      const game = stateRef.current.game;
+      void createBootstrapSnapshot(game)
+        .then((snapshot) => {
+          onlineRef.current.actions.enqueueMutation('configuration_replace', snapshot as unknown as Record<string, unknown>);
+          return onlineRef.current.actions.flushMutations();
+        })
+        .then((sync) => {
+          if (!sync) return;
+          const next = serverSyncToGameState(sync, stateRef.current.game);
+          configurationSignature.current = gameConfigurationSignature(next);
+          setState((current) => ({ ...current, game: next }));
+        })
+        .catch((error) => {
+          if (!(error instanceof Error && error.message === 'fighter_name_required')) {
+            console.warn('[sync] configuration upload deferred', error);
+          }
+        });
+    }, 750);
+    return () => clearTimeout(timer);
+  }, [online.state.configurationConnectedAt, online.state.householdId, state.game]);
 
   // On mount: roll over any bosses whose cycle has elapsed, and dismiss splash.
   useEffect(() => {
@@ -209,6 +254,16 @@ export function GameProvider({ db, initial, children }: { db: Db; initial: GameS
     };
 
     const reduce = () => stateRef.current.game.settings.reducedMotion;
+
+    const queueMutation = (type: SyncMutationType, payload: Record<string, unknown>) => {
+      if (!onlineRef.current.state.configurationConnectedAt) return;
+      try {
+        onlineRef.current.actions.enqueueMutation(type, payload);
+        window.setTimeout(() => void onlineRef.current.actions.flushMutations().catch(() => undefined), 0);
+      } catch (error) {
+        console.warn('[sync] mutation queue failed', error);
+      }
+    };
 
     const hitFx = (crit: boolean) => {
       if (reduce()) return;
@@ -316,10 +371,16 @@ export function GameProvider({ db, initial, children }: { db: Db; initial: GameS
     };
 
     return {
-      replaceGame: (game) => setState((current) => ({
-        game,
+      replaceGame: (game) => setState((current) => {
+        const accessible = game.fighters.filter((fighter) => mayActAsFighter(onlineRef.current.state, fighter));
+        const activeFighterId = accessible.some((fighter) => fighter.id === game.activeFighterId)
+          ? game.activeFighterId
+          : accessible[0]?.id ?? null;
+        return {
+        game: { ...game, activeFighterId },
         ui: { ...current.ui, intro: true, won: false, dying: false, combo: 0, dmgNums: [], ping: null },
-      })),
+      };
+      }),
       go: (tab) => patchUi((u) => ({ ...u, tab })),
 
       startFight: () => {
@@ -327,7 +388,10 @@ export function GameProvider({ db, initial, children }: { db: Db; initial: GameS
         patchUi((u) => ({ ...u, intro: false }));
       },
 
-      selectFighter: (id) => patchGame((g) => ({ ...g, activeFighterId: id })),
+      selectFighter: (id) => patchGame((g) => {
+        const fighter = g.fighters.find((item) => item.id === id);
+        return fighter && mayActAsFighter(onlineRef.current.state, fighter) ? { ...g, activeFighterId: id } : g;
+      }),
 
       doAttack: (index) => {
         const s = stateRef.current;
@@ -341,6 +405,8 @@ export function GameProvider({ db, initial, children }: { db: Db; initial: GameS
         const caster = s.game.activeFighterId
           ?? s.game.fighters[0]?.id
           ?? '';
+        const actingFighter = s.game.fighters.find((fighter) => fighter.id === caster);
+        if (!actingFighter || !mayActAsFighter(onlineRef.current.state, actingFighter)) return;
         const dmg = Number(chore.damage) || 0;
         const nextHp = Math.max(0, boss.hp - dmg);
         const defeated = nextHp === 0;
@@ -349,6 +415,17 @@ export function GameProvider({ db, initial, children }: { db: Db; initial: GameS
         const pingId = ++pingSeq.current;
         const label = (crit ? 'CRIT ' : '') + '-' + dmg;
         const x = 34 + Math.random() * 32;
+
+        queueMutation('chore_completion', {
+          bossId: boss.id,
+          choreId: chore.id,
+          fighterId: caster,
+          cycleKey: cycleKey(boss),
+          resetSeq: boss.resetSeq ?? 0,
+          choreTitle: chore.title,
+          damage: dmg,
+          completedAt: new Date().toISOString(),
+        });
 
         setState((st) => ({
           game: {
@@ -397,8 +474,17 @@ export function GameProvider({ db, initial, children }: { db: Db; initial: GameS
         confetti.current = [];
         clearDeathAnims();
         const id = stateRef.current.game.currentBossId;
+        const boss = stateRef.current.game.bosses.find((item) => item.id === id);
+        const resetSeq = boss ? (boss.resetSeq ?? 0) + 1 : 0;
+        if (boss) queueMutation('boss_reset', {
+          bossId: id,
+          fighterId: stateRef.current.game.activeFighterId,
+          cycleKey: cycleKey(boss),
+          resetSeq,
+          reason: 'fight_again',
+        });
         setState((s) => ({
-          game: resetBoss(s.game, id),
+          game: resetBoss(s.game, id, resetSeq),
           ui: { ...s.ui, intro: true, ping: null, dmgNums: [], combo: 0, dying: false, won: false },
         }));
       },
@@ -418,10 +504,19 @@ export function GameProvider({ db, initial, children }: { db: Db; initial: GameS
       fightAgain: (id) => {
         confetti.current = [];
         clearDeathAnims();
+        const boss = stateRef.current.game.bosses.find((item) => item.id === id);
+        const resetSeq = boss ? (boss.resetSeq ?? 0) + 1 : 0;
+        if (boss) queueMutation('boss_reset', {
+          bossId: id,
+          fighterId: stateRef.current.game.activeFighterId,
+          cycleKey: cycleKey(boss),
+          resetSeq,
+          reason: 'fight_again',
+        });
         setState((s) => {
           const active = s.game.activeFighterId ?? s.game.fighters[0]?.id ?? null;
           return {
-            game: { ...resetBoss(s.game, id), currentBossId: id, activeFighterId: active },
+            game: { ...resetBoss(s.game, id, resetSeq), currentBossId: id, activeFighterId: active },
             ui: { ...s.ui, tab: 'battle', intro: true, dmgNums: [], combo: 0, ping: null, dying: false, won: false },
           };
         });
@@ -605,6 +700,15 @@ export function GameProvider({ db, initial, children }: { db: Db; initial: GameS
         const id = s.game.activeFighterId;
         const fighter = s.game.fighters.find((f) => f.id === id);
         if (!fighter || fighter.coins < r.cost) return;
+        queueMutation('reward_redemption', {
+          rewardId: r.id,
+          scope: 'personal',
+          fighterId: fighter.id,
+          icon: r.icon,
+          title: r.title,
+          cost: r.cost,
+          status: 'active',
+        });
         buzz('crit', s.game.settings.haptics);
         patchGame((g) => ({
           ...g,
@@ -619,6 +723,15 @@ export function GameProvider({ db, initial, children }: { db: Db; initial: GameS
       redeemGroup: (r) => {
         const s = stateRef.current;
         if (s.game.pool < r.cost) return;
+        queueMutation('reward_redemption', {
+          rewardId: r.id,
+          scope: 'group',
+          fighterId: null,
+          icon: r.icon,
+          title: r.title,
+          cost: r.cost,
+          status: 'active',
+        });
         buzz('win', s.game.settings.haptics);
         patchGame((g) => ({
           ...g,
@@ -637,6 +750,12 @@ export function GameProvider({ db, initial, children }: { db: Db; initial: GameS
         if (!fighter) return;
         const give = amount === 'all' ? fighter.coins : Math.min(fighter.coins, amount);
         if (give <= 0) return;
+        const transferGroup = crypto.randomUUID();
+        queueMutation('wallet_transfer', {
+          fighterId: fighter.id,
+          amount: give,
+          transferGroup,
+        });
         buzz('crit', s.game.settings.haptics);
         patchGame((g) => ({
           ...g,
@@ -647,7 +766,9 @@ export function GameProvider({ db, initial, children }: { db: Db; initial: GameS
       },
       useVoucher: (vid) => {
         const s = stateRef.current;
+        if (!mayManageHousehold(onlineRef.current.state)) return;
         const entry = s.game.redemptions.find((x) => x.vid === vid);
+        queueMutation('reward_redemption_update', { redemptionId: vid, status: 'used' });
         patchGame((g) => ({
           ...g,
           redemptions: g.redemptions.map((x) => (x.vid === vid ? { ...x, used: true } : x)),
@@ -669,11 +790,11 @@ export function GameProvider({ db, initial, children }: { db: Db; initial: GameS
 
 // ---- pure helpers on GameState ----
 
-function resetBoss(g: GameState, id: string): GameState {
+function resetBoss(g: GameState, id: string, resetSeq?: number): GameState {
   return {
     ...g,
     bosses: g.bosses.map((b) =>
-      b.id === id ? { ...b, hp: maxHpOf(b.chores), usedChores: [], clearedCycle: '' } : b),
+      b.id === id ? { ...b, hp: maxHpOf(b.chores), usedChores: [], clearedCycle: '', resetSeq: resetSeq ?? b.resetSeq } : b),
     log: g.log.filter((e) => e.bossId !== id),
   };
 }
@@ -697,3 +818,21 @@ function rolloverCycles(g: GameState, now = new Date()): GameState {
 
 // Re-export helpers used by components for convenience.
 export { statusOf, sumDamage };
+
+function gameConfigurationSignature(game: GameState) {
+  return JSON.stringify({
+    fighters: game.fighters.map(({ id, name, color, avatar }) => ({ id, name, color, avatar })),
+    bosses: game.bosses.map((boss) => ({
+      id: boss.id,
+      name: boss.name,
+      sprite: boss.sprite,
+      frames: boss.frames,
+      rare: boss.rare,
+      hue: boss.hue,
+      trigger: boss.trigger,
+      dormant: boss.dormant,
+      unlockAt: boss.unlockAt,
+      chores: boss.chores.map(({ id, title, damage, repeatable }) => ({ id, title, damage, repeatable })),
+    })),
+  });
+}
