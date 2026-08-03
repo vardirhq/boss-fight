@@ -1,3 +1,5 @@
+name: boss-kamp-api
+
 services:
   boss-kamp-api:
     image: boss-kamp-api:latest

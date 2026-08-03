@@ -39,13 +39,18 @@ Never commit environment files.
 
 ## Deploy
 
-On the server:
+Deploys are automated by GitHub Actions after quality checks pass on `main`.
+The production checkout lives at `/opt/boss-fight`.
+
+Manual deploy on the server:
 
 ```bash
 docker compose up -d --build
 ```
 
 The Caddy route is configured outside this repo in `/srv/friskr/Caddyfile`.
+See [`../docs/deployment.md`](../docs/deployment.md) for the full deployment
+setup.
 
 ## Auth
 
