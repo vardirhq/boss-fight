@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useGame } from './store/GameContext';
 import { BattleScreen } from './screens/BattleScreen';
 import { HomeScreen } from './screens/HomeScreen';
@@ -9,6 +9,8 @@ import { BottomNav } from './screens/BottomNav';
 import { BossManager, ChoreEditor, PartyManager } from './screens/managers';
 import { SettingsPanel, Splash, Onboarding, Toast } from './screens/overlays';
 import { AccountSettings } from './online/AccountSettings';
+import { useOnline } from './online/OnlineContext';
+import { serverConfigToGameState } from './online/gameSync';
 import { GOLD, useT } from './ui/common';
 
 const PS = "'Press Start 2P'";
@@ -16,11 +18,16 @@ const LEGACY_NEW_FIGHTER_NAME = 'Ny kjemper';
 
 export function App() {
   const { state, actions } = useGame();
+  const online = useOnline();
+  const loadedServerConfiguration = useRef<string | null>(null);
   const t = useT();
   const { ui, game } = state;
   const [accountOpen, setAccountOpen] = useState(false);
   const currentBoss = game.bosses.find((boss) => boss.id === game.currentBossId) ?? game.bosses[0];
   const showBattleIntro = ui.phase === 'app' && ui.tab === 'battle' && ui.intro && currentBoss;
+  const accountCopy = game.settings.lang === 'en'
+    ? { button: '☁ Account & sync', title: 'ACCOUNT & SYNC', back: 'Back' }
+    : { button: '☁ Konto og synk', title: 'KONTO OG SYNK', back: 'Tilbake' };
 
   useEffect(() => {
     for (const fighter of game.fighters) {
@@ -33,6 +40,23 @@ export function App() {
   useEffect(() => {
     if (!ui.settingsOpen) setAccountOpen(false);
   }, [ui.settingsOpen]);
+
+  useEffect(() => {
+    const { householdId, configurationConnectedAt, status } = online.state;
+    if (!householdId || !configurationConnectedAt || status !== 'authenticated') return;
+    const key = `${householdId}:${configurationConnectedAt}`;
+    if (loadedServerConfiguration.current === key) return;
+    loadedServerConfiguration.current = key;
+    void online.actions.getConfiguration()
+      .then((configuration) => {
+        actions.replaceGame(serverConfigToGameState(configuration, state.game));
+      })
+      .catch(() => {
+        // Keep the last local server snapshot available while offline. A manual
+        // fetch or the next app start will try the authoritative server again.
+        loadedServerConfiguration.current = null;
+      });
+  }, [actions, online.actions, online.state.configurationConnectedAt, online.state.householdId, online.state.status, state.game]);
 
   return (
     <div className="app-shell" style={{ width: '100%', height: '100%', minHeight: 0, position: 'relative', background: 'linear-gradient(180deg,#12161f 0%,#0c0f16 60%,#090b10 100%)', display: 'flex', flexDirection: 'column', color: '#F6EBDD', overflow: 'hidden' }}>
@@ -54,16 +78,16 @@ export function App() {
           onClick={() => setAccountOpen(true)}
           style={{ position: 'fixed', right: 18, bottom: 'calc(22px + env(safe-area-inset-bottom))', zIndex: 91, border: '1px solid rgba(91,155,232,.5)', borderRadius: 13, background: '#18243a', color: '#8fc0ff', padding: '12px 15px', fontWeight: 800, cursor: 'pointer', boxShadow: '0 8px 22px rgba(0,0,0,.45)' }}
         >
-          ☁ Konto og synk
+          {accountCopy.button}
         </button>
       )}
       {ui.settingsOpen && accountOpen && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 92, background: '#0b0e16', display: 'flex', flexDirection: 'column' }}>
           <div style={{ flex: 'none', padding: 'calc(20px + env(safe-area-inset-top)) 18px 14px', borderBottom: '1px solid #222a3c', display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ flex: 1, fontFamily: PS, fontSize: 11, color: '#5B9BE8' }}>KONTO OG SYNK</div>
-            <button onClick={() => setAccountOpen(false)} style={{ border: '1px solid #333c50', borderRadius: 11, background: '#1b2130', color: '#F6EBDD', padding: '10px 14px', fontWeight: 700, cursor: 'pointer' }}>Tilbake</button>
+            <div style={{ flex: 1, fontFamily: PS, fontSize: 11, color: '#5B9BE8' }}>{accountCopy.title}</div>
+            <button onClick={() => setAccountOpen(false)} style={{ border: '1px solid #333c50', borderRadius: 11, background: '#1b2130', color: '#F6EBDD', padding: '10px 14px', fontWeight: 700, cursor: 'pointer' }}>{accountCopy.back}</button>
           </div>
-          <div className="scr" style={{ flex: 1, overflowY: 'auto', padding: 18 }}><AccountSettings /></div>
+          <div className="scr" style={{ flex: 1, overflowY: 'auto', padding: 18 }}><AccountSettings lang={game.settings.lang} /></div>
         </div>
       )}
       {ui.phase === 'splash' && <Splash />}

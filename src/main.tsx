@@ -6,6 +6,7 @@ import { App } from './App';
 import { Db } from './db/sqlite';
 import { loadState } from './db/repository';
 import { GameProvider } from './store/GameContext';
+import { OnlineProvider } from './online/OnlineContext';
 import type { GameState } from './game/types';
 
 registerSW({ immediate: true });
@@ -55,9 +56,11 @@ function Boot() {
     );
   }
   return (
-    <GameProvider db={ready.db} initial={ready.initial}>
-      <App />
-    </GameProvider>
+    <OnlineProvider>
+      <GameProvider db={ready.db} initial={ready.initial}>
+        <App />
+      </GameProvider>
+    </OnlineProvider>
   );
 }
 

@@ -195,7 +195,10 @@ Response:
 
 ### `POST /api/bootstrap`
 
-Creates a household for the authenticated adult and makes them an active owner.
+Creates (or reuses) the authenticated adult's household and atomically installs
+the app's complete game configuration. The operation is retry-safe: stable
+`clientId` values upsert the same rows and return the same ID mappings after a
+lost response.
 
 Headers:
 
@@ -208,9 +211,50 @@ Request:
 ```json
 {
   "householdName": "The Household",
-  "timezone": "Europe/Oslo"
+  "timezone": "Europe/Oslo",
+  "victoriesBaseline": 4,
+  "pool": 12,
+  "fighters": [
+    {
+      "clientId": "f1",
+      "name": "Alma",
+      "color": "#E0564A",
+      "streak": 2,
+      "coins": 8,
+      "careerXp": 75,
+      "sort": 0
+    }
+  ],
+  "bosses": [
+    {
+      "clientId": "b1",
+      "name": "Laundry Dragon",
+      "sprite": "dragon",
+      "frames": 0,
+      "rare": false,
+      "trigger": { "type": "daglig" },
+      "dormant": false,
+      "unlockAt": 0,
+      "sort": 0
+    }
+  ],
+  "chores": [
+    {
+      "clientId": "c1",
+      "bossClientId": "b1",
+      "title": "Fold clothes",
+      "damage": 20,
+      "repeatable": false,
+      "sort": 0
+    }
+  ],
+  "rewards": []
 }
 ```
+
+Fighters may include an `avatar` object with `mime`, base64 `bytesBase64`, and
+its SHA-256 `hash`. All nested rows are committed in one database transaction;
+an invalid relationship or avatar rolls back the entire request.
 
 Response:
 
@@ -218,9 +262,18 @@ Response:
 {
   "userId": "uuid",
   "householdId": "uuid",
-  "memberId": "uuid"
+  "memberId": "uuid",
+  "created": true,
+  "ids": {
+    "fighters": { "f1": "uuid" },
+    "bosses": { "b1": "uuid" },
+    "chores": { "c1": "uuid" },
+    "rewards": {}
+  }
 }
 ```
+
+`created` is `false` when an earlier successful bootstrap is returned.
 
 ### `PATCH /api/households/:householdId`
 
@@ -243,8 +296,8 @@ Response:
 
 ### `GET /api/households/:householdId/config`
 
-Returns mutable game configuration for one household. Requires active
-membership.
+Returns the authoritative game configuration for one household, including
+avatars and derived wallet balances. Requires active membership.
 
 Response:
 
@@ -253,9 +306,11 @@ Response:
   "household": {},
   "members": [],
   "fighters": [],
+  "fighterAvatars": [],
   "bosses": [],
   "chores": [],
-  "rewards": []
+  "rewards": [],
+  "balances": []
 }
 ```
 

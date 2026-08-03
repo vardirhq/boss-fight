@@ -86,6 +86,7 @@ function initialUi(): UiState {
 }
 
 export interface GameActions {
+  replaceGame(game: GameState): void;
   go(tab: Tab): void;
   startFight(): void;
   doAttack(index: number): void;
@@ -315,6 +316,10 @@ export function GameProvider({ db, initial, children }: { db: Db; initial: GameS
     };
 
     return {
+      replaceGame: (game) => setState((current) => ({
+        game,
+        ui: { ...current.ui, intro: true, won: false, dying: false, combo: 0, dmgNums: [], ping: null },
+      })),
       go: (tab) => patchUi((u) => ({ ...u, tab })),
 
       startFight: () => {

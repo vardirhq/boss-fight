@@ -73,6 +73,16 @@ function requireObject(body: unknown): JsonObject {
   return body as JsonObject;
 }
 
+function requireObjects(value: unknown, field: string): JsonObject[] {
+  if (!Array.isArray(value)) throw new Error(`${field} must be an array`);
+  return value.map((item) => requireObject(item));
+}
+
+function stringValue(value: unknown, field: string): string {
+  if (typeof value !== 'string') throw new Error(`${field} must be a string`);
+  return value;
+}
+
 function publicId(row: JsonObject) {
   return requireString(row.id, 'id');
 }
@@ -219,6 +229,19 @@ function publicTokenCode(length = 8) {
 export async function buildApp() {
   const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' }, trustProxy: true });
 
+  // The app is unreleased, so the server schema can move forward in place. These
+  // stable client ids let a retried bootstrap reconstruct the same mappings.
+  await sql.unsafe(`
+    alter table fighters add column if not exists client_id text;
+    alter table bosses add column if not exists client_id text;
+    alter table chores add column if not exists client_id text;
+    alter table rewards add column if not exists client_id text;
+    create unique index if not exists fighters_household_client on fighters (household_id, client_id) where client_id is not null;
+    create unique index if not exists bosses_household_client on bosses (household_id, client_id) where client_id is not null;
+    create unique index if not exists chores_household_client on chores (household_id, client_id) where client_id is not null;
+    create unique index if not exists rewards_household_client on rewards (household_id, client_id) where client_id is not null;
+  `);
+
   await app.register(cors, {
     origin: process.env.CORS_ORIGIN?.split(',').map((origin) => origin.trim()).filter(Boolean) ?? true
   });
@@ -228,17 +251,52 @@ export async function buildApp() {
     timeWindow: process.env.RATE_LIMIT_WINDOW ?? '1 minute'
   });
 
-  app.setErrorHandler((error, _request, reply) => {
+  app.setErrorHandler((error, request, reply) => {
     const message = error instanceof Error ? error.message : 'Bad request';
+    const errorInfo = error as Error & { code?: string; statusCode?: number };
+    if (errorInfo.statusCode === 429) {
+      reply.code(429).send({ error: 'Too many requests', code: 'rate_limited' });
+      return;
+    }
     if (message === 'Unauthorized') {
-      reply.code(401).send({ error: 'Unauthorized' });
+      reply.code(401).send({ error: 'Unauthorized', code: 'unauthenticated' });
       return;
     }
     if (message === 'Forbidden') {
-      reply.code(403).send({ error: 'Forbidden' });
+      reply.code(403).send({ error: 'Forbidden', code: 'forbidden' });
       return;
     }
-    reply.code(400).send({ error: message });
+    if (message === 'Not found') {
+      reply.code(404).send({ error: 'Not found', code: 'not_found' });
+      return;
+    }
+    if (errorInfo.code === '23505') {
+      reply.code(409).send({ error: 'A conflicting record already exists', code: 'conflict' });
+      return;
+    }
+    if (errorInfo.code?.startsWith('22')) {
+      reply.code(400).send({ error: 'Invalid request data', code: 'invalid_request' });
+      return;
+    }
+    const validationMessages = [
+      'is required', 'must be an array', 'must be a string', 'Expected JSON object', 'Expected numeric value',
+      'Password must be at least', 'PIN must be at least', 'Invalid pairing role', 'Invalid invite role'
+    ];
+    if (validationMessages.some((part) => message.includes(part))) {
+      reply.code(400).send({ error: message, code: 'invalid_request' });
+      return;
+    }
+    const domainMessages = [
+      'does not belong to household', 'Chore does not belong to boss',
+      'does not reference a submitted boss', 'Avatar hash does not match bytes',
+      'Victory payout amount must be positive', 'Unsupported mutation type'
+    ];
+    if (domainMessages.some((part) => message.includes(part))) {
+      reply.code(422).send({ error: message, code: 'domain_rule' });
+      return;
+    }
+    request.log.error({ err: error }, 'Unhandled API error');
+    reply.code(500).send({ error: 'Internal server error', code: 'internal_error' });
   });
 
   app.get('/health', async () => {
@@ -363,19 +421,198 @@ export async function buildApp() {
     const body = requireObject(request.body);
     const householdName = requireString(body.householdName, 'householdName');
     const timezone = optionalString(body.timezone) ?? 'Europe/Oslo';
+    const hasConfiguration = body.fighters !== undefined;
+    const fighters = hasConfiguration ? requireObjects(body.fighters, 'fighters') : [];
+    const bosses = hasConfiguration ? requireObjects(body.bosses, 'bosses') : [];
+    const chores = hasConfiguration ? requireObjects(body.chores, 'chores') : [];
+    const rewards = hasConfiguration ? requireObjects(body.rewards, 'rewards') : [];
 
     const result = await sql.begin(async (tx) => {
-      const [household] = await tx`
-        insert into households (name, timezone, created_by_user_id)
-        values (${householdName}, ${timezone}, ${auth.userId})
-        returning id
+      // Serialize first-household creation per user. A retry after a lost HTTP
+      // response returns the existing household instead of creating a duplicate.
+      await tx`select pg_advisory_xact_lock(hashtext(${auth.userId})::bigint)`;
+      const [existing] = await tx`
+        select h.id as household_id, hm.id as member_id
+        from household_members hm
+        join households h on h.id = hm.household_id
+        where hm.user_id = ${auth.userId}
+          and hm.role = 'owner'
+          and hm.status = 'active'
+          and h.deleted_at is null
+        order by h.created_at
+        limit 1
       `;
-      const [member] = await tx`
-        insert into household_members (household_id, user_id, role, status)
-        values (${household.id}, ${auth.userId}, 'owner', 'active')
-        returning id
-      `;
-      return { userId: auth.userId, householdId: publicId(household), memberId: publicId(member) };
+      let householdId: string;
+      let memberId: string;
+      let created = false;
+      if (existing) {
+        householdId = requireString(existing.household_id, 'household_id');
+        memberId = requireString(existing.member_id, 'member_id');
+      } else {
+        const [household] = await tx`
+          insert into households (name, timezone, victories_baseline, created_by_user_id)
+          values (${householdName}, ${timezone}, ${optionalNumber(body.victoriesBaseline)}, ${auth.userId})
+          returning id
+        `;
+        const [member] = await tx`
+          insert into household_members (household_id, user_id, role, status)
+          values (${household.id}, ${auth.userId}, 'owner', 'active')
+          returning id
+        `;
+        householdId = publicId(household);
+        memberId = publicId(member);
+        created = true;
+      }
+
+      const ids = {
+        fighters: {} as Record<string, string>,
+        bosses: {} as Record<string, string>,
+        chores: {} as Record<string, string>,
+        rewards: {} as Record<string, string>
+      };
+
+      if (hasConfiguration) {
+        await tx`
+          update households
+          set name = ${householdName}, timezone = ${timezone},
+              victories_baseline = ${optionalNumber(body.victoriesBaseline)}, version = version + 1
+          where id = ${householdId}
+        `;
+
+        for (const [sort, item] of fighters.entries()) {
+          const clientId = requireString(item.clientId, 'fighter.clientId');
+          const name = requireString(item.name, 'fighter.name');
+          const [fighter] = await tx`
+            insert into fighters (
+              household_id, client_id, name, color, streak, coins_cached,
+              career_xp_cached, sort, created_by_user_id
+            ) values (
+              ${householdId}, ${clientId}, ${name}, ${requireString(item.color, 'fighter.color')},
+              ${optionalNumber(item.streak)}, ${optionalNumber(item.coins)},
+              ${optionalNumber(item.careerXp)}, ${optionalNumber(item.sort, sort)}, ${auth.userId}
+            )
+            on conflict (household_id, client_id) where client_id is not null do update
+            set name = excluded.name, color = excluded.color, streak = excluded.streak,
+                coins_cached = excluded.coins_cached, career_xp_cached = excluded.career_xp_cached,
+                sort = excluded.sort, deleted_at = null, version = fighters.version + 1
+            returning id
+          `;
+          const fighterId = publicId(fighter);
+          ids.fighters[clientId] = fighterId;
+
+          const coins = optionalNumber(item.coins);
+          if (coins !== 0) {
+            await tx`
+              insert into wallet_transactions (
+                household_id, fighter_id, amount, kind, reference_type, reference_id,
+                note, created_by_user_id
+              ) values (
+                ${householdId}, ${fighterId}, ${coins}, 'adjustment', 'local_bootstrap',
+                ${fighterId}, 'Initial local balance', ${auth.userId}
+              ) on conflict do nothing
+            `;
+          }
+
+          if (item.avatar && typeof item.avatar === 'object' && !Array.isArray(item.avatar)) {
+            const avatar = item.avatar as JsonObject;
+            const mime = requireString(avatar.mime, 'avatar.mime');
+            const bytes = Buffer.from(requireString(avatar.bytesBase64, 'avatar.bytesBase64'), 'base64');
+            const hash = requireString(avatar.hash, 'avatar.hash').toLowerCase();
+            if (createHash('sha256').update(bytes).digest('hex') !== hash) throw new Error('Avatar hash does not match bytes');
+            await tx`
+              insert into fighter_avatars (fighter_id, mime, bytes, hash)
+              values (${fighterId}, ${mime}, ${bytes}, ${hash})
+              on conflict (fighter_id) do update
+              set mime = excluded.mime, bytes = excluded.bytes, hash = excluded.hash
+            `;
+            await tx`update fighters set avatar_hash = ${hash} where id = ${fighterId}`;
+          }
+        }
+
+        for (const [sort, item] of bosses.entries()) {
+          const clientId = requireString(item.clientId, 'boss.clientId');
+          const trigger = requireObject(item.trigger);
+          const [boss] = await tx`
+            insert into bosses (
+              household_id, client_id, name, sprite, frames, rare, hue,
+              trigger_type, trigger_day, trigger_date, trigger_note,
+              dormant, unlock_at, sort
+            ) values (
+              ${householdId}, ${clientId}, ${requireString(item.name, 'boss.name')},
+              ${requireString(item.sprite, 'boss.sprite')}, ${optionalNumber(item.frames)},
+              ${optionalBoolean(item.rare)}, ${optionalNumberOrNull(item.hue)},
+              ${requireString(trigger.type, 'trigger.type')}, ${optionalNumberOrNull(trigger.day)},
+              ${optionalNumberOrNull(trigger.date)}, ${optionalString(trigger.note)},
+              ${optionalBoolean(item.dormant)}, ${optionalNumber(item.unlockAt)},
+              ${optionalNumber(item.sort, sort)}
+            )
+            on conflict (household_id, client_id) where client_id is not null do update
+            set name = excluded.name, sprite = excluded.sprite, frames = excluded.frames,
+                rare = excluded.rare, hue = excluded.hue, trigger_type = excluded.trigger_type,
+                trigger_day = excluded.trigger_day, trigger_date = excluded.trigger_date,
+                trigger_note = excluded.trigger_note, dormant = excluded.dormant,
+                unlock_at = excluded.unlock_at, sort = excluded.sort,
+                deleted_at = null, version = bosses.version + 1
+            returning id
+          `;
+          ids.bosses[clientId] = publicId(boss);
+        }
+
+        for (const [sort, item] of chores.entries()) {
+          const clientId = requireString(item.clientId, 'chore.clientId');
+          const bossId = ids.bosses[requireString(item.bossClientId, 'chore.bossClientId')];
+          if (!bossId) throw new Error('chore.bossClientId does not reference a submitted boss');
+          const [chore] = await tx`
+            insert into chores (
+              household_id, client_id, boss_id, title, damage, repeatable, sort
+            ) values (
+              ${householdId}, ${clientId}, ${bossId}, ${stringValue(item.title, 'chore.title')},
+              ${optionalNumber(item.damage)}, ${optionalBoolean(item.repeatable)},
+              ${optionalNumber(item.sort, sort)}
+            )
+            on conflict (household_id, client_id) where client_id is not null do update
+            set boss_id = excluded.boss_id, title = excluded.title, damage = excluded.damage,
+                repeatable = excluded.repeatable, sort = excluded.sort,
+                deleted_at = null, version = chores.version + 1
+            returning id
+          `;
+          ids.chores[clientId] = publicId(chore);
+        }
+
+        for (const [sort, item] of rewards.entries()) {
+          const clientId = requireString(item.clientId, 'reward.clientId');
+          const [reward] = await tx`
+            insert into rewards (household_id, client_id, scope, icon, title, descr, cost, sort)
+            values (
+              ${householdId}, ${clientId}, ${requireString(item.scope, 'reward.scope')},
+              ${stringValue(item.icon, 'reward.icon')}, ${requireString(item.title, 'reward.title')},
+              ${stringValue(item.description, 'reward.description')}, ${optionalNumber(item.cost)},
+              ${optionalNumber(item.sort, sort)}
+            )
+            on conflict (household_id, client_id) where client_id is not null do update
+            set scope = excluded.scope, icon = excluded.icon, title = excluded.title,
+                descr = excluded.descr, cost = excluded.cost, sort = excluded.sort,
+                deleted_at = null, version = rewards.version + 1
+            returning id
+          `;
+          ids.rewards[clientId] = publicId(reward);
+        }
+
+        const pool = optionalNumber(body.pool);
+        if (pool !== 0) {
+          await tx`
+            insert into wallet_transactions (
+              household_id, fighter_id, amount, kind, reference_type, reference_id,
+              note, created_by_user_id
+            ) values (
+              ${householdId}, null, ${pool}, 'adjustment', 'local_bootstrap',
+              ${householdId}, 'Initial local shared balance', ${auth.userId}
+            ) on conflict do nothing
+          `;
+        }
+      }
+
+      return { userId: auth.userId, householdId, memberId, created, ids };
     });
 
     return result;
@@ -391,15 +628,27 @@ export async function buildApp() {
     `;
     if (!household) return { household: null };
 
-    const [members, fighters, bosses, chores, rewards] = await Promise.all([
+    const [members, fighters, avatars, bosses, chores, rewards, balances] = await Promise.all([
       sql`select * from household_members where household_id = ${householdId} order by joined_at`,
       sql`select * from fighters where household_id = ${householdId} order by sort, created_at`,
+      sql`
+        select fa.fighter_id, fa.mime, encode(fa.bytes, 'base64') as bytes_base64, fa.hash
+        from fighter_avatars fa
+        join fighters f on f.id = fa.fighter_id
+        where f.household_id = ${householdId}
+      `,
       sql`select * from bosses where household_id = ${householdId} order by sort, created_at`,
       sql`select * from chores where household_id = ${householdId} order by sort, created_at`,
-      sql`select * from rewards where household_id = ${householdId} order by scope, sort, created_at`
+      sql`select * from rewards where household_id = ${householdId} order by scope, sort, created_at`,
+      sql`
+        select fighter_id, coalesce(sum(amount), 0)::integer as balance
+        from wallet_transactions
+        where household_id = ${householdId}
+        group by fighter_id
+      `
     ]);
 
-    return { household, members, fighters, bosses, chores, rewards };
+    return { household, members, fighters, fighterAvatars: avatars, bosses, chores, rewards, balances };
   });
 
   app.patch('/api/households/:householdId', async (request) => {
