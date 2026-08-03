@@ -228,17 +228,51 @@ export async function buildApp() {
     timeWindow: process.env.RATE_LIMIT_WINDOW ?? '1 minute'
   });
 
-  app.setErrorHandler((error, _request, reply) => {
+  app.setErrorHandler((error, request, reply) => {
     const message = error instanceof Error ? error.message : 'Bad request';
+    const errorInfo = error as Error & { code?: string; statusCode?: number };
+    if (errorInfo.statusCode === 429) {
+      reply.code(429).send({ error: 'Too many requests', code: 'rate_limited' });
+      return;
+    }
     if (message === 'Unauthorized') {
-      reply.code(401).send({ error: 'Unauthorized' });
+      reply.code(401).send({ error: 'Unauthorized', code: 'unauthenticated' });
       return;
     }
     if (message === 'Forbidden') {
-      reply.code(403).send({ error: 'Forbidden' });
+      reply.code(403).send({ error: 'Forbidden', code: 'forbidden' });
       return;
     }
-    reply.code(400).send({ error: message });
+    if (message === 'Not found') {
+      reply.code(404).send({ error: 'Not found', code: 'not_found' });
+      return;
+    }
+    if (errorInfo.code === '23505') {
+      reply.code(409).send({ error: 'A conflicting record already exists', code: 'conflict' });
+      return;
+    }
+    if (errorInfo.code?.startsWith('22')) {
+      reply.code(400).send({ error: 'Invalid request data', code: 'invalid_request' });
+      return;
+    }
+    const validationMessages = [
+      'is required', 'Expected JSON object', 'Expected numeric value',
+      'Password must be at least', 'PIN must be at least', 'Invalid pairing role', 'Invalid invite role'
+    ];
+    if (validationMessages.some((part) => message.includes(part))) {
+      reply.code(400).send({ error: message, code: 'invalid_request' });
+      return;
+    }
+    const domainMessages = [
+      'does not belong to household', 'Chore does not belong to boss',
+      'Victory payout amount must be positive', 'Unsupported mutation type'
+    ];
+    if (domainMessages.some((part) => message.includes(part))) {
+      reply.code(422).send({ error: message, code: 'domain_rule' });
+      return;
+    }
+    request.log.error({ err: error }, 'Unhandled API error');
+    reply.code(500).send({ error: 'Internal server error', code: 'internal_error' });
   });
 
   app.get('/health', async () => {
@@ -365,6 +399,28 @@ export async function buildApp() {
     const timezone = optionalString(body.timezone) ?? 'Europe/Oslo';
 
     const result = await sql.begin(async (tx) => {
+      // Serialize first-household creation per user. A retry after a lost HTTP
+      // response returns the existing household instead of creating a duplicate.
+      await tx`select pg_advisory_xact_lock(hashtext(${auth.userId})::bigint)`;
+      const [existing] = await tx`
+        select h.id as household_id, hm.id as member_id
+        from household_members hm
+        join households h on h.id = hm.household_id
+        where hm.user_id = ${auth.userId}
+          and hm.role = 'owner'
+          and hm.status = 'active'
+          and h.deleted_at is null
+        order by h.created_at
+        limit 1
+      `;
+      if (existing) {
+        return {
+          userId: auth.userId,
+          householdId: requireString(existing.household_id, 'household_id'),
+          memberId: requireString(existing.member_id, 'member_id'),
+          created: false
+        };
+      }
       const [household] = await tx`
         insert into households (name, timezone, created_by_user_id)
         values (${householdName}, ${timezone}, ${auth.userId})
@@ -375,7 +431,7 @@ export async function buildApp() {
         values (${household.id}, ${auth.userId}, 'owner', 'active')
         returning id
       `;
-      return { userId: auth.userId, householdId: publicId(household), memberId: publicId(member) };
+      return { userId: auth.userId, householdId: publicId(household), memberId: publicId(member), created: true };
     });
 
     return result;
