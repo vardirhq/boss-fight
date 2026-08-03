@@ -36,15 +36,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install icon tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes imagemagick
+
       - name: Restore PNG icon source
         shell: bash
         run: |
           base64 --decode public/icons/icon-source.jpg.b64 > public/icons/icon-source.jpg
-          if command -v magick >/dev/null 2>&1; then
-            magick public/icons/icon-source.jpg -resize '1024x1024^' -gravity center -extent 1024x1024 public/icons/icon-source.png
-          else
-            convert public/icons/icon-source.jpg -resize '1024x1024^' -gravity center -extent 1024x1024 public/icons/icon-source.png
-          fi
+          convert public/icons/icon-source.jpg -resize '1024x1024^' -gravity center -extent 1024x1024 public/icons/icon-source.png
           file public/icons/icon-source.png | grep -q 'PNG image data'
 
       - name: Set up Node.js
