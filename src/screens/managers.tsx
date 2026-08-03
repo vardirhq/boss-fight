@@ -4,6 +4,18 @@ import { maxHpOf, bossFilter } from '../game/logic';
 import { FIGHTER_COLORS } from '../game/seed';
 import { DAY_SHORT } from '../game/i18n';
 import type { TriggerType } from '../game/types';
+import type { Fighter } from '../game/types';
+import { useOnline } from '../online/OnlineContext';
+import {
+  createFighterPairing,
+  inviteAdultFighter,
+  resetChildPin,
+  setupChildFighter,
+  suspendFighterAccess,
+  unlinkFighterAccount,
+  updateFighterAccess,
+} from '../online/api';
+import { serverSyncToGameState } from '../online/gameSync';
 
 const PS = "'Press Start 2P'";
 
@@ -167,12 +179,139 @@ export function FighterRows() {
               <button key={c} onClick={() => actions.editFighter(f.id, { color: c })} style={{ width: 28, height: 28, borderRadius: 9, background: c, cursor: 'pointer', border: `2px solid ${f.color === c ? '#F6EBDD' : 'transparent'}` }} />
             ))}
           </div>
+          <FighterOnlineControls fighter={f} />
         </div>
       ))}
       <button onClick={actions.addFighter} style={dashedAdd}>{t.addFighter}</button>
     </>
   );
 }
+
+function FighterOnlineControls({ fighter }: { fighter: Fighter }) {
+  const online = useOnline();
+  const { state: gameState, actions: gameActions } = useGame();
+  const connected = Boolean(online.state.sessionToken && online.state.householdId && online.state.configurationConnectedAt);
+  const mayManage = online.state.role === 'owner' || online.state.role === 'parent';
+  if (!connected || !mayManage) return null;
+  const en = gameState.game.settings.lang === 'en';
+  const token = online.state.sessionToken!;
+  const householdId = online.state.householdId!;
+  const serverBacked = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(fighter.id);
+
+  if (!serverBacked) {
+    return <div style={{ marginTop: 12, color: '#F4B942', fontSize: 10 }}>{en ? 'Waiting for server sync…' : 'Venter på serversynk…'}</div>;
+  }
+
+  const refresh = async () => {
+    const sync = await online.actions.syncNow();
+    if (sync) gameActions.replaceGame(serverSyncToGameState(sync, gameState.game));
+  };
+  const setupChild = async () => {
+    const pin = window.prompt(en ? `Choose a PIN for ${fighter.name}` : `Velg PIN for ${fighter.name}`)?.trim();
+    if (!pin || pin.length < 4) return;
+    try {
+      await setupChildFighter(token, householdId, fighter.id, pin);
+      const pairing = await createFighterPairing(token, householdId, fighter.id);
+      window.alert(en ? `Pairing code for ${fighter.name}: ${pairing.code}` : `Paringskode for ${fighter.name}: ${pairing.code}`);
+      await refresh();
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : String(error));
+    }
+  };
+  const inviteAdult = async () => {
+    const email = window.prompt(en ? `Email address for ${fighter.name}` : `E-postadresse for ${fighter.name}`)?.trim();
+    if (!email) return;
+    try {
+      const invite = await inviteAdultFighter(token, householdId, fighter.id, email);
+      window.alert(en ? `Invitation token: ${invite.token}` : `Invitasjonskode: ${invite.token}`);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : String(error));
+    }
+  };
+  const pairChild = async () => {
+    try {
+      const pairing = await createFighterPairing(token, householdId, fighter.id);
+      window.alert(en ? `Pairing code for ${fighter.name}: ${pairing.code}` : `Paringskode for ${fighter.name}: ${pairing.code}`);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : String(error));
+    }
+  };
+  const resetPin = async () => {
+    const pin = window.prompt(en ? `New PIN for ${fighter.name}` : `Ny PIN for ${fighter.name}`)?.trim();
+    if (!pin || pin.length < 4) return;
+    try {
+      await resetChildPin(token, householdId, fighter.id, pin);
+      window.alert(en ? 'PIN updated.' : 'PIN-koden er oppdatert.');
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : String(error));
+    }
+  };
+  const toggleAccess = async () => {
+    try {
+      await updateFighterAccess(token, householdId, fighter.id, !fighter.requireOwnDevice);
+      await refresh();
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : String(error));
+    }
+  };
+  const suspendAccess = async () => {
+    const restoring = fighter.accountStatus === 'suspended';
+    if (!window.confirm(restoring
+      ? (en ? `Restore ${fighter.name}'s access?` : `Vil du gjenopprette tilgangen til ${fighter.name}?`)
+      : (en ? `Suspend ${fighter.name}'s access on all devices?` : `Vil du sperre tilgangen til ${fighter.name} på alle enheter?`))) return;
+    try {
+      await suspendFighterAccess(token, householdId, fighter.id, fighter.accountStatus !== 'suspended');
+      await refresh();
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : String(error));
+    }
+  };
+  const unlinkAccount = async () => {
+    if (!window.confirm(en ? `Unlink ${fighter.name}'s account? Game history is kept.` : `Vil du koble fra kontoen til ${fighter.name}? Spillhistorikken beholdes.`)) return;
+    try {
+      await unlinkFighterAccount(token, householdId, fighter.id);
+      await refresh();
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  return (
+    <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #2b3346' }}>
+      <div style={{ fontSize: 10, color: fighter.userId ? '#67D391' : '#8b93a5', fontWeight: 700, marginBottom: 8 }}>
+        {fighter.userId
+          ? fighter.accountStatus === 'suspended'
+            ? (en ? 'Access suspended' : 'Tilgang sperret')
+            : (en ? 'Connected account' : 'Tilknyttet konto')
+          : (en ? 'Shared local profile' : 'Delt spillerprofil')}
+      </div>
+      <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
+        {!fighter.userId && <>
+          <button onClick={() => void inviteAdult()} style={smallAction}>{en ? 'Invite adult' : 'Inviter voksen'}</button>
+          <button onClick={() => void setupChild()} style={smallAction}>{en ? 'Set up child' : 'Sett opp barn'}</button>
+        </>}
+        {fighter.userKind === 'child' && <>
+          <button onClick={() => void pairChild()} style={smallAction}>{en ? 'Pair device' : 'Par enhet'}</button>
+          <button onClick={() => void resetPin()} style={smallAction}>{en ? 'Reset PIN' : 'Nullstill PIN'}</button>
+        </>}
+        {fighter.userId && (
+          <button onClick={() => void toggleAccess()} style={{ ...smallAction, color: fighter.requireOwnDevice ? '#F4B942' : '#67D391' }}>
+            {fighter.requireOwnDevice ? (en ? 'Own device required' : 'Krever egen enhet') : (en ? 'Shared device allowed' : 'Delt enhet tillatt')}
+          </button>
+        )}
+        {fighter.userId && <>
+          <button onClick={() => void suspendAccess()} style={{ ...smallAction, color: '#F4B942' }}>{fighter.accountStatus === 'suspended' ? (en ? 'Restore access' : 'Gjenopprett tilgang') : (en ? 'Suspend access' : 'Sperr tilgang')}</button>
+          <button onClick={() => void unlinkAccount()} style={{ ...smallAction, color: '#ff8f85' }}>{en ? 'Unlink account' : 'Koble fra konto'}</button>
+        </>}
+      </div>
+    </div>
+  );
+}
+
+const smallAction: React.CSSProperties = {
+  border: '1px solid #3b465e', borderRadius: 9, background: '#20293a', color: '#8fc0ff',
+  padding: '8px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer',
+};
 
 export function PartyManager() {
   const { actions } = useGame();
