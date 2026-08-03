@@ -72,4 +72,12 @@ jobs:
              git reset --hard origin/main
              cd server
              docker compose up -d --build
-             curl -fsS http://127.0.0.1:3002/health'
+             for attempt in $(seq 1 30); do
+               if curl -fsS http://127.0.0.1:3002/health; then
+                 exit 0
+               fi
+               sleep 1
+             done
+             docker compose ps
+             docker compose logs --tail=80 boss-kamp-api
+             exit 1'
