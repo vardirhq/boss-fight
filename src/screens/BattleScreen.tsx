@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useGame } from '../store/GameContext';
+import { mayActAsFighter, mayManageHousehold, useOnline } from '../online/OnlineContext';
 import { useT, BossSprite, Avatar, initialOf, GOLD } from '../ui/common';
 import { maxHpOf, scheduleLabel, statusOf, hexA, isElite } from '../game/logic';
 import { eliteSpriteFor } from '../game/seed';
@@ -8,6 +9,7 @@ const PS = "'Press Start 2P'";
 
 export function BattleScreen() {
   const { state, actions } = useGame();
+  const online = useOnline();
   const t = useT();
   const g = state.game;
   const ui = state.ui;
@@ -140,8 +142,9 @@ export function BattleScreen() {
           {g.fighters.map((f) => {
             const sel = g.activeFighterId === f.id;
             const pinging = ui.ping?.fighterId === f.id;
+            const accessible = mayActAsFighter(online.state, f);
             return (
-              <button key={f.id} onClick={() => actions.selectFighter(f.id)} style={railBtn}>
+              <button key={f.id} disabled={!accessible} title={!accessible ? (f.requireOwnDevice ? 'This fighter requires their own device' : `Only ${f.name} can use this fighter`) : undefined} onClick={() => actions.selectFighter(f.id)} style={{ ...railBtn, opacity: accessible ? 1 : .38, cursor: accessible ? 'pointer' : 'not-allowed' }}>
                 <div style={{ position: 'relative', width: 48, height: 48, borderRadius: 14, background: '#2C3548', border: `2px solid ${f.color}`, display: 'grid', placeItems: 'center', fontFamily: PS, fontSize: 13, color: f.color }}>
                   {sel && <div style={{ position: 'absolute', inset: -3, borderRadius: 15, background: hexA(f.color, .16), boxShadow: `0 0 0 2px ${f.color},0 0 18px ${hexA(f.color, .55)}` }} />}
                   <Avatar fighter={f} radius={12} />
@@ -153,7 +156,7 @@ export function BattleScreen() {
               </button>
             );
           })}
-          {g.fighters.length === 0 && (
+          {g.fighters.length === 0 && mayManageHousehold(online.state) && (
             <button onClick={actions.openPartyManager} style={{ ...railBtn, color: '#6C7486', fontSize: 12, fontWeight: 600 }}>
               <div style={{ width: 48, height: 48, borderRadius: 14, border: '1px dashed #38425a', display: 'grid', placeItems: 'center', fontSize: 22 }}>＋</div>
               {t.addFighter.replace('+ ', '')}
@@ -168,7 +171,7 @@ export function BattleScreen() {
           <span style={{ fontFamily: PS, fontSize: 8, color: '#6C7486', letterSpacing: 1 }}>{t.chooseAttack}</span>
           <div style={{ flex: 1, height: 1, background: 'linear-gradient(90deg,#2b3346,transparent)' }} />
           <span style={{ fontSize: 11, color: '#A8B0BF', fontWeight: 600, whiteSpace: 'nowrap' }}><b style={{ color: GOLD }}>{activeName}</b>{t.turnSuffix}</span>
-          <button onClick={() => actions.openEditChores()} title={t.editChoresTitle} style={{ flex: 'none', width: 30, height: 30, borderRadius: 9, background: '#1b2130', border: '1px solid #333c50', color: '#A8B0BF', cursor: 'pointer', display: 'grid', placeItems: 'center' }}><EditIcon size={15} /></button>
+          {mayManageHousehold(online.state) && <button onClick={() => actions.openEditChores()} title={t.editChoresTitle} style={{ flex: 'none', width: 30, height: 30, borderRadius: 9, background: '#1b2130', border: '1px solid #333c50', color: '#A8B0BF', cursor: 'pointer', display: 'grid', placeItems: 'center' }}><EditIcon size={15} /></button>}
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
           {boss.chores.map((c, i) => {

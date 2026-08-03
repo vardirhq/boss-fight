@@ -3,11 +3,13 @@ import { useT, Avatar, initialOf, GOLD } from '../ui/common';
 import { hexA } from '../game/logic';
 import { REWARDS_PERSONAL, REWARDS_GROUP } from '../game/seed';
 import type { RewardDef } from '../game/types';
+import { mayActAsFighter, useOnline } from '../online/OnlineContext';
 
 const PS = "'Press Start 2P'";
 
 export function RewardsScreen() {
   const { state, actions } = useGame();
+  const online = useOnline();
   const t = useT();
   const g = state.game;
   const active = g.fighters.find((f) => f.id === g.activeFighterId);
@@ -37,8 +39,9 @@ export function RewardsScreen() {
           <div style={{ display: 'flex', gap: 10 }}>
             {g.fighters.map((f) => {
               const sel = g.activeFighterId === f.id;
+              const accessible = mayActAsFighter(online.state, f);
               return (
-                <button key={f.id} onClick={() => actions.selectFighter(f.id)} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                <button key={f.id} disabled={!accessible} onClick={() => actions.selectFighter(f.id)} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: accessible ? 'pointer' : 'not-allowed', padding: 0, opacity: accessible ? 1 : .35 }}>
                   <div style={{ position: 'relative', width: 46, height: 46, borderRadius: 14, background: '#2C3548', border: `2px solid ${f.color}`, display: 'grid', placeItems: 'center', fontFamily: PS, fontSize: 13, color: f.color }}>
                     {sel && <div style={{ position: 'absolute', inset: -3, borderRadius: 15, boxShadow: `0 0 0 2px ${f.color},0 0 14px ${hexA(f.color, .5)}` }} />}
                     <Avatar fighter={f} radius={12} />{!f.avatar && <span style={{ position: 'relative', zIndex: 1 }}>{initialOf(f.name)}</span>}
@@ -68,7 +71,7 @@ export function RewardsScreen() {
 
       <div style={label}>{t.groupRewards}</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {REWARDS_GROUP.map((r) => <RewardCard key={r.id} r={r} balance={g.pool} kind="group" />)}
+        {REWARDS_GROUP.map((r) => <RewardCard key={r.id} r={r} balance={g.pool} kind="group" allowed={online.state.mode !== 'fighter-account'} />)}
       </div>
 
       {g.redemptions.length > 0 && (
@@ -94,10 +97,10 @@ export function RewardsScreen() {
   );
 }
 
-function RewardCard({ r, balance, kind }: { r: RewardDef; balance: number; kind: 'personal' | 'group' }) {
+function RewardCard({ r, balance, kind, allowed = true }: { r: RewardDef; balance: number; kind: 'personal' | 'group'; allowed?: boolean }) {
   const { actions } = useGame();
   const t = useT();
-  const afford = balance >= r.cost;
+  const afford = allowed && balance >= r.cost;
   const group = kind === 'group';
   const coinBg = group
     ? 'radial-gradient(circle at 35% 30%,#bfe0ff,#5B9BE8 60%,#2f6bb0)'

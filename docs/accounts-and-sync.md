@@ -4,8 +4,12 @@ Design for turning Boss Kamp from a single-device offline PWA into a synced
 household game, without losing the offline-first experience or the
 kitchen-tablet way families actually play.
 
-Nothing here is implemented yet. This is the target the local schema should
-migrate toward.
+The account, household, fighter-claiming, pairing, authoritative configuration,
+append-only activity, and wallet foundations described here are implemented.
+The client keeps a local render cache and durable outbound queue, while the
+server is authoritative after a household is connected. Remaining production
+hardening work is tracked separately (notably versioned migrations, recovery
+flows, and broader integration coverage).
 
 ---
 

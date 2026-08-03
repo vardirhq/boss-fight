@@ -121,6 +121,23 @@ Request:
 }
 ```
 
+### `POST /api/auth/child-pair`
+
+Claims a short-lived fighter pairing code and verifies the child's PIN. The
+client does not need to know a household or fighter UUID.
+
+```json
+{
+  "code": "AB12CD34",
+  "pin": "1234",
+  "deviceName": "Lina's phone",
+  "platform": "android"
+}
+```
+
+Returns the child user, linked fighter and personal device IDs, and a bearer
+session.
+
 Response:
 
 ```json
@@ -366,19 +383,31 @@ Response:
 
 ### `POST /api/households/:householdId/children`
 
-Creates a child user, household membership, linked fighter, and PIN credential.
-Requires `owner` or `parent`.
+Claims an existing unclaimed fighter by creating a child user, household
+membership, and PIN credential. It never creates a duplicate fighter. Requires
+`owner` or `parent`.
 
 Request:
 
 ```json
 {
-  "displayName": "Lina",
-  "pin": "1234",
-  "color": "#ffcc00",
-  "sort": 0
+  "fighterId": "existing-fighter-uuid",
+  "pin": "1234"
 }
 ```
+
+### Fighter account controls
+
+These routes require `owner` or `parent` and preserve the fighter's game
+history:
+
+- `POST /api/households/:householdId/fighters/:fighterId/pin` resets a child PIN.
+- `PATCH /api/households/:householdId/fighters/:fighterId/access` sets
+  `requireOwnDevice`.
+- `POST /api/households/:householdId/fighters/:fighterId/suspend` suspends or
+  restores the linked member; suspension revokes their sessions and devices.
+- `POST /api/households/:householdId/fighters/:fighterId/unlink` removes the
+  identity link and unlocks the fighter without deleting its history.
 
 Response:
 
@@ -630,7 +659,6 @@ Request:
 
 ```json
 {
-  "householdId": "uuid",
   "code": "AB12CD34",
   "name": "Kitchen tablet",
   "platform": "android"
@@ -651,6 +679,9 @@ Response:
   "deviceToken": "opaque-device-token"
 }
 ```
+
+The response also includes `householdId`, allowing a fresh shared device to
+restore the correct household without already knowing its UUID.
 
 ## Sync
 
@@ -712,7 +743,7 @@ Request:
   "mutations": [
     {
       "type": "chore_completion",
-      "payload": {}
+      "payload": { "id": "stable-client-generated-uuid" }
     }
   ]
 }
@@ -738,23 +769,22 @@ Request payload:
 
 ```json
 {
-  "id": "optional-client-generated-uuid",
+  "id": "stable-client-generated-uuid",
   "bossId": "uuid",
   "choreId": "uuid",
   "fighterId": "uuid",
   "cycleKey": "2026-08-03",
   "resetSeq": 0,
-  "choreTitle": "Optional snapshot override",
-  "damage": 20,
-  "performedByDeviceId": "optional-uuid",
-  "actedOnBehalf": false,
   "completedAt": "2026-08-03T17:17:20Z"
 }
 ```
 
-The server verifies boss, chore, fighter, and device household ownership. If
-`choreTitle` or `damage` are omitted, the current chore title/damage are used as
-the immutable snapshot.
+The server verifies household ownership, fighter authority, current cycle,
+availability, reset sequence, and repeatability. It snapshots title and damage
+from the server configuration and derives performer/device and
+`acted_on_behalf`; client-supplied authority or reward values are not trusted.
+When this completion is the final blow, victory insertion and elite-aware wallet
+payouts happen atomically and exactly once.
 
 ### Mutation: `boss_reset`
 
@@ -762,8 +792,9 @@ Request payload:
 
 ```json
 {
-  "id": "optional-client-generated-uuid",
+  "id": "stable-client-generated-uuid",
   "bossId": "uuid",
+  "fighterId": "uuid",
   "cycleKey": "2026-08-03",
   "resetSeq": 1,
   "reason": "fight_again"
@@ -776,58 +807,30 @@ Request payload:
 fight_again, chores_edited, manual
 ```
 
-### Mutation: `boss_victory`
+### Mutation: `wallet_transfer`
 
 Request payload:
 
 ```json
 {
-  "id": "optional-client-generated-uuid",
-  "bossId": "uuid",
-  "cycleKey": "2026-08-03",
-  "resetSeq": 0,
-  "elite": false,
-  "rare": false,
-  "wonAt": "2026-08-03T17:17:20Z",
-  "payouts": [
-    {
-      "fighterId": "uuid",
-      "amount": 10
-    }
-  ]
-}
-```
-
-The unique key on `(household_id, boss_id, cycle_key, reset_seq)` makes victory
-insertion idempotent. If the victory insert wins, payout rows are inserted as
-`wallet_transactions.kind = 'boss_reward'` with `reference_type =
-'boss_victory'`.
-
-### Mutation: `wallet_transaction`
-
-Request payload:
-
-```json
-{
-  "id": "optional-client-generated-uuid",
-  "fighterId": "uuid-or-null-for-fellespott",
+  "id": "stable-client-generated-uuid",
+  "fighterId": "uuid",
   "amount": 10,
-  "kind": "adjustment",
-  "transferGroup": "optional-uuid",
-  "referenceType": "optional-reference-type",
-  "referenceId": "optional-reference-uuid",
-  "note": "optional"
+  "transferGroup": "stable-client-generated-uuid"
 }
 ```
 
-`kind` must be one of:
+The server validates authority and the derived fighter balance, then inserts the
+fighter debit and shared-pool credit in one transaction. Clients cannot submit
+arbitrary wallet ledger rows.
 
-```text
-boss_reward, transfer, redemption, adjustment, refund
-```
+### Mutation: `configuration_replace`
 
-For transfers, the client should send two rows with the same `transferGroup`
-whose amounts sum to zero.
+An owner/parent may atomically replace the submitted fighter, boss, chore, and
+reward configuration using the same stable client IDs as bootstrap. Rows absent
+from the snapshot are soft-deleted. The response includes fresh client-to-server
+ID mappings. Chore changes advance the affected boss reset sequence so old
+completion events cannot corrupt the edited fight.
 
 ### Mutation: `reward_redemption`
 
@@ -835,20 +838,22 @@ Request payload:
 
 ```json
 {
-  "id": "optional-client-generated-uuid",
+  "id": "stable-client-generated-uuid",
   "rewardId": "uuid",
   "scope": "personal",
   "fighterId": "uuid",
-  "icon": "star",
-  "title": "Extra screen time",
-  "cost": 20,
-  "status": "active",
-  "approvedByUserId": "optional-uuid"
+  "status": "active"
 }
 ```
 
-If `status` is `active`, the server inserts an idempotent negative
-`wallet_transactions` row referencing the redemption.
+The server resolves the reward configuration, verifies scope, fighter authority,
+and derived balance, snapshots its title/icon/cost, and inserts the redemption
+and debit atomically. A retry with the same ID cannot charge twice.
+
+### Mutation: `reward_redemption_update`
+
+An owner/parent may mark a redemption `used` or `cancelled`. The operation is
+idempotent.
 
 ## Error Responses
 
@@ -870,7 +875,11 @@ HTTP status mapping:
 
 - `401`: missing or invalid session/device token
 - `403`: authenticated but not an active member or lacks role
-- `400`: validation/database error
+- `400`: malformed or invalid request
+- `409`: unique/version conflict
+- `422`: domain rule violation
+- `429`: rate limited
+- `500`: unexpected server failure
 
 ## Android Notes
 

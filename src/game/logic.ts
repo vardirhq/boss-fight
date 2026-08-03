@@ -14,6 +14,7 @@ export function weekOf(d: Date): number {
 
 /** A stable key for the boss's current recurrence window. */
 export function cycleKey(boss: Boss, now = new Date()): string {
+  if (boss.currentCycleKey) return boss.currentCycleKey;
   const t = boss.trigger;
   if (t.type === 'daglig') return 'd' + now.toDateString();
   if (t.type === 'ukentlig') return 'w' + now.getFullYear() + '-' + weekOf(now);
@@ -66,6 +67,7 @@ function eliteKey(boss: Boss, now: Date): string {
  * they are already their own spectacle.
  */
 export function isElite(boss: Boss, now = new Date()): boolean {
+  if (boss.elite !== undefined) return boss.elite;
   if (boss.rare) return false;
   return hashStr(eliteKey(boss, now)) % 100 < ELITE_CHANCE;
 }
@@ -88,6 +90,7 @@ function localDateKey(now: Date): string {
 
 /** Whether a boss is currently due (spawned) for its schedule. */
 export function isDue(boss: Boss, _goldenRevealed: boolean, now = new Date()): boolean {
+  if (boss.available !== undefined) return boss.available;
   const t = boss.trigger;
   if (t.type === 'sjelden') {
     // One stable roll per local calendar day. Reopening the app cannot re-roll it,

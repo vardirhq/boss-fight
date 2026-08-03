@@ -9,8 +9,8 @@ import { BottomNav } from './screens/BottomNav';
 import { BossManager, ChoreEditor, PartyManager } from './screens/managers';
 import { SettingsPanel, Splash, Onboarding, Toast } from './screens/overlays';
 import { AccountSettings } from './online/AccountSettings';
-import { useOnline } from './online/OnlineContext';
-import { serverConfigToGameState } from './online/gameSync';
+import { mayManageHousehold, useOnline } from './online/OnlineContext';
+import { serverSyncToGameState } from './online/gameSync';
 import { GOLD, useT } from './ui/common';
 
 const PS = "'Press Start 2P'";
@@ -20,6 +20,11 @@ export function App() {
   const { state, actions } = useGame();
   const online = useOnline();
   const loadedServerConfiguration = useRef<string | null>(null);
+  const onlineRef = useRef(online);
+  const gameRef = useRef(state.game);
+  const syncInFlight = useRef(false);
+  onlineRef.current = online;
+  gameRef.current = state.game;
   const t = useT();
   const { ui, game } = state;
   const [accountOpen, setAccountOpen] = useState(false);
@@ -47,9 +52,9 @@ export function App() {
     const key = `${householdId}:${configurationConnectedAt}`;
     if (loadedServerConfiguration.current === key) return;
     loadedServerConfiguration.current = key;
-    void online.actions.getConfiguration()
-      .then((configuration) => {
-        actions.replaceGame(serverConfigToGameState(configuration, state.game));
+    void online.actions.syncNow()
+      .then((sync) => {
+        if (sync) actions.replaceGame(serverSyncToGameState(sync, state.game));
       })
       .catch(() => {
         // Keep the last local server snapshot available while offline. A manual
@@ -57,6 +62,31 @@ export function App() {
         loadedServerConfiguration.current = null;
       });
   }, [actions, online.actions, online.state.configurationConnectedAt, online.state.householdId, online.state.status, state.game]);
+
+  useEffect(() => {
+    if (!online.state.householdId || !online.state.configurationConnectedAt) return;
+    const synchronize = () => {
+      if (syncInFlight.current || document.visibilityState === 'hidden') return;
+      syncInFlight.current = true;
+      void onlineRef.current.actions.syncNow()
+        .then((sync) => {
+          if (sync) actions.replaceGame(serverSyncToGameState(sync, gameRef.current));
+        })
+        .catch(() => undefined)
+        .finally(() => { syncInFlight.current = false; });
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') synchronize();
+    };
+    window.addEventListener('online', synchronize);
+    document.addEventListener('visibilitychange', onVisibility);
+    const interval = window.setInterval(synchronize, 30_000);
+    return () => {
+      window.removeEventListener('online', synchronize);
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.clearInterval(interval);
+    };
+  }, [actions, online.state.configurationConnectedAt, online.state.householdId]);
 
   return (
     <div className="app-shell" style={{ width: '100%', height: '100%', minHeight: 0, position: 'relative', background: 'linear-gradient(180deg,#12161f 0%,#0c0f16 60%,#090b10 100%)', display: 'flex', flexDirection: 'column', color: '#F6EBDD', overflow: 'hidden' }}>
@@ -69,9 +99,9 @@ export function App() {
       </div>
 
       <Toast />
-      {ui.editBosses && <BossManager />}
-      {ui.editParty && <PartyManager />}
-      {ui.editingChores && <ChoreEditor />}
+      {ui.editBosses && mayManageHousehold(online.state) && <BossManager />}
+      {ui.editParty && mayManageHousehold(online.state) && <PartyManager />}
+      {ui.editingChores && mayManageHousehold(online.state) && <ChoreEditor />}
       {ui.settingsOpen && <SettingsPanel />}
       {ui.settingsOpen && !accountOpen && (
         <button

@@ -90,6 +90,45 @@ export interface ServerHouseholdConfig {
   balances: Array<Record<string, unknown>>;
 }
 
+export type SyncMutationType =
+  | 'configuration_replace'
+  | 'chore_completion'
+  | 'boss_reset'
+  | 'wallet_transfer'
+  | 'reward_redemption'
+  | 'reward_redemption_update';
+
+export interface PendingMutation {
+  id: string;
+  householdId: string;
+  type: SyncMutationType;
+  payload: Record<string, unknown>;
+  createdAt: string;
+  attempts: number;
+  lastError?: string;
+}
+
+export interface ServerSyncState {
+  serverTime: string;
+  mutable: {
+    households: Array<Record<string, unknown>>;
+    household_members: Array<Record<string, unknown>>;
+    devices: Array<Record<string, unknown>>;
+    fighters: Array<Record<string, unknown>>;
+    fighter_avatars: Array<Record<string, unknown>>;
+    bosses: Array<Record<string, unknown>>;
+    chores: Array<Record<string, unknown>>;
+    rewards: Array<Record<string, unknown>>;
+  };
+  events: {
+    chore_completions: Array<Record<string, unknown>>;
+    boss_resets: Array<Record<string, unknown>>;
+    boss_victories: Array<Record<string, unknown>>;
+    wallet_transactions: Array<Record<string, unknown>>;
+    reward_redemptions: Array<Record<string, unknown>>;
+  };
+}
+
 export type ApiErrorKind = 'network' | 'unauthenticated' | 'forbidden' | 'conflict' | 'validation' | 'server' | 'unknown';
 
 export class ApiError extends Error {
@@ -177,7 +216,7 @@ function errorKind(status: number): ApiErrorKind {
   return 'unknown';
 }
 
-async function request<T>(path: string, init: RequestInit = {}, token?: string): Promise<T> {
+async function request<T>(path: string, init: RequestInit = {}, token?: string | null, householdDeviceToken?: string | null): Promise<T> {
   let response: Response;
   try {
     response = await fetch(`${API_BASE}${path}`, {
@@ -185,6 +224,7 @@ async function request<T>(path: string, init: RequestInit = {}, token?: string):
       headers: {
         'content-type': 'application/json',
         ...(token ? { authorization: `Bearer ${token}` } : {}),
+        ...(householdDeviceToken ? { 'x-boss-kamp-device-token': householdDeviceToken } : {}),
         ...init.headers,
       },
     });
@@ -225,6 +265,61 @@ export async function loginChild(householdId: string, fighterId: string, pin: st
   }));
 }
 
+export async function loginChildWithPairing(code: string, pin: string, deviceName: string, platform: string) {
+  return normalizeAuth(await request<AuthResponse>('/api/auth/child-pair', {
+    method: 'POST',
+    body: JSON.stringify({ code, pin, deviceName, platform }),
+  }));
+}
+
+export async function setupChildFighter(token: string, householdId: string, fighterId: string, pin: string) {
+  return request<{ fighter: Record<string, unknown> }>(`/api/households/${encodeURIComponent(householdId)}/children`, {
+    method: 'POST', body: JSON.stringify({ fighterId, pin }),
+  }, token);
+}
+
+export async function resetChildPin(token: string, householdId: string, fighterId: string, pin: string) {
+  return request<{ ok: boolean }>(`/api/households/${encodeURIComponent(householdId)}/fighters/${encodeURIComponent(fighterId)}/pin`, {
+    method: 'POST', body: JSON.stringify({ pin }),
+  }, token);
+}
+
+export async function createFighterPairing(token: string, householdId: string, fighterId: string) {
+  return request<{ code: string; pairing: Record<string, unknown> }>(`/api/households/${encodeURIComponent(householdId)}/pairings`, {
+    method: 'POST', body: JSON.stringify({ role: 'fighter', fighterId }),
+  }, token);
+}
+
+export async function inviteAdultFighter(token: string, householdId: string, fighterId: string, email: string) {
+  return request<{ token: string; invite: Record<string, unknown> }>(`/api/households/${encodeURIComponent(householdId)}/invites`, {
+    method: 'POST', body: JSON.stringify({ fighterId, email, role: 'member' }),
+  }, token);
+}
+
+export async function acceptHouseholdInvite(token: string, inviteToken: string) {
+  return request<{ member: Record<string, unknown>; fighter: Record<string, unknown> | null }>('/api/invites/accept', {
+    method: 'POST', body: JSON.stringify({ token: inviteToken }),
+  }, token);
+}
+
+export async function updateFighterAccess(token: string, householdId: string, fighterId: string, requireOwnDevice: boolean) {
+  return request<{ fighter: Record<string, unknown> }>(`/api/households/${encodeURIComponent(householdId)}/fighters/${encodeURIComponent(fighterId)}/access`, {
+    method: 'PATCH', body: JSON.stringify({ requireOwnDevice }),
+  }, token);
+}
+
+export async function suspendFighterAccess(token: string, householdId: string, fighterId: string, suspended = true) {
+  return request<{ ok: boolean }>(`/api/households/${encodeURIComponent(householdId)}/fighters/${encodeURIComponent(fighterId)}/suspend`, {
+    method: 'POST', body: JSON.stringify({ suspended }),
+  }, token);
+}
+
+export async function unlinkFighterAccount(token: string, householdId: string, fighterId: string) {
+  return request<{ fighter: Record<string, unknown> }>(`/api/households/${encodeURIComponent(householdId)}/fighters/${encodeURIComponent(fighterId)}/unlink`, {
+    method: 'POST', body: '{}',
+  }, token);
+}
+
 export async function bootstrapHousehold(token: string, householdName: string, snapshot?: BootstrapSnapshot) {
   const result = await request<{
     householdId?: unknown;
@@ -260,6 +355,56 @@ export async function getHouseholdConfig(token: string, householdId: string) {
     rewards: result.rewards,
     balances: Array.isArray(result.balances) ? result.balances : [],
   } satisfies ServerHouseholdConfig;
+}
+
+export async function pushSyncMutations(token: string | null, householdId: string, mutations: PendingMutation[], householdDeviceToken?: string | null) {
+  return request<{ accepted: Array<Record<string, unknown>> }>('/api/sync/push', {
+    method: 'POST',
+    body: JSON.stringify({
+      householdId,
+      mutations: mutations.map((mutation) => ({
+        type: mutation.type,
+        payload: { ...mutation.payload, id: mutation.id },
+      })),
+    }),
+  }, token, householdDeviceToken);
+}
+
+export async function pullSyncState(token: string | null, householdId: string, householdDeviceToken?: string | null) {
+  const query = new URLSearchParams({
+    household_id: householdId,
+    since_chore_completions: '0',
+    since_boss_resets: '0',
+    since_boss_victories: '0',
+    since_wallet_transactions: '0',
+    since_reward_redemptions: '0',
+  });
+  const result = await request<Partial<ServerSyncState>>(`/api/sync/pull?${query}`, {}, token, householdDeviceToken);
+  if (!result.mutable || !result.events || typeof result.serverTime !== 'string') {
+    throw new ApiError('Invalid API response: sync state', 'server');
+  }
+  return result as ServerSyncState;
+}
+
+export async function createHouseholdDevicePairing(token: string, householdId: string) {
+  return request<{ code: string; pairing: Record<string, unknown> }>(`/api/households/${encodeURIComponent(householdId)}/pairings`, {
+    method: 'POST', body: JSON.stringify({ role: 'household_device' }),
+  }, token);
+}
+
+export async function claimHouseholdDevice(code: string, name: string, platform: string) {
+  const result = await request<{
+    deviceToken?: unknown;
+    householdId?: unknown;
+    device?: { id?: unknown };
+  }>('/api/pairings/claim-household-device', {
+    method: 'POST', body: JSON.stringify({ code, name, platform }),
+  });
+  return {
+    deviceToken: requiredString(result.deviceToken, 'deviceToken'),
+    householdId: requiredString(result.householdId, 'householdId'),
+    deviceId: requiredString(result.device?.id, 'device.id'),
+  };
 }
 
 export async function getMe(token: string) {

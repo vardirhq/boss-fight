@@ -35,6 +35,14 @@ export interface Boss {
   clearedCycle: string;
   /** Ids of used (non-repeatable) chores in the current cycle. */
   usedChores: string[];
+  /** Latest server reset sequence for this recurrence cycle. */
+  resetSeq?: number;
+  /** Server-calculated recurrence key in the household timezone. */
+  currentCycleKey?: string;
+  /** Server-calculated schedule/rare-spawn availability. */
+  available?: boolean;
+  /** Server-calculated elite roll for this household recurrence cycle. */
+  elite?: boolean;
   /** Asleep: hidden from the roster and schedule until awakened. */
   dormant: boolean;
   /** Family victory count that auto-awakens a dormant boss (0 = never on its own). */
@@ -53,6 +61,12 @@ export interface Fighter {
   coins: number;
   /** Lifetime XP (damage dealt), drives the level curve. */
   careerXp: number;
+  /** Linked authenticated identity, when the profile has been claimed. */
+  userId?: string;
+  userKind?: 'adult' | 'child';
+  accountStatus?: 'active' | 'suspended' | 'left' | 'invited';
+  /** When true, parents and shared household devices cannot act for this fighter. */
+  requireOwnDevice?: boolean;
 }
 
 /** A single attack recorded during the current battle cycle. */
