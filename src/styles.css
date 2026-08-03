@@ -1,6 +1,14 @@
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; }
+html, body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
 body {
+  position: fixed;
+  inset: 0;
   background: #090b10;
   font-family: 'Space Grotesk', system-ui, sans-serif;
   color: #f6ebdd;
@@ -12,39 +20,33 @@ html.native-app body {
 html.native-app #root {
   height: calc(100dvh - 12px);
 }
-#root { height: 100dvh; }
+#root {
+  width: 100%;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+}
+.app-shell,
+.app-content {
+  min-height: 0;
+  overscroll-behavior: contain;
+}
 a { color: #f4b942; text-decoration: none; }
 a:hover { color: #ffcf6b; }
 button { font-family: inherit; }
 input { font-family: inherit; }
 
 .scr::-webkit-scrollbar { width: 0; }
-.scr { scrollbar-width: none; }
-
-/* Battle behaves like a game screen: the boss remains visible while the
-   team and attack controls move underneath it. Inline stage sizing is
-   overridden deliberately here so smaller phones still leave room to act. */
-.battle-scroll > div > :first-child {
-  position: sticky !important;
-  top: 0;
-  z-index: 42;
-  background: #12161f;
-}
-.battle-scroll > div > :nth-child(2) {
-  position: sticky !important;
-  top: 66px;
-  z-index: 35;
-  flex: none !important;
-  height: clamp(280px, 43dvh, 410px);
-  min-height: 0 !important;
-  margin-bottom: 12px !important;
-  box-shadow: 0 14px 24px rgba(7, 9, 13, .72);
+.scr {
+  min-height: 0;
+  scrollbar-width: none;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
-@media (max-height: 720px) {
-  .battle-scroll > div > :nth-child(2) {
-    height: 300px;
-  }
+/* The intro now belongs to the app shell. Hide the obsolete stage-local copy. */
+.battle-scroll [style*="z-index: 35"] {
+  display: none !important;
 }
 
 @keyframes idleBob { 0%, 100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(-12px) rotate(1deg); } }
