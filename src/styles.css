@@ -21,6 +21,32 @@ input { font-family: inherit; }
 .scr::-webkit-scrollbar { width: 0; }
 .scr { scrollbar-width: none; }
 
+/* Battle behaves like a game screen: the boss remains visible while the
+   team and attack controls move underneath it. Inline stage sizing is
+   overridden deliberately here so smaller phones still leave room to act. */
+.battle-scroll > div > :first-child {
+  position: sticky !important;
+  top: 0;
+  z-index: 42;
+  background: #12161f;
+}
+.battle-scroll > div > :nth-child(2) {
+  position: sticky !important;
+  top: 66px;
+  z-index: 35;
+  flex: none !important;
+  height: clamp(280px, 43dvh, 410px);
+  min-height: 0 !important;
+  margin-bottom: 12px !important;
+  box-shadow: 0 14px 24px rgba(7, 9, 13, .72);
+}
+
+@media (max-height: 720px) {
+  .battle-scroll > div > :nth-child(2) {
+    height: 300px;
+  }
+}
+
 @keyframes idleBob { 0%, 100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(-12px) rotate(1deg); } }
 @keyframes floatDmg { 0% { transform: translate(-50%, 0) scale(.5); opacity: 0; } 14% { opacity: 1; transform: translate(-50%, -6px) scale(1.15); } 100% { transform: translate(-50%, -104px) scale(.85); opacity: 0; } }
 @keyframes barShine { 0% { transform: translateX(-120%); } 100% { transform: translateX(360%); } }
