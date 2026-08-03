@@ -196,6 +196,9 @@ Response:
 ### `POST /api/bootstrap`
 
 Creates a household for the authenticated adult and makes them an active owner.
+This first-household operation is retry-safe: if the same owner retries after a
+lost response, the API returns their existing active owned household instead of
+creating another one.
 
 Headers:
 
@@ -218,9 +221,12 @@ Response:
 {
   "userId": "uuid",
   "householdId": "uuid",
-  "memberId": "uuid"
+  "memberId": "uuid",
+  "created": true
 }
 ```
+
+`created` is `false` when an earlier successful bootstrap is returned.
 
 ### `PATCH /api/households/:householdId`
 
