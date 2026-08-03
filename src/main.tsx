@@ -10,6 +10,14 @@ import type { GameState } from './game/types';
 
 registerSW({ immediate: true });
 
+const capacitor = (window as Window & {
+  Capacitor?: { isNativePlatform?: () => boolean };
+}).Capacitor;
+
+if (capacitor?.isNativePlatform?.()) {
+  document.documentElement.classList.add('native-app');
+}
+
 function Boot() {
   const [ready, setReady] = useState<{ db: Db; initial: GameState } | null>(null);
   const [error, setError] = useState<string | null>(null);
