@@ -1,4 +1,5 @@
 import { useGame } from '../store/GameContext';
+import { mayManageHousehold, useOnline } from '../online/OnlineContext';
 import { useT, Avatar, initialOf, GOLD } from '../ui/common';
 import { EditIcon } from './BattleScreen';
 import { levelInfo } from '../game/logic';
@@ -7,6 +8,7 @@ const PS = "'Press Start 2P'";
 
 export function PartyScreen() {
   const { state, actions } = useGame();
+  const online = useOnline();
   const t = useT();
   const g = state.game;
   const boss = g.bosses.find((b) => b.id === g.currentBossId) ?? g.bosses[0];
@@ -28,7 +30,7 @@ export function PartyScreen() {
           <div style={{ fontFamily: PS, fontSize: 15, color: GOLD, lineHeight: 1.4 }}>{t.team}</div>
           <div style={{ fontSize: 13, color: '#6C7486', marginTop: 8, fontWeight: 500 }}>Madsen-husholdningen · {t.teamSub.replace('{n}', String(g.fighters.length))}</div>
         </div>
-        <button onClick={actions.openPartyManager} title={t.partyMgrTitle} style={{ flex: 'none', width: 40, height: 40, borderRadius: 13, background: '#1b2130', border: '1px solid #333c50', color: '#A8B0BF', cursor: 'pointer', display: 'grid', placeItems: 'center' }}><EditIcon size={16} /></button>
+        {mayManageHousehold(online.state) && <button onClick={actions.openPartyManager} title={t.partyMgrTitle} style={{ flex: 'none', width: 40, height: 40, borderRadius: 13, background: '#1b2130', border: '1px solid #333c50', color: '#A8B0BF', cursor: 'pointer', display: 'grid', placeItems: 'center' }}><EditIcon size={16} /></button>}
       </div>
 
       {g.fighters.length === 0 ? (
@@ -36,7 +38,7 @@ export function PartyScreen() {
           <div style={{ fontSize: 40 }}>🧑‍🤝‍🧑</div>
           <div style={{ fontSize: 14, color: '#A8B0BF', fontWeight: 600, marginTop: 14 }}>{t.noFighters}</div>
           <div style={{ fontSize: 12, color: '#6C7486', marginTop: 8, lineHeight: 1.5 }} dangerouslySetInnerHTML={{ __html: t.noFightersSub }} />
-          <button onClick={actions.openPartyManager} style={goldBtn}>{t.addFightersBtn}</button>
+          {mayManageHousehold(online.state) && <button onClick={actions.openPartyManager} style={goldBtn}>{t.addFightersBtn}</button>}
         </div>
       ) : (
         <>
