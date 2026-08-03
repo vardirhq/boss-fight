@@ -31,8 +31,8 @@ export function App() {
   const currentBoss = game.bosses.find((boss) => boss.id === game.currentBossId) ?? game.bosses[0];
   const showBattleIntro = ui.phase === 'app' && ui.tab === 'battle' && ui.intro && currentBoss;
   const accountCopy = game.settings.lang === 'en'
-    ? { button: '☁ Account & sync', title: 'ACCOUNT & SYNC', back: 'Back' }
-    : { button: '☁ Konto og synk', title: 'KONTO OG SYNK', back: 'Tilbake' };
+    ? { button: 'Account', title: 'ACCOUNT', back: 'Back' }
+    : { button: 'Konto', title: 'KONTO', back: 'Tilbake' };
 
   useEffect(() => {
     for (const fighter of game.fighters) {
