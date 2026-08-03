@@ -49,6 +49,37 @@ input { font-family: inherit; }
   display: none !important;
 }
 
+/* Battle is a game screen, not one long document. Keep the boss visible and
+   give the attack list the remaining space to scroll. */
+.battle-scroll {
+  overflow: hidden !important;
+}
+.battle-scroll > div {
+  height: 100%;
+  min-height: 0 !important;
+  overflow: hidden;
+}
+.battle-scroll > div > :nth-child(2) {
+  flex: 0 0 clamp(280px, 42dvh, 430px) !important;
+  min-height: 0 !important;
+}
+.battle-scroll > div > :nth-child(3) {
+  flex: none !important;
+}
+.battle-scroll > div > :nth-child(4) {
+  flex: 1 1 auto !important;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-height: 760px) {
+  .battle-scroll > div > :nth-child(2) {
+    flex-basis: 270px !important;
+  }
+}
+
 @keyframes idleBob { 0%, 100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(-12px) rotate(1deg); } }
 @keyframes floatDmg { 0% { transform: translate(-50%, 0) scale(.5); opacity: 0; } 14% { opacity: 1; transform: translate(-50%, -6px) scale(1.15); } 100% { transform: translate(-50%, -104px) scale(.85); opacity: 0; } }
 @keyframes barShine { 0% { transform: translateX(-120%); } 100% { transform: translateX(360%); } }
