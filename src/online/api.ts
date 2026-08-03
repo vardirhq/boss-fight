@@ -25,6 +25,71 @@ export interface AuthSession {
   deviceId: string | null;
 }
 
+export interface BootstrapSnapshot {
+  victoriesBaseline: number;
+  pool: number;
+  fighters: Array<{
+    clientId: string;
+    name: string;
+    color: string;
+    avatar?: { mime: string; bytesBase64: string; hash: string };
+    streak: number;
+    coins: number;
+    careerXp: number;
+    sort: number;
+  }>;
+  bosses: Array<{
+    clientId: string;
+    name: string;
+    sprite: string;
+    frames: number;
+    rare: boolean;
+    hue?: number;
+    trigger: { type: string; day?: number; date?: number; note?: string };
+    dormant: boolean;
+    unlockAt: number;
+    sort: number;
+  }>;
+  chores: Array<{
+    clientId: string;
+    bossClientId: string;
+    title: string;
+    damage: number;
+    repeatable: boolean;
+    sort: number;
+  }>;
+  rewards: Array<{
+    clientId: string;
+    scope: 'personal' | 'group';
+    icon: string;
+    title: string;
+    description: string;
+    cost: number;
+    sort: number;
+  }>;
+}
+
+export interface BootstrapResult {
+  householdId: string;
+  created: boolean;
+  ids: {
+    fighters: Record<string, string>;
+    bosses: Record<string, string>;
+    chores: Record<string, string>;
+    rewards: Record<string, string>;
+  };
+}
+
+export interface ServerHouseholdConfig {
+  household: Record<string, unknown>;
+  fighters: Array<Record<string, unknown>>;
+  fighterAvatars: Array<Record<string, unknown>>;
+  bosses: Array<Record<string, unknown>>;
+  chores: Array<Record<string, unknown>>;
+  rewards: Array<Record<string, unknown>>;
+  balances: Array<Record<string, unknown>>;
+}
+
 export type ApiErrorKind = 'network' | 'unauthenticated' | 'forbidden' | 'conflict' | 'validation' | 'server' | 'unknown';
 
 export class ApiError extends Error {
@@ -160,15 +225,41 @@ export async function loginChild(householdId: string, fighterId: string, pin: st
   }));
 }
 
-export async function bootstrapHousehold(token: string, householdName: string) {
-  const result = await request<{ householdId?: unknown; created?: unknown }>('/api/bootstrap', {
+export async function bootstrapHousehold(token: string, householdName: string, snapshot?: BootstrapSnapshot) {
+  const result = await request<{
+    householdId?: unknown;
+    created?: unknown;
+    ids?: BootstrapResult['ids'];
+  }>('/api/bootstrap', {
     method: 'POST',
-    body: JSON.stringify({ householdName, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Oslo' }),
+    body: JSON.stringify({
+      householdName,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Oslo',
+      ...snapshot,
+    }),
   }, token);
   return {
     householdId: requiredString(result.householdId, 'householdId'),
     created: result.created !== false,
+    ids: result.ids ?? { fighters: {}, bosses: {}, chores: {}, rewards: {} },
   };
+}
+
+export async function getHouseholdConfig(token: string, householdId: string) {
+  const result = await request<Partial<ServerHouseholdConfig>>(`/api/households/${encodeURIComponent(householdId)}/config`, {}, token);
+  if (!result.household || !Array.isArray(result.fighters) || !Array.isArray(result.bosses)
+    || !Array.isArray(result.chores) || !Array.isArray(result.rewards)) {
+    throw new ApiError('Invalid API response: household config', 'server');
+  }
+  return {
+    household: result.household,
+    fighters: result.fighters,
+    fighterAvatars: Array.isArray(result.fighterAvatars) ? result.fighterAvatars : [],
+    bosses: result.bosses,
+    chores: result.chores,
+    rewards: result.rewards,
+    balances: Array.isArray(result.balances) ? result.balances : [],
+  } satisfies ServerHouseholdConfig;
 }
 
 export async function getMe(token: string) {
