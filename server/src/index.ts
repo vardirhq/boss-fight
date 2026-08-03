@@ -1579,15 +1579,19 @@ export async function buildApp() {
           const activeBosses = Object.values(ids.bosses);
           const activeChores = Object.values(ids.chores);
           const activeRewards = Object.values(ids.rewards);
+          const fighterIds = tx.array(activeFighters, 2950);
+          const bossIds = tx.array(activeBosses, 2950);
+          const choreIds = tx.array(activeChores, 2950);
+          const rewardIds = tx.array(activeRewards, 2950);
           const removedChores = await tx`
             select boss_id from chores
-            where household_id = ${householdId} and deleted_at is null and not (id = any(${activeChores}::uuid[]))
+            where household_id = ${householdId} and deleted_at is null and not (id = any(${choreIds}))
           `;
           removedChores.forEach((row) => bossesNeedingReset.add(String(row.boss_id)));
-          await tx`update chores set deleted_at = now(), version = version + 1 where household_id = ${householdId} and deleted_at is null and not (id = any(${activeChores}::uuid[]))`;
-          await tx`update bosses set deleted_at = now(), version = version + 1 where household_id = ${householdId} and deleted_at is null and not (id = any(${activeBosses}::uuid[]))`;
-          await tx`update fighters set deleted_at = now(), version = version + 1 where household_id = ${householdId} and deleted_at is null and not (id = any(${activeFighters}::uuid[]))`;
-          await tx`update rewards set deleted_at = now(), version = version + 1 where household_id = ${householdId} and deleted_at is null and not (id = any(${activeRewards}::uuid[]))`;
+          await tx`update chores set deleted_at = now(), version = version + 1 where household_id = ${householdId} and deleted_at is null and not (id = any(${choreIds}))`;
+          await tx`update bosses set deleted_at = now(), version = version + 1 where household_id = ${householdId} and deleted_at is null and not (id = any(${bossIds}))`;
+          await tx`update fighters set deleted_at = now(), version = version + 1 where household_id = ${householdId} and deleted_at is null and not (id = any(${fighterIds}))`;
+          await tx`update rewards set deleted_at = now(), version = version + 1 where household_id = ${householdId} and deleted_at is null and not (id = any(${rewardIds}))`;
           const [household] = await tx`select timezone from households where id = ${householdId}`;
           const timezone = requireString(household.timezone, 'timezone');
           for (const bossId of bossesNeedingReset) {
