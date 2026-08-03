@@ -2,14 +2,18 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import {
   ApiError,
   bootstrapHousehold as bootstrapHouseholdRequest,
+  getHouseholdConfig,
   getMe,
   loginAdult as loginAdultRequest,
   loginChild as loginChildRequest,
   logoutOnline,
   registerAdult as registerAdultRequest,
   type AuthSession,
+  type BootstrapResult,
+  type BootstrapSnapshot,
   type HouseholdRole,
   type OnlineUser,
+  type ServerHouseholdConfig,
 } from './api';
 
 const STORAGE_KEY = 'boss-kamp-online-state-v2';
@@ -33,6 +37,8 @@ export interface OnlineState {
   lastSyncCursor: string | number | null;
   lastSuccessfulSyncAt: string | null;
   pendingMutationCount: number;
+  configurationConnectedAt: string | null;
+  entityMappings: BootstrapResult['ids'] | null;
   error: OnlineError | null;
 }
 
@@ -50,6 +56,8 @@ interface PersistedOnlineState {
   householdName: string | null;
   lastSyncCursor: string | number | null;
   lastSuccessfulSyncAt: string | null;
+  configurationConnectedAt: string | null;
+  entityMappings: BootstrapResult['ids'] | null;
 }
 
 interface OnlineActions {
@@ -57,7 +65,8 @@ interface OnlineActions {
   loginAdult(email: string, password: string): Promise<void>;
   loginChild(householdId: string, fighterId: string, pin: string, deviceName: string, platform: string): Promise<void>;
   logout(): Promise<void>;
-  createHousehold(name: string): Promise<void>;
+  createHousehold(name: string, snapshot: BootstrapSnapshot): Promise<ServerHouseholdConfig>;
+  getConfiguration(): Promise<ServerHouseholdConfig>;
   refreshIdentity(): Promise<void>;
   syncNow(): Promise<void>;
 }
@@ -71,7 +80,8 @@ const localState: OnlineState = {
   mode: 'local', status: 'idle', sessionToken: null, sessionExpiresAt: null,
   userId: null, deviceId: null, householdId: null, fighterId: null, role: null,
   account: null, householdName: null, lastSyncCursor: null,
-  lastSuccessfulSyncAt: null, pendingMutationCount: 0, error: null,
+  lastSuccessfulSyncAt: null, pendingMutationCount: 0,
+  configurationConnectedAt: null, entityMappings: null, error: null,
 };
 
 function clearPersistedState() {
@@ -159,6 +169,8 @@ function loadPersistedState(): OnlineState {
       householdName: value.householdName ?? null,
       lastSyncCursor: value.lastSyncCursor ?? null,
       lastSuccessfulSyncAt: value.lastSuccessfulSyncAt ?? null,
+      configurationConnectedAt: value.configurationConnectedAt ?? null,
+      entityMappings: value.entityMappings ?? null,
     };
   } catch {
     clearPersistedState();
@@ -185,6 +197,8 @@ function persistState(state: OnlineState) {
     householdName: state.householdName,
     lastSyncCursor: state.lastSyncCursor,
     lastSuccessfulSyncAt: state.lastSuccessfulSyncAt,
+    configurationConnectedAt: state.configurationConnectedAt,
+    entityMappings: state.entityMappings,
   };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(persisted));
   localStorage.removeItem('boss-kamp-online-session-v1');
@@ -243,6 +257,9 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
           householdId: membership?.id ?? null,
           householdName: membership?.name ?? null,
           role: membership?.role ?? null,
+          configurationConnectedAt: membership
+            ? (current.configurationConnectedAt ?? new Date().toISOString())
+            : null,
           error: null,
         };
         persistState(next);
@@ -279,7 +296,16 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
   const authenticate = useCallback(async (request: () => Promise<AuthSession>) => {
     setState((current) => ({ ...current, status: 'syncing', error: null }));
     try {
-      replaceState(stateFromAuth(await request()));
+      const session = await request();
+      const me = await getMe(session.token);
+      const membership = me.households[0] ?? null;
+      replaceState({
+        ...stateFromAuth(session),
+        householdId: membership?.id ?? null,
+        householdName: membership?.name ?? null,
+        role: membership?.role ?? null,
+        configurationConnectedAt: membership ? new Date().toISOString() : null,
+      });
     } catch (error) {
       setState((current) => ({ ...current, status: 'error', error: errorCode(error, 'auth') }));
       throw error;
@@ -301,20 +327,26 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
         replaceState(localState);
       }
     },
-    createHousehold: async (name) => {
-      if (!state.sessionToken || state.householdId) return;
+    createHousehold: async (name, snapshot) => {
+      if (!state.sessionToken) throw new ApiError('Authentication required', 'unauthenticated');
       setState((current) => ({ ...current, status: 'syncing', error: null }));
       try {
-        const result = await bootstrapHouseholdRequest(state.sessionToken, name);
+        const result = await bootstrapHouseholdRequest(state.sessionToken, name, snapshot);
+        const configuration = await getHouseholdConfig(state.sessionToken, result.householdId);
+        const connectedAt = new Date().toISOString();
         const next: OnlineState = {
           ...state,
           status: 'authenticated',
           householdId: result.householdId,
           householdName: name.trim(),
           role: 'owner',
+          configurationConnectedAt: connectedAt,
+          entityMappings: result.ids,
+          lastSuccessfulSyncAt: connectedAt,
           error: null,
         };
         replaceState(next);
+        return configuration;
       } catch (error) {
         setState((current) => ({
           ...current,
@@ -323,6 +355,10 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
         }));
         throw error;
       }
+    },
+    getConfiguration: async () => {
+      if (!state.sessionToken || !state.householdId) throw new ApiError('Household connection required', 'validation');
+      return getHouseholdConfig(state.sessionToken, state.householdId);
     },
     refreshIdentity,
     syncNow: refreshIdentity,
