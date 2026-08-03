@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useGame } from './store/GameContext';
 import { BattleScreen } from './screens/BattleScreen';
 import { HomeScreen } from './screens/HomeScreen';
@@ -9,6 +9,8 @@ import { BottomNav } from './screens/BottomNav';
 import { BossManager, ChoreEditor, PartyManager } from './screens/managers';
 import { SettingsPanel, Splash, Onboarding, Toast } from './screens/overlays';
 import { AccountSettings } from './online/AccountSettings';
+import { useOnline } from './online/OnlineContext';
+import { serverConfigToGameState } from './online/gameSync';
 import { GOLD, useT } from './ui/common';
 
 const PS = "'Press Start 2P'";
@@ -16,6 +18,8 @@ const LEGACY_NEW_FIGHTER_NAME = 'Ny kjemper';
 
 export function App() {
   const { state, actions } = useGame();
+  const online = useOnline();
+  const loadedServerConfiguration = useRef<string | null>(null);
   const t = useT();
   const { ui, game } = state;
   const [accountOpen, setAccountOpen] = useState(false);
@@ -36,6 +40,23 @@ export function App() {
   useEffect(() => {
     if (!ui.settingsOpen) setAccountOpen(false);
   }, [ui.settingsOpen]);
+
+  useEffect(() => {
+    const { householdId, configurationConnectedAt, status } = online.state;
+    if (!householdId || !configurationConnectedAt || status !== 'authenticated') return;
+    const key = `${householdId}:${configurationConnectedAt}`;
+    if (loadedServerConfiguration.current === key) return;
+    loadedServerConfiguration.current = key;
+    void online.actions.getConfiguration()
+      .then((configuration) => {
+        actions.replaceGame(serverConfigToGameState(configuration, state.game));
+      })
+      .catch(() => {
+        // Keep the last local server snapshot available while offline. A manual
+        // fetch or the next app start will try the authoritative server again.
+        loadedServerConfiguration.current = null;
+      });
+  }, [actions, online.actions, online.state.configurationConnectedAt, online.state.householdId, online.state.status, state.game]);
 
   return (
     <div className="app-shell" style={{ width: '100%', height: '100%', minHeight: 0, position: 'relative', background: 'linear-gradient(180deg,#12161f 0%,#0c0f16 60%,#090b10 100%)', display: 'flex', flexDirection: 'column', color: '#F6EBDD', overflow: 'hidden' }}>
