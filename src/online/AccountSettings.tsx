@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import type { Lang } from '../game/types';
+import { useGame } from '../store/GameContext';
 import { useOnline, type OnlineError, type OnlineMode, type OnlineStatus } from './OnlineContext';
+import { createBootstrapSnapshot, serverConfigToGameState } from './gameSync';
 
 const field: React.CSSProperties = {
   width: '100%', background: '#0f1420', border: '1px solid #333c50', borderRadius: 11,
@@ -17,8 +19,9 @@ const COPY = {
     title: 'Konto og husholdning', intro: 'Lokal spilling fortsetter som før. Konto er valgfritt og brukes til synk og egne spillerinnlogginger.',
     register: 'Opprett konto', login: 'Logg inn', name: 'Navn', email: 'E-post', password: 'Passord, minst 10 tegn',
     connecting: 'Kobler til…', family: 'Familien', householdName: 'Navn på husholdningen', createHousehold: 'Opprett netthusholdning', creating: 'Oppretter…',
-    bootstrapNote: 'Den eksisterende lokale familien blir ikke lastet opp eller endret ennå.', connected: 'Husholdningen er koblet til. Lokal spilldata er fortsatt autoritativ på denne enheten.',
-    logout: 'Logg ut', sync: 'Sjekk tilkobling', restoring: 'Sjekker økten…', offline: 'Frakoblet – lokal spilling virker fortsatt.',
+    bootstrapNote: 'Dette laster opp oppsettet og nullstiller en kamp som pågår. Deretter blir serveren fasiten, mens denne enheten beholder en lokal kopi for frakoblet bruk.', connected: 'Husholdningen er koblet til. Serveren er fasiten, og denne enheten bruker en lokal kopi når den er frakoblet.',
+    logout: 'Logg ut', sync: 'Hent fra server', restoring: 'Sjekker økten…', offline: 'Frakoblet – den sist lagrede kopien virker fortsatt.',
+    fighterNameRequired: 'Gi alle spillerne et navn før du kobler spillet til serveren.', syncFailed: 'Kunne ikke hente spilloppsettet fra serveren.',
     local: 'Kun lokal', adult: 'Voksenkonto', child: 'Spillerkonto', shared: 'Delt husholdningsenhet', role: 'Rolle',
     errors: {
       'invalid-credentials': 'E-post eller passord er feil.', 'account-exists': 'Det finnes allerede en konto med denne e-postadressen.',
@@ -30,8 +33,9 @@ const COPY = {
     title: 'Account and household', intro: 'Local play continues as before. Accounts are optional and enable sync and personal fighter sign-ins.',
     register: 'Create account', login: 'Sign in', name: 'Name', email: 'Email', password: 'Password, at least 10 characters',
     connecting: 'Connecting…', family: 'The family', householdName: 'Household name', createHousehold: 'Create online household', creating: 'Creating…',
-    bootstrapNote: 'The existing local family will not be uploaded or changed yet.', connected: 'The household is connected. Local game data is still authoritative on this device.',
-    logout: 'Sign out', sync: 'Check connection', restoring: 'Checking session…', offline: 'Offline – local play still works.',
+    bootstrapNote: 'This uploads the current setup and resets any fight in progress. After that, the server is authoritative and this device keeps a local copy for offline use.', connected: 'The household is connected. The server is authoritative, with a local copy available while this device is offline.',
+    logout: 'Sign out', sync: 'Fetch from server', restoring: 'Checking session…', offline: 'Offline – the last saved copy still works.',
+    fighterNameRequired: 'Name every fighter before connecting the game to the server.', syncFailed: 'The game configuration could not be fetched from the server.',
     local: 'Local only', adult: 'Adult account', child: 'Fighter account', shared: 'Shared household device', role: 'Role',
     errors: {
       'invalid-credentials': 'The email or password is incorrect.', 'account-exists': 'An account already exists for this email address.',
@@ -58,11 +62,13 @@ function statusColor(status: OnlineStatus) {
 export function AccountSettings({ lang }: { lang: Lang }) {
   const copy = COPY[lang];
   const { state, actions } = useOnline();
+  const { state: gameState, actions: gameActions } = useGame();
   const [formMode, setFormMode] = useState<'login' | 'register'>('register');
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [householdName, setHouseholdName] = useState<string>(copy.family);
+  const [setupError, setSetupError] = useState<string | null>(null);
   const busy = state.status === 'syncing' || state.status === 'restoring';
 
   async function authenticate() {
@@ -76,10 +82,27 @@ export function AccountSettings({ lang }: { lang: Lang }) {
   }
 
   async function createHousehold() {
+    setSetupError(null);
     try {
-      await actions.createHousehold(householdName.trim());
-    } catch {
+      const snapshot = await createBootstrapSnapshot(gameState.game);
+      const configuration = await actions.createHousehold(householdName.trim(), snapshot);
+      gameActions.replaceGame(serverConfigToGameState(configuration, gameState.game));
+    } catch (error) {
+      if (error instanceof Error && error.message === 'fighter_name_required') {
+        setSetupError(copy.fighterNameRequired);
+      }
       // The centralized online state exposes a localized-safe error code.
+    }
+  }
+
+  async function syncConfiguration() {
+    setSetupError(null);
+    try {
+      await actions.refreshIdentity();
+      const configuration = await actions.getConfiguration();
+      gameActions.replaceGame(serverConfigToGameState(configuration, gameState.game));
+    } catch {
+      setSetupError(copy.syncFailed);
     }
   }
 
@@ -99,6 +122,7 @@ export function AccountSettings({ lang }: { lang: Lang }) {
       {state.status === 'restoring' && <Notice color="#8fc0ff">{copy.restoring}</Notice>}
       {state.status === 'offline' && <Notice color="#F4B942">{copy.offline}</Notice>}
       {state.error && <Notice color="#ff8f85">{copy.errors[state.error as OnlineError]}</Notice>}
+      {setupError && <Notice color="#ff8f85">{setupError}</Notice>}
 
       {!state.sessionToken ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginTop: 14 }}>
@@ -117,20 +141,20 @@ export function AccountSettings({ lang }: { lang: Lang }) {
         <div style={{ marginTop: 14 }}>
           <div style={{ color: '#67D391', fontWeight: 800 }}>{state.account?.displayName || state.account?.email}</div>
           {state.account?.email && <div style={{ color: '#6C7486', fontSize: 12, marginTop: 3 }}>{state.account.email}</div>}
-          {!state.householdId && state.mode === 'adult-account' ? (
+          {!state.configurationConnectedAt && state.mode === 'adult-account' ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginTop: 13 }}>
               <input value={householdName} onChange={(event) => setHouseholdName(event.target.value)} placeholder={copy.householdName} style={field} />
               <button disabled={busy || !householdName.trim()} onClick={createHousehold} style={primary}>{busy ? copy.creating : copy.createHousehold}</button>
               <div style={{ fontSize: 11, color: '#6C7486', lineHeight: 1.5 }}>{copy.bootstrapNote}</div>
             </div>
-          ) : state.householdId ? (
+          ) : state.householdId && state.configurationConnectedAt ? (
             <div style={{ marginTop: 12, padding: 12, borderRadius: 11, background: 'rgba(103,211,145,.09)', border: '1px solid rgba(103,211,145,.3)', color: '#A8B0BF', fontSize: 12 }}>
               {state.householdName && <strong style={{ color: '#F6EBDD' }}>{state.householdName}<br /></strong>}
               {copy.connected}
             </div>
           ) : null}
           <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-            <button disabled={busy} onClick={() => void actions.syncNow()} style={{ flex: 1, background: 'none', border: '1px solid #333c50', borderRadius: 10, padding: '10px 13px', color: '#8fc0ff', cursor: 'pointer' }}>{copy.sync}</button>
+            <button disabled={busy || !state.configurationConnectedAt} onClick={() => void syncConfiguration()} style={{ flex: 1, background: 'none', border: '1px solid #333c50', borderRadius: 10, padding: '10px 13px', color: '#8fc0ff', cursor: 'pointer', opacity: state.configurationConnectedAt ? 1 : .5 }}>{copy.sync}</button>
             <button onClick={() => void actions.logout()} style={{ flex: 1, background: 'none', border: '1px solid #333c50', borderRadius: 10, padding: '10px 13px', color: '#A8B0BF', cursor: 'pointer' }}>{copy.logout}</button>
           </div>
         </div>
