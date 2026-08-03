@@ -36,6 +36,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Restore icon source
+        shell: bash
+        run: base64 --decode public/icons/icon-source.jpg.b64 > public/icons/icon-source.jpg
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
