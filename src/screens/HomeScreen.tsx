@@ -1,4 +1,5 @@
 import { useGame } from '../store/GameContext';
+import { mayManageHousehold, useOnline } from '../online/OnlineContext';
 import { BossSprite, useT, GOLD } from '../ui/common';
 import { EditIcon } from './BattleScreen';
 import { maxHpOf, scheduleLabel, statusOf, whenText, hexA, isAwake, isElite, slumberInfo, bossFilter, type BossStatus } from '../game/logic';
@@ -9,6 +10,7 @@ const PS = "'Press Start 2P'";
 
 export function HomeScreen() {
   const { state, actions } = useGame();
+  const online = useOnline();
   const t = useT();
   const g = state.game;
   const lang = g.settings.lang;
@@ -33,7 +35,7 @@ export function HomeScreen() {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button onClick={actions.openSettings} title={t.settings} style={hdrBtn}><GearIcon /></button>
-          <button onClick={actions.openBossManager} title={t.bossMgrTitle} style={hdrBtn}><EditIcon size={16} /></button>
+          {mayManageHousehold(online.state) && <button onClick={actions.openBossManager} title={t.bossMgrTitle} style={hdrBtn}><EditIcon size={16} /></button>}
           <div onClick={() => actions.go('rewards')} style={{ display: 'flex', alignItems: 'center', gap: 7, background: '#14202a', border: '1px solid rgba(91,155,232,.4)', borderRadius: 13, padding: '10px 13px', cursor: 'pointer' }}>
             <div style={coinBlue} />
             <span style={{ fontFamily: PS, fontSize: 12, color: '#8fc0ff' }}>{g.pool}</span>
