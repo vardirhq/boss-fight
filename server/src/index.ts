@@ -91,6 +91,25 @@ function tokenHash(token: string) {
   return createHash('sha256').update(token).digest('hex');
 }
 
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/**
+ * Preserve IDs that already came from the server. For pre-sync local IDs,
+ * derive a stable household-scoped UUID so bootstrap/configuration retries can
+ * use the primary key for idempotency without requiring a client_id column.
+ */
+function entityId(householdId: string, entity: string, clientId: string) {
+  if (uuidPattern.test(clientId)) return clientId.toLowerCase();
+  const bytes = createHash('sha256')
+    .update(`boss-kamp|${householdId}|${entity}|${clientId}`)
+    .digest()
+    .subarray(0, 16);
+  bytes[6] = (bytes[6] & 0x0f) | 0x50;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = bytes.toString('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 function sessionExpiry() {
   const days = Number(process.env.SESSION_DAYS ?? 90);
   return new Date(Date.now() + days * 24 * 60 * 60 * 1000);
@@ -286,19 +305,6 @@ function decorateBosses(rows: JsonObject[], householdId: string, timezone: strin
 
 export async function buildApp() {
   const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' }, trustProxy: true });
-
-  // The app is unreleased, so the server schema can move forward in place. These
-  // stable client ids let a retried bootstrap reconstruct the same mappings.
-  await sql.unsafe(`
-    alter table fighters add column if not exists client_id text;
-    alter table bosses add column if not exists client_id text;
-    alter table chores add column if not exists client_id text;
-    alter table rewards add column if not exists client_id text;
-    create unique index if not exists fighters_household_client on fighters (household_id, client_id) where client_id is not null;
-    create unique index if not exists bosses_household_client on bosses (household_id, client_id) where client_id is not null;
-    create unique index if not exists chores_household_client on chores (household_id, client_id) where client_id is not null;
-    create unique index if not exists rewards_household_client on rewards (household_id, client_id) where client_id is not null;
-  `);
 
   await app.register(cors, {
     origin: process.env.CORS_ORIGIN?.split(',').map((origin) => origin.trim()).filter(Boolean) ?? true
@@ -599,20 +605,22 @@ export async function buildApp() {
 
         for (const [sort, item] of fighters.entries()) {
           const clientId = requireString(item.clientId, 'fighter.clientId');
+          const stableId = entityId(householdId, 'fighter', clientId);
           const name = requireString(item.name, 'fighter.name');
           const [fighter] = await tx`
             insert into fighters (
-              household_id, client_id, name, color, streak, coins_cached,
+              id, household_id, name, color, streak, coins_cached,
               career_xp_cached, sort, created_by_user_id
             ) values (
-              ${householdId}, ${clientId}, ${name}, ${requireString(item.color, 'fighter.color')},
+              ${stableId}, ${householdId}, ${name}, ${requireString(item.color, 'fighter.color')},
               ${optionalNumber(item.streak)}, ${optionalNumber(item.coins)},
               ${optionalNumber(item.careerXp)}, ${optionalNumber(item.sort, sort)}, ${auth.userId}
             )
-            on conflict (household_id, client_id) where client_id is not null do update
+            on conflict (id) do update
             set name = excluded.name, color = excluded.color, streak = excluded.streak,
                 coins_cached = excluded.coins_cached, career_xp_cached = excluded.career_xp_cached,
                 sort = excluded.sort, deleted_at = null, version = fighters.version + 1
+            where fighters.household_id = excluded.household_id
             returning id
           `;
           const fighterId = publicId(fighter);
@@ -649,14 +657,15 @@ export async function buildApp() {
 
         for (const [sort, item] of bosses.entries()) {
           const clientId = requireString(item.clientId, 'boss.clientId');
+          const stableId = entityId(householdId, 'boss', clientId);
           const trigger = requireObject(item.trigger);
           const [boss] = await tx`
             insert into bosses (
-              household_id, client_id, name, sprite, frames, rare, hue,
+              id, household_id, name, sprite, frames, rare, hue,
               trigger_type, trigger_day, trigger_date, trigger_note,
               dormant, unlock_at, sort
             ) values (
-              ${householdId}, ${clientId}, ${requireString(item.name, 'boss.name')},
+              ${stableId}, ${householdId}, ${requireString(item.name, 'boss.name')},
               ${requireString(item.sprite, 'boss.sprite')}, ${optionalNumber(item.frames)},
               ${optionalBoolean(item.rare)}, ${optionalNumberOrNull(item.hue)},
               ${requireString(trigger.type, 'trigger.type')}, ${optionalNumberOrNull(trigger.day)},
@@ -664,13 +673,14 @@ export async function buildApp() {
               ${optionalBoolean(item.dormant)}, ${optionalNumber(item.unlockAt)},
               ${optionalNumber(item.sort, sort)}
             )
-            on conflict (household_id, client_id) where client_id is not null do update
+            on conflict (id) do update
             set name = excluded.name, sprite = excluded.sprite, frames = excluded.frames,
                 rare = excluded.rare, hue = excluded.hue, trigger_type = excluded.trigger_type,
                 trigger_day = excluded.trigger_day, trigger_date = excluded.trigger_date,
                 trigger_note = excluded.trigger_note, dormant = excluded.dormant,
                 unlock_at = excluded.unlock_at, sort = excluded.sort,
                 deleted_at = null, version = bosses.version + 1
+            where bosses.household_id = excluded.household_id
             returning id
           `;
           ids.bosses[clientId] = publicId(boss);
@@ -678,20 +688,22 @@ export async function buildApp() {
 
         for (const [sort, item] of chores.entries()) {
           const clientId = requireString(item.clientId, 'chore.clientId');
+          const stableId = entityId(householdId, 'chore', clientId);
           const bossId = ids.bosses[requireString(item.bossClientId, 'chore.bossClientId')];
           if (!bossId) throw new Error('chore.bossClientId does not reference a submitted boss');
           const [chore] = await tx`
             insert into chores (
-              household_id, client_id, boss_id, title, damage, repeatable, sort
+              id, household_id, boss_id, title, damage, repeatable, sort
             ) values (
-              ${householdId}, ${clientId}, ${bossId}, ${stringValue(item.title, 'chore.title')},
+              ${stableId}, ${householdId}, ${bossId}, ${stringValue(item.title, 'chore.title')},
               ${optionalNumber(item.damage)}, ${optionalBoolean(item.repeatable)},
               ${optionalNumber(item.sort, sort)}
             )
-            on conflict (household_id, client_id) where client_id is not null do update
+            on conflict (id) do update
             set boss_id = excluded.boss_id, title = excluded.title, damage = excluded.damage,
                 repeatable = excluded.repeatable, sort = excluded.sort,
                 deleted_at = null, version = chores.version + 1
+            where chores.household_id = excluded.household_id
             returning id
           `;
           ids.chores[clientId] = publicId(chore);
@@ -699,18 +711,20 @@ export async function buildApp() {
 
         for (const [sort, item] of rewards.entries()) {
           const clientId = requireString(item.clientId, 'reward.clientId');
+          const stableId = entityId(householdId, 'reward', clientId);
           const [reward] = await tx`
-            insert into rewards (household_id, client_id, scope, icon, title, descr, cost, sort)
+            insert into rewards (id, household_id, scope, icon, title, descr, cost, sort)
             values (
-              ${householdId}, ${clientId}, ${requireString(item.scope, 'reward.scope')},
+              ${stableId}, ${householdId}, ${requireString(item.scope, 'reward.scope')},
               ${stringValue(item.icon, 'reward.icon')}, ${requireString(item.title, 'reward.title')},
               ${stringValue(item.description, 'reward.description')}, ${optionalNumber(item.cost)},
               ${optionalNumber(item.sort, sort)}
             )
-            on conflict (household_id, client_id) where client_id is not null do update
+            on conflict (id) do update
             set scope = excluded.scope, icon = excluded.icon, title = excluded.title,
                 descr = excluded.descr, cost = excluded.cost, sort = excluded.sort,
                 deleted_at = null, version = rewards.version + 1
+            where rewards.household_id = excluded.household_id
             returning id
           `;
           ids.rewards[clientId] = publicId(reward);
@@ -1399,10 +1413,10 @@ export async function buildApp() {
 
           for (const [sort, fighterBody] of fighters.entries()) {
             const clientId = requireString(fighterBody.clientId, 'fighter.clientId');
+            const stableId = entityId(householdId, 'fighter', clientId);
             const [existing] = await tx`
               select id from fighters
-              where household_id = ${householdId}
-                and (client_id = ${clientId} or id::text = ${clientId})
+              where household_id = ${householdId} and id = ${stableId}
               for update
             `;
             const [fighter] = existing
@@ -1416,9 +1430,9 @@ export async function buildApp() {
                   returning id
                 `
               : await tx`
-                  insert into fighters (household_id, client_id, name, color, sort, created_by_user_id)
+                  insert into fighters (id, household_id, name, color, sort, created_by_user_id)
                   values (
-                    ${householdId}, ${clientId}, ${requireString(fighterBody.name, 'fighter.name')},
+                    ${stableId}, ${householdId}, ${requireString(fighterBody.name, 'fighter.name')},
                     ${requireString(fighterBody.color, 'fighter.color')},
                     ${optionalNumber(fighterBody.sort, sort)}, ${auth.userId}
                   ) returning id
@@ -1445,11 +1459,11 @@ export async function buildApp() {
 
           for (const [sort, bossBody] of bosses.entries()) {
             const clientId = requireString(bossBody.clientId, 'boss.clientId');
+            const stableId = entityId(householdId, 'boss', clientId);
             const trigger = requireObject(bossBody.trigger);
             const [existing] = await tx`
               select id from bosses
-              where household_id = ${householdId}
-                and (client_id = ${clientId} or id::text = ${clientId})
+              where household_id = ${householdId} and id = ${stableId}
               for update
             `;
             const values = {
@@ -1480,10 +1494,10 @@ export async function buildApp() {
                 `
               : await tx`
                   insert into bosses (
-                    household_id, client_id, name, sprite, frames, rare, hue,
+                    id, household_id, name, sprite, frames, rare, hue,
                     trigger_type, trigger_day, trigger_date, trigger_note, dormant, unlock_at, sort
                   ) values (
-                    ${householdId}, ${clientId}, ${values.name}, ${values.sprite}, ${values.frames},
+                    ${stableId}, ${householdId}, ${values.name}, ${values.sprite}, ${values.frames},
                     ${values.rare}, ${values.hue}, ${values.triggerType}, ${values.triggerDay},
                     ${values.triggerDate}, ${values.triggerNote}, ${values.dormant}, ${values.unlockAt}, ${values.sort}
                   ) returning id
@@ -1493,13 +1507,13 @@ export async function buildApp() {
 
           for (const [sort, choreBody] of chores.entries()) {
             const clientId = requireString(choreBody.clientId, 'chore.clientId');
+            const stableId = entityId(householdId, 'chore', clientId);
             const submittedBossId = requireString(choreBody.bossClientId, 'chore.bossClientId');
             const bossId = ids.bosses[submittedBossId] ?? submittedBossId;
             if (!Object.values(ids.bosses).includes(bossId)) throw new Error('chore.bossClientId does not reference a submitted boss');
             const [existing] = await tx`
               select id, boss_id, title, damage, repeatable, deleted_at from chores
-              where household_id = ${householdId}
-                and (client_id = ${clientId} or id::text = ${clientId})
+              where household_id = ${householdId} and id = ${stableId}
               for update
             `;
             if (!existing
@@ -1520,9 +1534,9 @@ export async function buildApp() {
                   returning id
                 `
               : await tx`
-                  insert into chores (household_id, client_id, boss_id, title, damage, repeatable, sort)
+                  insert into chores (id, household_id, boss_id, title, damage, repeatable, sort)
                   values (
-                    ${householdId}, ${clientId}, ${bossId}, ${stringValue(choreBody.title, 'chore.title')},
+                    ${stableId}, ${householdId}, ${bossId}, ${stringValue(choreBody.title, 'chore.title')},
                     ${optionalNumber(choreBody.damage)}, ${optionalBoolean(choreBody.repeatable)},
                     ${optionalNumber(choreBody.sort, sort)}
                   ) returning id
@@ -1532,10 +1546,10 @@ export async function buildApp() {
 
           for (const [sort, rewardBody] of rewards.entries()) {
             const clientId = requireString(rewardBody.clientId, 'reward.clientId');
+            const stableId = entityId(householdId, 'reward', clientId);
             const [existing] = await tx`
               select id from rewards
-              where household_id = ${householdId}
-                and (client_id = ${clientId} or id::text = ${clientId})
+              where household_id = ${householdId} and id = ${stableId}
               for update
             `;
             const [reward] = existing
@@ -1550,9 +1564,9 @@ export async function buildApp() {
                   returning id
                 `
               : await tx`
-                  insert into rewards (household_id, client_id, scope, icon, title, descr, cost, sort)
+                  insert into rewards (id, household_id, scope, icon, title, descr, cost, sort)
                   values (
-                    ${householdId}, ${clientId}, ${requireString(rewardBody.scope, 'reward.scope')},
+                    ${stableId}, ${householdId}, ${requireString(rewardBody.scope, 'reward.scope')},
                     ${stringValue(rewardBody.icon, 'reward.icon')}, ${requireString(rewardBody.title, 'reward.title')},
                     ${stringValue(rewardBody.description, 'reward.description')}, ${optionalNumber(rewardBody.cost)},
                     ${optionalNumber(rewardBody.sort, sort)}
@@ -1895,7 +1909,7 @@ export async function buildApp() {
           const [reward] = submittedRewardId ? await tx`
             select id, scope, icon, title, cost from rewards
             where household_id = ${householdId} and deleted_at is null
-              and (id::text = ${submittedRewardId} or client_id = ${submittedRewardId})
+              and id = ${entityId(householdId, 'reward', submittedRewardId)}
             limit 1
           ` : [null];
           if (!reward) throw new Error('rewards row does not belong to household');

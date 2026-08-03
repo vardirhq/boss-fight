@@ -104,7 +104,6 @@ create index sessions_user on sessions (user_id)
 create table fighters (
   id                 uuid primary key default gen_random_uuid(),
   household_id       uuid not null references households(id) on delete cascade,
-  client_id          text,
   user_id            uuid references users(id) on delete set null,
   name               text not null,
   color              text not null,
@@ -130,8 +129,6 @@ create unique index fighters_one_per_user
 
 create index fighters_household on fighters (household_id)
   where deleted_at is null;
-create unique index fighters_household_client on fighters (household_id, client_id)
-  where client_id is not null;
 
 create trigger fighters_touch_updated_at
 before update on fighters
@@ -197,7 +194,6 @@ for each row execute function touch_updated_at();
 create table bosses (
   id           uuid primary key default gen_random_uuid(),
   household_id uuid not null references households(id) on delete cascade,
-  client_id    text,
   name         text not null,
   sprite       text not null,
   frames       integer not null default 0,
@@ -219,8 +215,6 @@ create table bosses (
 
 create index bosses_household on bosses (household_id)
   where deleted_at is null;
-create unique index bosses_household_client on bosses (household_id, client_id)
-  where client_id is not null;
 
 create trigger bosses_touch_updated_at
 before update on bosses
@@ -229,7 +223,6 @@ for each row execute function touch_updated_at();
 create table chores (
   id           uuid primary key default gen_random_uuid(),
   household_id uuid not null references households(id) on delete cascade,
-  client_id    text,
   boss_id      uuid not null references bosses(id) on delete restrict,
   title        text not null default '',
   damage       integer not null default 0,
@@ -243,8 +236,6 @@ create table chores (
 
 create index chores_boss on chores (boss_id)
   where deleted_at is null;
-create unique index chores_household_client on chores (household_id, client_id)
-  where client_id is not null;
 
 create trigger chores_touch_updated_at
 before update on chores
@@ -253,7 +244,6 @@ for each row execute function touch_updated_at();
 create table rewards (
   id           uuid primary key default gen_random_uuid(),
   household_id uuid not null references households(id) on delete cascade,
-  client_id    text,
   scope        text not null check (scope in ('personal','group')),
   icon         text not null default '',
   title        text not null default '',
@@ -268,8 +258,6 @@ create table rewards (
 
 create index rewards_household on rewards (household_id, scope)
   where deleted_at is null;
-create unique index rewards_household_client on rewards (household_id, client_id)
-  where client_id is not null;
 
 create trigger rewards_touch_updated_at
 before update on rewards

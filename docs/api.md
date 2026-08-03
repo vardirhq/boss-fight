@@ -213,9 +213,9 @@ Response:
 ### `POST /api/bootstrap`
 
 Creates (or reuses) the authenticated adult's household and atomically installs
-the app's complete game configuration. The operation is retry-safe: stable
-`clientId` values upsert the same rows and return the same ID mappings after a
-lost response.
+the app's complete game configuration. The operation is retry-safe: each stable
+`clientId` is deterministically mapped to a household-scoped UUID, so retries
+upsert the same rows and return the same ID mappings after a lost response.
 
 Headers:
 
@@ -827,7 +827,7 @@ arbitrary wallet ledger rows.
 ### Mutation: `configuration_replace`
 
 An owner/parent may atomically replace the submitted fighter, boss, chore, and
-reward configuration using the same stable client IDs as bootstrap. Rows absent
+reward configuration using the same deterministic ID mapping as bootstrap. Rows absent
 from the snapshot are soft-deleted. The response includes fresh client-to-server
 ID mappings. Chore changes advance the affected boss reset sequence so old
 completion events cannot corrupt the edited fight.
