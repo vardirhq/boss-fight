@@ -226,6 +226,64 @@ function publicTokenCode(length = 8) {
   return randomBytes(length).toString('base64url').replace(/[^A-Za-z0-9]/g, '').slice(0, length).toUpperCase();
 }
 
+function householdDate(timezone: string, now = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short'
+  }).formatToParts(now);
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value ?? '';
+  return {
+    iso: `${part('year')}-${part('month')}-${part('day')}`,
+    year: Number(part('year')),
+    month: Number(part('month')),
+    day: Number(part('day')),
+    weekday: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(part('weekday'))
+  };
+}
+
+function serverCycleKey(boss: JsonObject, timezone: string, now = new Date()) {
+  const date = householdDate(timezone, now);
+  const type = requireString(boss.trigger_type, 'trigger_type');
+  if (type === 'daglig' || type === 'sjelden') return `d${date.iso}`;
+  if (type === 'ukentlig') {
+    const start = new Date(Date.UTC(date.year, 0, 1));
+    const current = new Date(Date.UTC(date.year, date.month - 1, date.day));
+    const week = Math.floor(((current.getTime() - start.getTime()) / 86400000 + start.getUTCDay()) / 7);
+    return `w${date.year}-${week}`;
+  }
+  if (type === 'månedlig') return `m${date.year}-${date.month}`;
+  return 'alltid';
+}
+
+function serverBossAvailable(boss: JsonObject, householdId: string, timezone: string, now = new Date()) {
+  const date = householdDate(timezone, now);
+  const type = requireString(boss.trigger_type, 'trigger_type');
+  if (type === 'sjelden') {
+    const digest = createHash('sha256').update(`${householdId}|${boss.id}|${date.iso}|rare`).digest();
+    return digest.readUInt32BE(0) % 100 < 3;
+  }
+  if (type === 'ukentlig') return ((date.weekday + 6) % 7) >= ((Number(boss.trigger_day ?? 0) + 6) % 7);
+  if (type === 'månedlig') return date.day >= Number(boss.trigger_date ?? 1);
+  return true;
+}
+
+function serverBossElite(boss: JsonObject, householdId: string, timezone: string, now = new Date()) {
+  if (Boolean(boss.rare)) return false;
+  const cycle = requireString(boss.trigger_type, 'trigger_type') === 'alltid'
+    ? `d${householdDate(timezone, now).iso}`
+    : serverCycleKey(boss, timezone, now);
+  const digest = createHash('sha256').update(`${householdId}|${boss.id}|${cycle}|elite`).digest();
+  return digest.readUInt32BE(0) % 100 < 22;
+}
+
+function decorateBosses(rows: JsonObject[], householdId: string, timezone: string) {
+  return rows.map((boss) => ({
+    ...boss,
+    current_cycle_key: serverCycleKey(boss, timezone),
+    available: serverBossAvailable(boss, householdId, timezone),
+    elite: serverBossElite(boss, householdId, timezone)
+  }));
+}
+
 export async function buildApp() {
   const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' }, trustProxy: true });
 
@@ -280,7 +338,8 @@ export async function buildApp() {
     }
     const validationMessages = [
       'is required', 'must be an array', 'must be a string', 'Expected JSON object', 'Expected numeric value',
-      'Password must be at least', 'PIN must be at least', 'Invalid pairing role', 'Invalid invite role'
+      'Password must be at least', 'PIN must be at least', 'Invalid pairing role', 'Invalid invite role',
+      'Unsupported redemption status'
     ];
     if (validationMessages.some((part) => message.includes(part))) {
       reply.code(400).send({ error: message, code: 'invalid_request' });
@@ -289,6 +348,12 @@ export async function buildApp() {
     const domainMessages = [
       'does not belong to household', 'Chore does not belong to boss',
       'does not reference a submitted boss', 'Avatar hash does not match bytes',
+      'Fighter requires their own device', 'Chore is already completed for this cycle',
+      'Insufficient wallet balance', 'Reward scope does not match fighter',
+      'Fighter is already claimed or missing',
+      'Cycle key is no longer current', 'Boss is not currently available',
+      'Reset sequence conflict',
+      'Transfer amount must be positive',
       'Victory payout amount must be positive', 'Unsupported mutation type'
     ];
     if (domainMessages.some((part) => message.includes(part))) {
@@ -389,6 +454,59 @@ export async function buildApp() {
       deviceId: publicId(device),
       session
     };
+  });
+
+  app.post('/api/auth/child-pair', async (request) => {
+    const body = requireObject(request.body);
+    const code = requireString(body.code, 'code').toUpperCase();
+    const pin = requireString(body.pin, 'pin');
+    const deviceName = optionalString(body.deviceName) ?? '';
+    const platform = optionalString(body.platform) ?? 'android';
+
+    const result = await sql.begin(async (tx) => {
+      const [pairing] = await tx`
+        select id, fighter_id from device_pairings
+        where role = 'fighter'
+          and code_hash = ${tokenHash(code)} and claimed_at is null and expires_at > now()
+        for update
+      `;
+      if (!pairing?.fighter_id) throw new Error('Unauthorized');
+      const [pairingHousehold] = await tx`select household_id from device_pairings where id = ${pairing.id}`;
+      const householdId = requireString(pairingHousehold.household_id, 'household_id');
+      const [fighter] = await tx`
+        select id, user_id, name from fighters
+        where id = ${pairing.fighter_id} and household_id = ${householdId}
+          and user_id is not null and deleted_at is null
+      `;
+      const [credentials] = await tx`
+        select pin_hash, locked_until from fighter_credentials where fighter_id = ${pairing.fighter_id}
+      `;
+      if (!fighter || !credentials || (credentials.locked_until && new Date(credentials.locked_until) > new Date())) {
+        throw new Error('Unauthorized');
+      }
+      if (!(await verifySecret(pin, credentials.pin_hash))) {
+        await tx`
+          update fighter_credentials set failed_attempts = failed_attempts + 1,
+            locked_until = case when failed_attempts + 1 >= 8 then now() + interval '10 minutes' else locked_until end
+          where fighter_id = ${pairing.fighter_id}
+        `;
+        throw new Error('Unauthorized');
+      }
+      const [device] = await tx`
+        insert into devices (household_id, user_id, kind, name, platform, last_seen_at)
+        values (${householdId}, ${fighter.user_id}, 'personal', ${deviceName}, ${platform}, now())
+        returning id
+      `;
+      await tx`update fighter_credentials set failed_attempts = 0, locked_until = null where fighter_id = ${pairing.fighter_id}`;
+      await tx`update device_pairings set claimed_at = now(), claimed_device_id = ${device.id} where id = ${pairing.id}`;
+      return {
+        user: { id: fighter.user_id, kind: 'child', displayName: fighter.name },
+        fighterId: fighter.id,
+        deviceId: device.id
+      };
+    });
+    const session = await createSession(requireString(result.user.id, 'user_id'), requireString(result.deviceId, 'device_id'));
+    return { ...result, session };
   });
 
   app.post('/api/auth/logout', async (request) => {
@@ -648,7 +766,11 @@ export async function buildApp() {
       `
     ]);
 
-    return { household, members, fighters, fighterAvatars: avatars, bosses, chores, rewards, balances };
+    return {
+      household, members, fighters, fighterAvatars: avatars,
+      bosses: decorateBosses(bosses, householdId, requireString(household.timezone, 'timezone')),
+      chores, rewards, balances
+    };
   });
 
   app.patch('/api/households/:householdId', async (request) => {
@@ -729,14 +851,21 @@ export async function buildApp() {
     const householdId = (request.params as { householdId: string }).householdId;
     await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
     const body = requireObject(request.body);
-    const displayName = requireString(body.displayName, 'displayName');
+    const fighterId = requireString(body.fighterId, 'fighterId');
     const pin = requireString(body.pin, 'pin');
     if (pin.length < 4) throw new Error('PIN must be at least 4 digits');
 
     const result = await sql.begin(async (tx) => {
+      const [existingFighter] = await tx`
+        select id, name from fighters
+        where id = ${fighterId} and household_id = ${householdId}
+          and user_id is null and deleted_at is null
+        for update
+      `;
+      if (!existingFighter) throw new Error('Fighter is already claimed or missing');
       const [user] = await tx`
         insert into users (kind, display_name)
-        values ('child', ${displayName})
+        values ('child', ${existingFighter.name})
         returning id, kind, display_name
       `;
       const [member] = await tx`
@@ -745,11 +874,8 @@ export async function buildApp() {
         returning id
       `;
       const [fighter] = await tx`
-        insert into fighters (household_id, user_id, name, color, sort, created_by_user_id)
-        values (
-          ${householdId}, ${user.id}, ${displayName}, ${requireString(body.color, 'color')},
-          ${optionalNumber(body.sort)}, ${auth.userId}
-        )
+        update fighters set user_id = ${user.id}, version = version + 1
+        where id = ${fighterId}
         returning *
       `;
       await tx`
@@ -760,6 +886,100 @@ export async function buildApp() {
     });
 
     return result;
+  });
+
+  app.post('/api/households/:householdId/fighters/:fighterId/pin', async (request) => {
+    const auth = await requireAuth(request);
+    const { householdId, fighterId } = request.params as { householdId: string; fighterId: string };
+    await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
+    const body = requireObject(request.body);
+    const pin = requireString(body.pin, 'pin');
+    if (pin.length < 4) throw new Error('PIN must be at least 4 digits');
+    const [fighter] = await sql`
+      select f.id from fighters f join users u on u.id = f.user_id
+      where f.id = ${fighterId} and f.household_id = ${householdId}
+        and f.deleted_at is null and u.kind = 'child'
+    `;
+    if (!fighter) throw new Error('Not found');
+    await sql`
+      insert into fighter_credentials (fighter_id, pin_hash, failed_attempts, locked_until)
+      values (${fighterId}, ${await hashSecret(pin)}, 0, null)
+      on conflict (fighter_id) do update
+      set pin_hash = excluded.pin_hash, failed_attempts = 0, locked_until = null
+    `;
+    return { ok: true };
+  });
+
+  app.patch('/api/households/:householdId/fighters/:fighterId/access', async (request) => {
+    const auth = await requireAuth(request);
+    const { householdId, fighterId } = request.params as { householdId: string; fighterId: string };
+    await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
+    const body = requireObject(request.body);
+    const requireOwnDevice = optionalBoolean(body.requireOwnDevice);
+    const [fighter] = await sql`
+      update fighters set require_own_device = ${requireOwnDevice}, version = version + 1
+      where id = ${fighterId} and household_id = ${householdId}
+        and deleted_at is null and (user_id is not null or ${requireOwnDevice} = false)
+      returning *
+    `;
+    if (!fighter) throw new Error('Not found');
+    return { fighter };
+  });
+
+  app.post('/api/households/:householdId/fighters/:fighterId/suspend', async (request) => {
+    const auth = await requireAuth(request);
+    const { householdId, fighterId } = request.params as { householdId: string; fighterId: string };
+    await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
+    const body = requireObject(request.body);
+    const suspended = body.suspended !== false;
+    const result = await sql.begin(async (tx) => {
+      const [fighter] = await tx`
+        select id, user_id from fighters
+        where id = ${fighterId} and household_id = ${householdId} and deleted_at is null
+        for update
+      `;
+      if (!fighter?.user_id) throw new Error('Not found');
+      await tx`
+        update household_members set status = ${suspended ? 'suspended' : 'active'}, version = version + 1
+        where household_id = ${householdId} and user_id = ${fighter.user_id}
+      `;
+      if (suspended) {
+        await tx`update sessions set revoked_at = now() where user_id = ${fighter.user_id} and revoked_at is null`;
+        await tx`update devices set revoked_at = now() where household_id = ${householdId} and user_id = ${fighter.user_id} and revoked_at is null`;
+      }
+      return { ok: true };
+    });
+    return result;
+  });
+
+  app.post('/api/households/:householdId/fighters/:fighterId/unlink', async (request) => {
+    const auth = await requireAuth(request);
+    const { householdId, fighterId } = request.params as { householdId: string; fighterId: string };
+    await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
+    return sql.begin(async (tx) => {
+      const [fighter] = await tx`
+        select f.id, f.user_id, u.kind as user_kind
+        from fighters f left join users u on u.id = f.user_id
+        where f.id = ${fighterId} and f.household_id = ${householdId} and f.deleted_at is null
+        for update of f
+      `;
+      if (!fighter?.user_id) throw new Error('Not found');
+      await tx`update sessions set revoked_at = now() where user_id = ${fighter.user_id} and revoked_at is null`;
+      await tx`update devices set revoked_at = now() where household_id = ${householdId} and user_id = ${fighter.user_id} and revoked_at is null`;
+      if (fighter.user_kind === 'child') {
+        await tx`
+          update household_members set status = 'left', version = version + 1
+          where household_id = ${householdId} and user_id = ${fighter.user_id}
+        `;
+        await tx`delete from fighter_credentials where fighter_id = ${fighterId}`;
+      }
+      const [unlinked] = await tx`
+        update fighters set user_id = null, require_own_device = false, version = version + 1
+        where id = ${fighterId}
+        returning *
+      `;
+      return { fighter: unlinked };
+    });
   });
 
   app.post('/api/households/:householdId/pairings', async (request) => {
@@ -870,7 +1090,6 @@ export async function buildApp() {
 
   app.post('/api/pairings/claim-household-device', async (request) => {
     const body = requireObject(request.body);
-    const householdId = requireString(body.householdId, 'householdId');
     const code = requireString(body.code, 'code').toUpperCase();
     const name = optionalString(body.name) ?? '';
     const platform = optionalString(body.platform) ?? 'android';
@@ -878,15 +1097,15 @@ export async function buildApp() {
     const deviceToken = randomBytes(32).toString('base64url');
     const result = await sql.begin(async (tx) => {
       const [pairing] = await tx`
-        select id from device_pairings
-        where household_id = ${householdId}
-          and role = 'household_device'
+        select id, household_id from device_pairings
+        where role = 'household_device'
           and code_hash = ${tokenHash(code)}
           and claimed_at is null
           and expires_at > now()
         for update
       `;
       if (!pairing) throw new Error('Unauthorized');
+      const householdId = requireString(pairing.household_id, 'household_id');
 
       const [device] = await tx`
         insert into devices (household_id, kind, name, platform, token_hash, last_seen_at)
@@ -898,7 +1117,7 @@ export async function buildApp() {
         set claimed_at = now(), claimed_device_id = ${device.id}
         where id = ${pairing.id}
       `;
-      return { device, deviceToken };
+      return { device, deviceToken, householdId };
     });
 
     return result;
@@ -1092,9 +1311,16 @@ export async function buildApp() {
       sql`select * from households where id = ${householdId}`,
       sql`select * from household_members where household_id = ${householdId}`,
       sql`select * from devices where household_id = ${householdId}`,
-      sql`select * from fighters where household_id = ${householdId}`,
       sql`
-        select fa.* from fighter_avatars fa
+        select f.*, u.kind as user_kind, hm.status as account_status
+        from fighters f
+        left join users u on u.id = f.user_id
+        left join household_members hm on hm.household_id = f.household_id and hm.user_id = f.user_id
+        where f.household_id = ${householdId}
+      `,
+      sql`
+        select fa.fighter_id, fa.mime, encode(fa.bytes, 'base64') as bytes_base64, fa.hash, fa.updated_at
+        from fighter_avatars fa
         join fighters f on f.id = fa.fighter_id
         where f.household_id = ${householdId}
       `,
@@ -1131,9 +1357,13 @@ export async function buildApp() {
       `
     ]);
 
+    const timezone = requireString(households[0]?.timezone, 'timezone');
     return {
       serverTime: new Date().toISOString(),
-      mutable: { households, household_members: members, devices, fighters, fighter_avatars: avatars, bosses, chores, rewards },
+      mutable: {
+        households, household_members: members, devices, fighters, fighter_avatars: avatars,
+        bosses: decorateBosses(bosses, householdId, timezone), chores, rewards
+      },
       events: { chore_completions: completions, boss_resets: resets, boss_victories: victories, wallet_transactions: wallet, reward_redemptions: redemptions }
     };
   });
@@ -1152,20 +1382,292 @@ export async function buildApp() {
         const type = requireString(item.type, 'type');
         const payload = requireObject(item.payload);
 
-        if (type === 'chore_completion') {
+        if (type === 'configuration_replace') {
+          if (!auth.userId) throw new Error('Forbidden');
+          await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
+          const fighters = requireObjects(payload.fighters, 'fighters');
+          const bosses = requireObjects(payload.bosses, 'bosses');
+          const chores = requireObjects(payload.chores, 'chores');
+          const rewards = requireObjects(payload.rewards, 'rewards');
+          const ids = {
+            fighters: {} as Record<string, string>,
+            bosses: {} as Record<string, string>,
+            chores: {} as Record<string, string>,
+            rewards: {} as Record<string, string>
+          };
+          const bossesNeedingReset = new Set<string>();
+
+          for (const [sort, fighterBody] of fighters.entries()) {
+            const clientId = requireString(fighterBody.clientId, 'fighter.clientId');
+            const [existing] = await tx`
+              select id from fighters
+              where household_id = ${householdId}
+                and (client_id = ${clientId} or id::text = ${clientId})
+              for update
+            `;
+            const [fighter] = existing
+              ? await tx`
+                  update fighters set
+                    name = ${requireString(fighterBody.name, 'fighter.name')},
+                    color = ${requireString(fighterBody.color, 'fighter.color')},
+                    sort = ${optionalNumber(fighterBody.sort, sort)},
+                    deleted_at = null, version = version + 1
+                  where id = ${existing.id}
+                  returning id
+                `
+              : await tx`
+                  insert into fighters (household_id, client_id, name, color, sort, created_by_user_id)
+                  values (
+                    ${householdId}, ${clientId}, ${requireString(fighterBody.name, 'fighter.name')},
+                    ${requireString(fighterBody.color, 'fighter.color')},
+                    ${optionalNumber(fighterBody.sort, sort)}, ${auth.userId}
+                  ) returning id
+                `;
+            const fighterId = publicId(fighter);
+            ids.fighters[clientId] = fighterId;
+            if (fighterBody.avatar && typeof fighterBody.avatar === 'object' && !Array.isArray(fighterBody.avatar)) {
+              const avatar = fighterBody.avatar as JsonObject;
+              const bytes = Buffer.from(requireString(avatar.bytesBase64, 'avatar.bytesBase64'), 'base64');
+              const hash = requireString(avatar.hash, 'avatar.hash').toLowerCase();
+              if (createHash('sha256').update(bytes).digest('hex') !== hash) throw new Error('Avatar hash does not match bytes');
+              await tx`
+                insert into fighter_avatars (fighter_id, mime, bytes, hash)
+                values (${fighterId}, ${requireString(avatar.mime, 'avatar.mime')}, ${bytes}, ${hash})
+                on conflict (fighter_id) do update
+                set mime = excluded.mime, bytes = excluded.bytes, hash = excluded.hash
+              `;
+              await tx`update fighters set avatar_hash = ${hash} where id = ${fighterId}`;
+            } else {
+              await tx`delete from fighter_avatars where fighter_id = ${fighterId}`;
+              await tx`update fighters set avatar_hash = null where id = ${fighterId}`;
+            }
+          }
+
+          for (const [sort, bossBody] of bosses.entries()) {
+            const clientId = requireString(bossBody.clientId, 'boss.clientId');
+            const trigger = requireObject(bossBody.trigger);
+            const [existing] = await tx`
+              select id from bosses
+              where household_id = ${householdId}
+                and (client_id = ${clientId} or id::text = ${clientId})
+              for update
+            `;
+            const values = {
+              name: requireString(bossBody.name, 'boss.name'),
+              sprite: requireString(bossBody.sprite, 'boss.sprite'),
+              frames: optionalNumber(bossBody.frames),
+              rare: optionalBoolean(bossBody.rare),
+              hue: optionalNumberOrNull(bossBody.hue),
+              triggerType: requireString(trigger.type, 'trigger.type'),
+              triggerDay: optionalNumberOrNull(trigger.day),
+              triggerDate: optionalNumberOrNull(trigger.date),
+              triggerNote: optionalString(trigger.note),
+              dormant: optionalBoolean(bossBody.dormant),
+              unlockAt: optionalNumber(bossBody.unlockAt),
+              sort: optionalNumber(bossBody.sort, sort)
+            };
+            const [boss] = existing
+              ? await tx`
+                  update bosses set
+                    name = ${values.name}, sprite = ${values.sprite}, frames = ${values.frames},
+                    rare = ${values.rare}, hue = ${values.hue}, trigger_type = ${values.triggerType},
+                    trigger_day = ${values.triggerDay}, trigger_date = ${values.triggerDate},
+                    trigger_note = ${values.triggerNote}, dormant = ${values.dormant},
+                    unlock_at = ${values.unlockAt}, sort = ${values.sort}, deleted_at = null,
+                    version = version + 1
+                  where id = ${existing.id}
+                  returning id
+                `
+              : await tx`
+                  insert into bosses (
+                    household_id, client_id, name, sprite, frames, rare, hue,
+                    trigger_type, trigger_day, trigger_date, trigger_note, dormant, unlock_at, sort
+                  ) values (
+                    ${householdId}, ${clientId}, ${values.name}, ${values.sprite}, ${values.frames},
+                    ${values.rare}, ${values.hue}, ${values.triggerType}, ${values.triggerDay},
+                    ${values.triggerDate}, ${values.triggerNote}, ${values.dormant}, ${values.unlockAt}, ${values.sort}
+                  ) returning id
+                `;
+            ids.bosses[clientId] = publicId(boss);
+          }
+
+          for (const [sort, choreBody] of chores.entries()) {
+            const clientId = requireString(choreBody.clientId, 'chore.clientId');
+            const submittedBossId = requireString(choreBody.bossClientId, 'chore.bossClientId');
+            const bossId = ids.bosses[submittedBossId] ?? submittedBossId;
+            if (!Object.values(ids.bosses).includes(bossId)) throw new Error('chore.bossClientId does not reference a submitted boss');
+            const [existing] = await tx`
+              select id, boss_id, title, damage, repeatable, deleted_at from chores
+              where household_id = ${householdId}
+                and (client_id = ${clientId} or id::text = ${clientId})
+              for update
+            `;
+            if (!existing
+              || existing.boss_id !== bossId
+              || String(existing.title) !== stringValue(choreBody.title, 'chore.title')
+              || Number(existing.damage) !== optionalNumber(choreBody.damage)
+              || Boolean(existing.repeatable) !== optionalBoolean(choreBody.repeatable)
+              || existing.deleted_at) {
+              bossesNeedingReset.add(bossId);
+              if (existing?.boss_id) bossesNeedingReset.add(String(existing.boss_id));
+            }
+            const [chore] = existing
+              ? await tx`
+                  update chores set boss_id = ${bossId}, title = ${stringValue(choreBody.title, 'chore.title')},
+                    damage = ${optionalNumber(choreBody.damage)}, repeatable = ${optionalBoolean(choreBody.repeatable)},
+                    sort = ${optionalNumber(choreBody.sort, sort)}, deleted_at = null, version = version + 1
+                  where id = ${existing.id}
+                  returning id
+                `
+              : await tx`
+                  insert into chores (household_id, client_id, boss_id, title, damage, repeatable, sort)
+                  values (
+                    ${householdId}, ${clientId}, ${bossId}, ${stringValue(choreBody.title, 'chore.title')},
+                    ${optionalNumber(choreBody.damage)}, ${optionalBoolean(choreBody.repeatable)},
+                    ${optionalNumber(choreBody.sort, sort)}
+                  ) returning id
+                `;
+            ids.chores[clientId] = publicId(chore);
+          }
+
+          for (const [sort, rewardBody] of rewards.entries()) {
+            const clientId = requireString(rewardBody.clientId, 'reward.clientId');
+            const [existing] = await tx`
+              select id from rewards
+              where household_id = ${householdId}
+                and (client_id = ${clientId} or id::text = ${clientId})
+              for update
+            `;
+            const [reward] = existing
+              ? await tx`
+                  update rewards set scope = ${requireString(rewardBody.scope, 'reward.scope')},
+                    icon = ${stringValue(rewardBody.icon, 'reward.icon')},
+                    title = ${requireString(rewardBody.title, 'reward.title')},
+                    descr = ${stringValue(rewardBody.description, 'reward.description')},
+                    cost = ${optionalNumber(rewardBody.cost)}, sort = ${optionalNumber(rewardBody.sort, sort)},
+                    deleted_at = null, version = version + 1
+                  where id = ${existing.id}
+                  returning id
+                `
+              : await tx`
+                  insert into rewards (household_id, client_id, scope, icon, title, descr, cost, sort)
+                  values (
+                    ${householdId}, ${clientId}, ${requireString(rewardBody.scope, 'reward.scope')},
+                    ${stringValue(rewardBody.icon, 'reward.icon')}, ${requireString(rewardBody.title, 'reward.title')},
+                    ${stringValue(rewardBody.description, 'reward.description')}, ${optionalNumber(rewardBody.cost)},
+                    ${optionalNumber(rewardBody.sort, sort)}
+                  ) returning id
+                `;
+            ids.rewards[clientId] = publicId(reward);
+          }
+
+          const activeFighters = Object.values(ids.fighters);
+          const activeBosses = Object.values(ids.bosses);
+          const activeChores = Object.values(ids.chores);
+          const activeRewards = Object.values(ids.rewards);
+          const removedChores = await tx`
+            select boss_id from chores
+            where household_id = ${householdId} and deleted_at is null and not (id = any(${activeChores}::uuid[]))
+          `;
+          removedChores.forEach((row) => bossesNeedingReset.add(String(row.boss_id)));
+          await tx`update chores set deleted_at = now(), version = version + 1 where household_id = ${householdId} and deleted_at is null and not (id = any(${activeChores}::uuid[]))`;
+          await tx`update bosses set deleted_at = now(), version = version + 1 where household_id = ${householdId} and deleted_at is null and not (id = any(${activeBosses}::uuid[]))`;
+          await tx`update fighters set deleted_at = now(), version = version + 1 where household_id = ${householdId} and deleted_at is null and not (id = any(${activeFighters}::uuid[]))`;
+          await tx`update rewards set deleted_at = now(), version = version + 1 where household_id = ${householdId} and deleted_at is null and not (id = any(${activeRewards}::uuid[]))`;
+          const [household] = await tx`select timezone from households where id = ${householdId}`;
+          const timezone = requireString(household.timezone, 'timezone');
+          for (const bossId of bossesNeedingReset) {
+            const [boss] = await tx`
+              select id, trigger_type, trigger_day, trigger_date from bosses
+              where id = ${bossId} and household_id = ${householdId} and deleted_at is null
+            `;
+            if (!boss) continue;
+            const cycleKey = serverCycleKey(boss, timezone);
+            const [latest] = await tx`
+              select coalesce(max(reset_seq), 0)::integer as reset_seq from boss_resets
+              where household_id = ${householdId} and boss_id = ${bossId} and cycle_key = ${cycleKey}
+            `;
+            await tx`
+              insert into boss_resets (household_id, boss_id, cycle_key, reset_seq, reason, created_by_user_id)
+              values (${householdId}, ${bossId}, ${cycleKey}, ${Number(latest.reset_seq) + 1}, 'chores_edited', ${auth.userId})
+              on conflict do nothing
+            `;
+          }
+          accepted.push({ type, id: optionalString(payload.id), ids });
+        } else if (type === 'chore_completion') {
           const bossId = requireString(payload.bossId, 'bossId');
           const choreId = requireString(payload.choreId, 'choreId');
           const fighterId = requireString(payload.fighterId, 'fighterId');
-          const performedByDeviceId = auth.deviceId ?? optionalString(payload.performedByDeviceId);
-          await assertHouseholdRow('bosses', bossId, householdId);
-          await assertHouseholdRow('chores', choreId, householdId);
-          await assertHouseholdRow('fighters', fighterId, householdId);
-          await assertNullableHouseholdRow('devices', performedByDeviceId, householdId);
+          const eventId = requireString(payload.id, 'id');
+          const performedByDeviceId = auth.deviceId ?? null;
+          const [duplicate] = await tx`
+            select id, server_seq from chore_completions
+            where id = ${eventId} and household_id = ${householdId}
+          `;
+          if (duplicate) {
+            accepted.push({ type, id: duplicate.id, serverSeq: duplicate.server_seq, duplicate: true });
+            continue;
+          }
+          const [boss] = await tx`
+            select id, rare, dormant, unlock_at, trigger_type, trigger_day, trigger_date from bosses
+            where id = ${bossId} and household_id = ${householdId} and deleted_at is null
+            for update
+          `;
+          if (!boss) throw new Error('bosses row does not belong to household');
+          const [household] = await tx`select timezone from households where id = ${householdId} and deleted_at is null`;
+          const timezone = requireString(household?.timezone, 'timezone');
+          if (boss.dormant) {
+            const [progress] = await tx`
+              select h.victories_baseline + count(v.id)::integer as victories
+              from households h left join boss_victories v on v.household_id = h.id
+              where h.id = ${householdId}
+              group by h.victories_baseline
+            `;
+            if (Number(boss.unlock_at) <= 0 || Number(progress?.victories) < Number(boss.unlock_at)) {
+              throw new Error('Boss is not currently available');
+            }
+          }
           const [chore] = await tx`
-            select boss_id, title, damage from chores
-            where id = ${choreId} and household_id = ${householdId}
+            select boss_id, title, damage, repeatable from chores
+            where id = ${choreId} and household_id = ${householdId} and deleted_at is null
           `;
           if (!chore || chore.boss_id !== bossId) throw new Error('Chore does not belong to boss');
+          const [fighter] = await tx`
+            select id, user_id, require_own_device from fighters
+            where id = ${fighterId} and household_id = ${householdId} and deleted_at is null
+          `;
+          if (!fighter) throw new Error('fighters row does not belong to household');
+
+          let mayAct = false;
+          let actedOnBehalf = false;
+          if (auth.kind === 'household_device') {
+            mayAct = !fighter.require_own_device;
+            actedOnBehalf = fighter.user_id !== null;
+          } else if (auth.userId) {
+            const ownsFighter = fighter.user_id === auth.userId;
+            const [membership] = await tx`
+              select role from household_members
+              where household_id = ${householdId} and user_id = ${auth.userId} and status = 'active'
+            `;
+            const isParent = membership && (membership.role === 'owner' || membership.role === 'parent');
+            mayAct = ownsFighter || Boolean(isParent && !fighter.require_own_device);
+            actedOnBehalf = !ownsFighter;
+          }
+          if (!mayAct) throw new Error('Fighter requires their own device');
+
+          const cycleKey = requireString(payload.cycleKey, 'cycleKey');
+          if (cycleKey !== serverCycleKey(boss, timezone)) throw new Error('Cycle key is no longer current');
+          if (!serverBossAvailable(boss, householdId, timezone)) throw new Error('Boss is not currently available');
+          const resetSeq = optionalNumber(payload.resetSeq);
+          if (!chore.repeatable) {
+            const [alreadyCompleted] = await tx`
+              select id from chore_completions
+              where household_id = ${householdId} and chore_id = ${choreId}
+                and cycle_key = ${cycleKey} and reset_seq = ${resetSeq} and voided_at is null
+              limit 1
+            `;
+            if (alreadyCompleted) throw new Error('Chore is already completed for this cycle');
+          }
 
           const [row] = await tx`
             insert into chore_completions (
@@ -1174,21 +1676,109 @@ export async function buildApp() {
               acted_on_behalf, completed_at
             )
             values (
-              coalesce(${optionalString(payload.id)}::uuid, gen_random_uuid()),
+              ${eventId}::uuid,
               ${householdId}, ${bossId},
               ${choreId}, ${fighterId},
-              ${requireString(payload.cycleKey, 'cycleKey')}, ${optionalNumber(payload.resetSeq)},
-              ${optionalString(payload.choreTitle) ?? chore.title}, ${optionalNumber(payload.damage, Number(chore.damage))},
+              ${cycleKey}, ${resetSeq},
+              ${chore.title}, ${Number(chore.damage)},
               ${auth.userId}, ${performedByDeviceId}::uuid,
-              ${Boolean(payload.actedOnBehalf)}, ${requireString(payload.completedAt, 'completedAt')}::timestamptz
+              ${actedOnBehalf}, ${requireString(payload.completedAt, 'completedAt')}::timestamptz
             )
             on conflict (id) do nothing
             returning id, server_seq
           `;
-          if (row) accepted.push({ type, id: row.id, serverSeq: row.server_seq });
+          if (row) {
+            await tx`
+              update fighters
+              set career_xp_cached = career_xp_cached + ${Number(chore.damage)}, version = version + 1
+              where id = ${fighterId}
+            `;
+            const [health] = await tx`
+              select
+                (select coalesce(sum(damage), 0) from chores
+                  where household_id = ${householdId} and boss_id = ${bossId} and deleted_at is null)::integer as max_hp,
+                (select coalesce(sum(damage), 0) from chore_completions
+                  where household_id = ${householdId} and boss_id = ${bossId}
+                    and cycle_key = ${cycleKey} and reset_seq = ${resetSeq} and voided_at is null)::integer as damage
+            `;
+            let victoryCreated = false;
+            if (Number(health.damage) >= Number(health.max_hp) && Number(health.max_hp) > 0) {
+              const elite = serverBossElite(boss, householdId, timezone);
+              const [victory] = await tx`
+                insert into boss_victories (household_id, boss_id, cycle_key, reset_seq, elite, rare, won_at)
+                values (${householdId}, ${bossId}, ${cycleKey}, ${resetSeq}, ${elite}, ${Boolean(boss.rare)}, now())
+                on conflict (household_id, boss_id, cycle_key, reset_seq) do nothing
+                returning id
+              `;
+              if (victory) {
+                victoryCreated = true;
+                const contributions = await tx`
+                  select fighter_id, round((sum(damage) / 4.0) * ${elite ? 1.5 : 1})::integer as amount
+                  from chore_completions
+                  where household_id = ${householdId} and boss_id = ${bossId}
+                    and cycle_key = ${cycleKey} and reset_seq = ${resetSeq} and voided_at is null
+                  group by fighter_id
+                `;
+                for (const contribution of contributions) {
+                  const amount = Number(contribution.amount);
+                  if (amount <= 0) continue;
+                  await tx`
+                    insert into wallet_transactions (
+                      household_id, fighter_id, amount, kind, reference_type, reference_id, created_by_user_id
+                    ) values (
+                      ${householdId}, ${contribution.fighter_id}, ${amount}, 'boss_reward',
+                      'boss_victory', ${victory.id}, ${auth.userId}
+                    ) on conflict do nothing
+                  `;
+                }
+              }
+            }
+            accepted.push({ type, id: row.id, serverSeq: row.server_seq, victoryCreated });
+          }
         } else if (type === 'boss_reset') {
           const bossId = requireString(payload.bossId, 'bossId');
-          await assertHouseholdRow('bosses', bossId, householdId);
+          const fighterId = requireString(payload.fighterId, 'fighterId');
+          const [actingFighter] = await tx`
+            select user_id, require_own_device from fighters
+            where id = ${fighterId} and household_id = ${householdId} and deleted_at is null
+          `;
+          if (!actingFighter) throw new Error('fighters row does not belong to household');
+          const [membership] = auth.userId ? await tx`
+            select role from household_members
+            where household_id = ${householdId} and user_id = ${auth.userId} and status = 'active'
+          ` : [null];
+          const ownsFighter = Boolean(auth.userId && actingFighter.user_id === auth.userId);
+          const isParent = membership && (membership.role === 'owner' || membership.role === 'parent');
+          const mayReset = auth.kind === 'household_device'
+            ? !actingFighter.require_own_device
+            : ownsFighter || Boolean(isParent && !actingFighter.require_own_device);
+          if (!mayReset) throw new Error('Fighter requires their own device');
+          const cycleKey = requireString(payload.cycleKey, 'cycleKey');
+          const resetSeq = optionalNumber(payload.resetSeq);
+          const [duplicate] = await tx`
+            select id, server_seq from boss_resets
+            where household_id = ${householdId} and boss_id = ${bossId}
+              and cycle_key = ${cycleKey} and reset_seq = ${resetSeq}
+          `;
+          if (duplicate) {
+            accepted.push({ type, id: duplicate.id, serverSeq: duplicate.server_seq, duplicate: true });
+            continue;
+          }
+          const [boss] = await tx`
+            select id, trigger_type, trigger_day, trigger_date from bosses
+            where id = ${bossId} and household_id = ${householdId} and deleted_at is null
+            for update
+          `;
+          if (!boss) throw new Error('bosses row does not belong to household');
+          const [household] = await tx`select timezone from households where id = ${householdId}`;
+          if (cycleKey !== serverCycleKey(boss, requireString(household.timezone, 'timezone'))) {
+            throw new Error('Cycle key is no longer current');
+          }
+          const [latest] = await tx`
+            select coalesce(max(reset_seq), 0)::integer as reset_seq from boss_resets
+            where household_id = ${householdId} and boss_id = ${bossId} and cycle_key = ${cycleKey}
+          `;
+          if (resetSeq !== Number(latest.reset_seq) + 1) throw new Error('Reset sequence conflict');
           const [row] = await tx`
             insert into boss_resets (
               id, household_id, boss_id, cycle_key, reset_seq, reason, created_by_user_id
@@ -1196,84 +1786,166 @@ export async function buildApp() {
             values (
               coalesce(${optionalString(payload.id)}::uuid, gen_random_uuid()),
               ${householdId}, ${bossId},
-              ${requireString(payload.cycleKey, 'cycleKey')}, ${optionalNumber(payload.resetSeq)},
+              ${cycleKey}, ${resetSeq},
               ${requireString(payload.reason, 'reason')}, ${auth.userId}
             )
             on conflict (household_id, boss_id, cycle_key, reset_seq) do nothing
             returning id, server_seq
           `;
           if (row) accepted.push({ type, id: row.id, serverSeq: row.server_seq });
-        } else if (type === 'boss_victory') {
-          const bossId = requireString(payload.bossId, 'bossId');
-          await assertHouseholdRow('bosses', bossId, householdId);
-          const [row] = await tx`
-            insert into boss_victories (
-              id, household_id, boss_id, cycle_key, reset_seq, elite, rare, won_at
-            )
-            values (
-              coalesce(${optionalString(payload.id)}::uuid, gen_random_uuid()),
-              ${householdId}, ${bossId},
-              ${requireString(payload.cycleKey, 'cycleKey')}, ${optionalNumber(payload.resetSeq)},
-              ${Boolean(payload.elite)}, ${Boolean(payload.rare)},
-              ${requireString(payload.wonAt, 'wonAt')}::timestamptz
-            )
-            on conflict (household_id, boss_id, cycle_key, reset_seq) do nothing
-            returning id, server_seq
+        } else if (type === 'wallet_transfer') {
+          const eventId = requireString(payload.id, 'id');
+          const transferGroup = requireString(payload.transferGroup, 'transferGroup');
+          const [duplicate] = await tx`
+            select id, server_seq from wallet_transactions
+            where household_id = ${householdId} and transfer_group = ${transferGroup}
+            order by server_seq limit 1
           `;
-          if (row) {
-            const payouts = Array.isArray(payload.payouts) ? payload.payouts : [];
-            for (const payout of payouts) {
-              const payoutBody = requireObject(payout);
-              const fighterId = requireString(payoutBody.fighterId, 'fighterId');
-              const amount = optionalNumber(payoutBody.amount);
-              if (amount <= 0) throw new Error('Victory payout amount must be positive');
-              await assertHouseholdRow('fighters', fighterId, householdId);
-              await tx`
-                insert into wallet_transactions (
-                  household_id, fighter_id, amount, kind, reference_type, reference_id, created_by_user_id
-                )
-                values (${householdId}, ${fighterId}, ${amount}, 'boss_reward', 'boss_victory', ${row.id}, ${auth.userId})
-                on conflict do nothing
-              `;
-            }
-            accepted.push({ type, id: row.id, serverSeq: row.server_seq });
+          if (duplicate) {
+            accepted.push({ type, id: duplicate.id, serverSeq: duplicate.server_seq, duplicate: true });
+            continue;
           }
-        } else if (type === 'wallet_transaction') {
-          const fighterId = optionalString(payload.fighterId);
-          await assertNullableHouseholdRow('fighters', fighterId, householdId);
+          const fighterId = requireString(payload.fighterId, 'fighterId');
+          const amount = optionalNumber(payload.amount);
+          if (amount <= 0) throw new Error('Transfer amount must be positive');
+          const [fighter] = await tx`
+            select user_id, require_own_device from fighters
+            where id = ${fighterId} and household_id = ${householdId} and deleted_at is null
+            for update
+          `;
+          if (!fighter) throw new Error('fighters row does not belong to household');
+          const [membership] = auth.userId ? await tx`
+            select role from household_members
+            where household_id = ${householdId} and user_id = ${auth.userId} and status = 'active'
+          ` : [null];
+          const ownsFighter = Boolean(auth.userId && fighter.user_id === auth.userId);
+          const isParent = membership && (membership.role === 'owner' || membership.role === 'parent');
+          const mayAct = auth.kind === 'household_device'
+            ? !fighter.require_own_device
+            : ownsFighter || Boolean(isParent && !fighter.require_own_device);
+          if (!mayAct) throw new Error('Fighter requires their own device');
+          const [balance] = await tx`
+            select coalesce(sum(amount), 0)::integer as amount from wallet_transactions
+            where household_id = ${householdId} and fighter_id = ${fighterId}
+          `;
+          if (Number(balance.amount) < amount) throw new Error('Insufficient wallet balance');
           const [row] = await tx`
             insert into wallet_transactions (
               id, household_id, fighter_id, amount, kind, transfer_group,
               reference_type, reference_id, note, created_by_user_id
             )
             values (
-              coalesce(${optionalString(payload.id)}::uuid, gen_random_uuid()),
-              ${householdId}, ${fighterId}::uuid,
-              ${optionalNumber(payload.amount)}, ${requireString(payload.kind, 'kind')},
-              ${optionalString(payload.transferGroup)}::uuid, ${optionalString(payload.referenceType)},
-              ${optionalString(payload.referenceId)}::uuid, ${optionalString(payload.note)}, ${auth.userId}
+              ${eventId}::uuid,
+              ${householdId}, ${fighterId}, ${-amount}, 'transfer',
+              ${transferGroup}, 'transfer', ${transferGroup}, 'Transfer to shared pool', ${auth.userId}
             )
             on conflict (id) do nothing
             returning id, server_seq
           `;
-          if (row) accepted.push({ type, id: row.id, serverSeq: row.server_seq });
+          if (row) {
+            await tx`
+              insert into wallet_transactions (
+                household_id, fighter_id, amount, kind, transfer_group,
+                reference_type, reference_id, note, created_by_user_id
+              ) values (
+                ${householdId}, null, ${amount}, 'transfer', ${transferGroup},
+                'transfer', ${transferGroup}, 'Transfer from fighter', ${auth.userId}
+              ) on conflict do nothing
+            `;
+            accepted.push({ type, id: row.id, serverSeq: row.server_seq });
+          }
+        } else if (type === 'reward_redemption_update') {
+          if (!auth.userId) throw new Error('Forbidden');
+          await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
+          const redemptionId = requireString(payload.redemptionId, 'redemptionId');
+          const status = requireString(payload.status, 'status');
+          if (status !== 'used' && status !== 'cancelled') throw new Error('Unsupported redemption status');
+          const [alreadyUpdated] = await tx`
+            select id, server_seq from reward_redemptions
+            where id = ${redemptionId} and household_id = ${householdId} and status = ${status}
+          `;
+          if (alreadyUpdated) {
+            accepted.push({ type, id: alreadyUpdated.id, serverSeq: alreadyUpdated.server_seq, duplicate: true });
+            continue;
+          }
+          const [redemption] = await tx`
+            update reward_redemptions
+            set status = ${status}, used_at = case when ${status} = 'used' then now() else used_at end,
+                version = version + 1
+            where id = ${redemptionId} and household_id = ${householdId}
+              and status in ('active', 'pending')
+            returning id, server_seq
+          `;
+          if (!redemption) throw new Error('Not found');
+          accepted.push({ type, id: redemption.id, serverSeq: redemption.server_seq });
         } else if (type === 'reward_redemption') {
-          const rewardId = optionalString(payload.rewardId);
+          const eventId = requireString(payload.id, 'id');
+          const [duplicate] = await tx`
+            select id, server_seq from reward_redemptions
+            where id = ${eventId} and household_id = ${householdId}
+          `;
+          if (duplicate) {
+            accepted.push({ type, id: duplicate.id, serverSeq: duplicate.server_seq, duplicate: true });
+            continue;
+          }
+          const submittedRewardId = optionalString(payload.rewardId);
           const fighterId = optionalString(payload.fighterId);
           const scope = requireString(payload.scope, 'scope');
-          await assertNullableHouseholdRow('rewards', rewardId, householdId);
           await assertNullableHouseholdRow('fighters', fighterId, householdId);
+          const [reward] = submittedRewardId ? await tx`
+            select id, scope, icon, title, cost from rewards
+            where household_id = ${householdId} and deleted_at is null
+              and (id::text = ${submittedRewardId} or client_id = ${submittedRewardId})
+            limit 1
+          ` : [null];
+          if (!reward) throw new Error('rewards row does not belong to household');
+          if ((scope === 'personal') !== Boolean(fighterId) || reward.scope !== scope) {
+            throw new Error('Reward scope does not match fighter');
+          }
+          if (fighterId) {
+            const [fighter] = await tx`
+              select user_id, require_own_device from fighters
+              where id = ${fighterId} and household_id = ${householdId} and deleted_at is null
+              for update
+            `;
+            const [membership] = auth.userId ? await tx`
+              select role from household_members
+              where household_id = ${householdId} and user_id = ${auth.userId} and status = 'active'
+            ` : [null];
+            const ownsFighter = Boolean(auth.userId && fighter?.user_id === auth.userId);
+            const isParent = membership && (membership.role === 'owner' || membership.role === 'parent');
+            const mayAct = auth.kind === 'household_device'
+              ? !fighter?.require_own_device
+              : ownsFighter || Boolean(isParent && !fighter?.require_own_device);
+            if (!mayAct) throw new Error('Fighter requires their own device');
+          } else {
+            if (auth.userId) {
+              const [membership] = await tx`
+                select role from household_members
+                where household_id = ${householdId} and user_id = ${auth.userId} and status = 'active'
+              `;
+              if (!membership || (membership.role !== 'owner' && membership.role !== 'parent')) throw new Error('Forbidden');
+            }
+            await tx`select id from households where id = ${householdId} for update`;
+          }
+          const [balance] = await tx`
+            select coalesce(sum(amount), 0)::integer as amount
+            from wallet_transactions
+            where household_id = ${householdId}
+              and fighter_id is not distinct from ${fighterId}::uuid
+          `;
+          if (Number(balance.amount) < Number(reward.cost)) throw new Error('Insufficient wallet balance');
           const [row] = await tx`
             insert into reward_redemptions (
               id, household_id, reward_id, scope, fighter_id, icon, title, cost,
               status, requested_by_user_id, approved_by_user_id
             )
             values (
-              coalesce(${optionalString(payload.id)}::uuid, gen_random_uuid()),
-              ${householdId}, ${rewardId}::uuid,
+              ${eventId}::uuid,
+              ${householdId}, ${reward.id}::uuid,
               ${scope}, ${fighterId}::uuid,
-              ${optionalString(payload.icon) ?? ''}, ${requireString(payload.title, 'title')},
-              ${optionalNumber(payload.cost)}, ${optionalString(payload.status) ?? 'active'},
+              ${reward.icon}, ${reward.title},
+              ${Number(reward.cost)}, ${optionalString(payload.status) ?? 'active'},
               ${auth.userId}, ${optionalString(payload.approvedByUserId)}::uuid
             )
             on conflict (id) do nothing
@@ -1282,7 +1954,7 @@ export async function buildApp() {
           if (row) {
             const status = optionalString(payload.status) ?? 'active';
             if (status === 'active') {
-              const cost = optionalNumber(payload.cost);
+              const cost = Number(reward.cost);
               await tx`
                 insert into wallet_transactions (
                   household_id, fighter_id, amount, kind, reference_type, reference_id, created_by_user_id
