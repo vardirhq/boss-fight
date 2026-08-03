@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useGame } from './store/GameContext';
 import { BattleScreen } from './screens/BattleScreen';
 import { HomeScreen } from './screens/HomeScreen';
@@ -10,17 +11,28 @@ import { SettingsPanel, Splash, Onboarding, Toast } from './screens/overlays';
 import { GOLD, useT } from './ui/common';
 
 const PS = "'Press Start 2P'";
+const LEGACY_NEW_FIGHTER_NAME = 'Ny kjemper';
 
 export function App() {
   const { state, actions } = useGame();
   const t = useT();
   const { ui, game } = state;
   const currentBoss = game.bosses.find((boss) => boss.id === game.currentBossId) ?? game.bosses[0];
-  const showBattleIntro = ui.tab === 'battle' && ui.intro && currentBoss;
+  const showBattleIntro = ui.phase === 'app' && ui.tab === 'battle' && ui.intro && currentBoss;
+
+  // Older builds created a fighter with visible default text. Turn that legacy
+  // value into an empty field so the localized name prompt behaves as a placeholder.
+  useEffect(() => {
+    for (const fighter of game.fighters) {
+      if (fighter.name === LEGACY_NEW_FIGHTER_NAME) {
+        actions.editFighter(fighter.id, { name: '' });
+      }
+    }
+  }, [actions, game.fighters]);
 
   return (
-    <div style={{ width: '100%', height: '100dvh', position: 'relative', background: 'linear-gradient(180deg,#12161f 0%,#0c0f16 60%,#090b10 100%)', display: 'flex', flexDirection: 'column', color: '#F6EBDD', overflow: 'hidden' }}>
-      <div className={`scr${ui.tab === 'battle' ? ' battle-scroll' : ''}`} style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', position: 'relative' }}>
+    <div className="app-shell" style={{ width: '100%', height: '100%', minHeight: 0, position: 'relative', background: 'linear-gradient(180deg,#12161f 0%,#0c0f16 60%,#090b10 100%)', display: 'flex', flexDirection: 'column', color: '#F6EBDD', overflow: 'hidden' }}>
+      <div className={`scr app-content${ui.tab === 'battle' ? ' battle-scroll' : ''}`} style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', position: 'relative' }}>
         {ui.tab === 'battle' && <BattleScreen />}
         {ui.tab === 'home' && <HomeScreen />}
         {ui.tab === 'party' && <PartyScreen />}
