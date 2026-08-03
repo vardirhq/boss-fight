@@ -1,10 +1,12 @@
 import { useGame } from '../store/GameContext';
+import { mayManageHousehold, useOnline } from '../online/OnlineContext';
 import { useT, GOLD } from '../ui/common';
 
 const PS = "'Press Start 2P'";
 
 export function BagScreen() {
   const { state, actions } = useGame();
+  const online = useOnline();
   const t = useT();
   const g = state.game;
   const colorByName = new Map(g.fighters.map((f) => [f.name, f.color]));
@@ -29,7 +31,7 @@ export function BagScreen() {
                     <span style={{ fontSize: 11, color: '#6C7486', fontWeight: 500 }}>{v.who}</span>
                   </div>
                 </div>
-                <button onClick={() => actions.useVoucher(v.vid)} style={{ flex: 'none', padding: '11px 16px', border: 'none', borderRadius: 12, background: 'linear-gradient(180deg,#8fe0a8,#67D391)', color: '#0c1a12', fontFamily: PS, fontSize: 8, letterSpacing: .5, cursor: 'pointer', boxShadow: '0 4px 0 #3f9c63' }}>{t.use}</button>
+                {mayManageHousehold(online.state) && <button onClick={() => actions.useVoucher(v.vid)} style={{ flex: 'none', padding: '11px 16px', border: 'none', borderRadius: 12, background: 'linear-gradient(180deg,#8fe0a8,#67D391)', color: '#0c1a12', fontFamily: PS, fontSize: 8, letterSpacing: .5, cursor: 'pointer', boxShadow: '0 4px 0 #3f9c63' }}>{t.use}</button>}
               </div>
             ))}
           </div>
