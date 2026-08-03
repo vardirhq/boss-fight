@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useGame } from './store/GameContext';
 import { BattleScreen } from './screens/BattleScreen';
 import { HomeScreen } from './screens/HomeScreen';
@@ -8,6 +8,7 @@ import { BagScreen } from './screens/BagScreen';
 import { BottomNav } from './screens/BottomNav';
 import { BossManager, ChoreEditor, PartyManager } from './screens/managers';
 import { SettingsPanel, Splash, Onboarding, Toast } from './screens/overlays';
+import { AccountSettings } from './online/AccountSettings';
 import { GOLD, useT } from './ui/common';
 
 const PS = "'Press Start 2P'";
@@ -17,11 +18,10 @@ export function App() {
   const { state, actions } = useGame();
   const t = useT();
   const { ui, game } = state;
+  const [accountOpen, setAccountOpen] = useState(false);
   const currentBoss = game.bosses.find((boss) => boss.id === game.currentBossId) ?? game.bosses[0];
   const showBattleIntro = ui.phase === 'app' && ui.tab === 'battle' && ui.intro && currentBoss;
 
-  // Older builds created a fighter with visible default text. Turn that legacy
-  // value into an empty field so the localized name prompt behaves as a placeholder.
   useEffect(() => {
     for (const fighter of game.fighters) {
       if (fighter.name === LEGACY_NEW_FIGHTER_NAME) {
@@ -29,6 +29,10 @@ export function App() {
       }
     }
   }, [actions, game.fighters]);
+
+  useEffect(() => {
+    if (!ui.settingsOpen) setAccountOpen(false);
+  }, [ui.settingsOpen]);
 
   return (
     <div className="app-shell" style={{ width: '100%', height: '100%', minHeight: 0, position: 'relative', background: 'linear-gradient(180deg,#12161f 0%,#0c0f16 60%,#090b10 100%)', display: 'flex', flexDirection: 'column', color: '#F6EBDD', overflow: 'hidden' }}>
@@ -45,6 +49,23 @@ export function App() {
       {ui.editParty && <PartyManager />}
       {ui.editingChores && <ChoreEditor />}
       {ui.settingsOpen && <SettingsPanel />}
+      {ui.settingsOpen && !accountOpen && (
+        <button
+          onClick={() => setAccountOpen(true)}
+          style={{ position: 'fixed', right: 18, bottom: 'calc(22px + env(safe-area-inset-bottom))', zIndex: 91, border: '1px solid rgba(91,155,232,.5)', borderRadius: 13, background: '#18243a', color: '#8fc0ff', padding: '12px 15px', fontWeight: 800, cursor: 'pointer', boxShadow: '0 8px 22px rgba(0,0,0,.45)' }}
+        >
+          ☁ Konto og synk
+        </button>
+      )}
+      {ui.settingsOpen && accountOpen && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 92, background: '#0b0e16', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ flex: 'none', padding: 'calc(20px + env(safe-area-inset-top)) 18px 14px', borderBottom: '1px solid #222a3c', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ flex: 1, fontFamily: PS, fontSize: 11, color: '#5B9BE8' }}>KONTO OG SYNK</div>
+            <button onClick={() => setAccountOpen(false)} style={{ border: '1px solid #333c50', borderRadius: 11, background: '#1b2130', color: '#F6EBDD', padding: '10px 14px', fontWeight: 700, cursor: 'pointer' }}>Tilbake</button>
+          </div>
+          <div className="scr" style={{ flex: 1, overflowY: 'auto', padding: 18 }}><AccountSettings /></div>
+        </div>
+      )}
       {ui.phase === 'splash' && <Splash />}
       {ui.phase === 'onboarding' && <Onboarding />}
 
@@ -59,21 +80,7 @@ export function App() {
           onKeyDown={(event) => {
             if (event.key === 'Enter' || event.key === ' ') actions.startFight();
           }}
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 1000,
-            background: 'rgba(7,9,13,.78)',
-            backdropFilter: 'blur(4px)',
-            WebkitBackdropFilter: 'blur(4px)',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            padding: 24,
-            textAlign: 'center',
-          }}
+          style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(7,9,13,.78)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 24, textAlign: 'center' }}
         >
           <div style={{ fontFamily: PS, fontSize: 9, color: '#E0564A', letterSpacing: 2, animation: 'victoryPop .4s ease-out both' }}>{t.introAppears}</div>
           <div style={{ fontFamily: PS, fontSize: 22, color: '#F6EBDD', textShadow: `0 3px 0 rgba(0,0,0,.6),0 0 20px ${GOLD}66`, marginTop: 18, lineHeight: 1.5, textTransform: 'uppercase', animation: 'introSlam .7s cubic-bezier(.2,.9,.2,1) both' }}>{currentBoss.name}</div>
