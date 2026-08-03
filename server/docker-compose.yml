@@ -1,0 +1,12 @@
+services:
+  boss-kamp-api:
+    image: boss-kamp-api:latest
+    build: .
+    network_mode: host
+    env_file: .env.production
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

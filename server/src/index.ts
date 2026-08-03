@@ -1,0 +1,1068 @@
+import 'dotenv/config';
+import { createHash, randomBytes, scrypt as scryptCallback, timingSafeEqual } from 'node:crypto';
+import { promisify } from 'node:util';
+import Fastify, { type FastifyRequest } from 'fastify';
+import cors from '@fastify/cors';
+import rateLimit from '@fastify/rate-limit';
+import { sql } from './db.js';
+
+type JsonObject = Record<string, unknown>;
+type AuthContext = { userId: string; sessionId: string };
+type PrincipalContext = { userId: string | null; sessionId?: string; deviceId?: string; kind: 'user' | 'household_device' };
+type HouseholdRole = 'owner' | 'parent' | 'member' | 'child';
+
+const scrypt = promisify(scryptCallback);
+const passwordKeyLength = 64;
+
+const appendTables = [
+  'chore_completions',
+  'boss_resets',
+  'boss_victories',
+  'wallet_transactions',
+  'reward_redemptions'
+] as const;
+
+const mutableTables = [
+  'households',
+  'household_members',
+  'devices',
+  'fighters',
+  'fighter_avatars',
+  'bosses',
+  'chores',
+  'rewards'
+] as const;
+
+function requireString(value: unknown, field: string): string {
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new Error(`${field} is required`);
+  }
+  return value.trim();
+}
+
+function optionalString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() !== '' ? value.trim() : null;
+}
+
+function optionalNumber(value: unknown, fallback = 0): number {
+  if (value === undefined || value === null || value === '') return fallback;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) throw new Error('Expected numeric value');
+  return parsed;
+}
+
+function optionalNumberOrNull(value: unknown): number | null {
+  if (value === undefined || value === null || value === '') return null;
+  return optionalNumber(value);
+}
+
+function optionalBoolean(value: unknown, fallback = false): boolean {
+  if (value === undefined || value === null) return fallback;
+  return Boolean(value);
+}
+
+function optionalBooleanOrNull(value: unknown): boolean | null {
+  if (value === undefined || value === null) return null;
+  return Boolean(value);
+}
+
+function requireObject(body: unknown): JsonObject {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    throw new Error('Expected JSON object');
+  }
+  return body as JsonObject;
+}
+
+function publicId(row: JsonObject) {
+  return requireString(row.id, 'id');
+}
+
+function tokenHash(token: string) {
+  return createHash('sha256').update(token).digest('hex');
+}
+
+function sessionExpiry() {
+  const days = Number(process.env.SESSION_DAYS ?? 90);
+  return new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+}
+
+async function hashSecret(secret: string) {
+  const salt = randomBytes(16).toString('hex');
+  const derived = (await scrypt(secret, salt, passwordKeyLength)) as Buffer;
+  return `scrypt$${salt}$${derived.toString('hex')}`;
+}
+
+async function hashPassword(password: string) {
+  if (password.length < 10) {
+    throw new Error('Password must be at least 10 characters');
+  }
+  return hashSecret(password);
+}
+
+async function verifySecret(secret: string, stored: unknown) {
+  if (typeof stored !== 'string') return false;
+  const [scheme, salt, expectedHex] = stored.split('$');
+  if (scheme !== 'scrypt' || !salt || !expectedHex) return false;
+  const actual = (await scrypt(secret, salt, passwordKeyLength)) as Buffer;
+  const expected = Buffer.from(expectedHex, 'hex');
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
+}
+
+async function verifyPassword(password: string, stored: unknown) {
+  return verifySecret(password, stored);
+}
+
+function bearerToken(request: FastifyRequest) {
+  const header = request.headers.authorization;
+  if (!header?.startsWith('Bearer ')) return null;
+  return header.slice('Bearer '.length).trim();
+}
+
+function deviceToken(request: FastifyRequest) {
+  const value = request.headers['x-boss-kamp-device-token'];
+  return Array.isArray(value) ? value[0] : value ?? null;
+}
+
+async function createSession(userId: string, deviceId?: string | null) {
+  const token = randomBytes(32).toString('base64url');
+  const expiresAt = sessionExpiry();
+  const [session] = await sql`
+    insert into sessions (user_id, device_id, token_hash, expires_at, last_used_at)
+    values (${userId}, ${deviceId ?? null}, ${tokenHash(token)}, ${expiresAt}, now())
+    returning id, expires_at
+  `;
+  return { token, sessionId: publicId(session), expiresAt: session.expires_at };
+}
+
+async function requireAuth(request: FastifyRequest): Promise<AuthContext> {
+  const token = bearerToken(request);
+  if (!token) throw new Error('Unauthorized');
+
+  const [session] = await sql`
+    update sessions
+    set last_used_at = now()
+    where token_hash = ${tokenHash(token)}
+      and revoked_at is null
+      and expires_at > now()
+    returning id, user_id
+  `;
+
+  if (!session) throw new Error('Unauthorized');
+  return { userId: requireString(session.user_id, 'user_id'), sessionId: publicId(session) };
+}
+
+async function requireHouseholdMember(userId: string, householdId: string) {
+  const [member] = await sql`
+    select id, role from household_members
+    where household_id = ${householdId}
+      and user_id = ${userId}
+      and status = 'active'
+  `;
+  if (!member) throw new Error('Forbidden');
+  return member;
+}
+
+async function requireHouseholdPrincipal(request: FastifyRequest, householdId: string): Promise<PrincipalContext> {
+  const token = bearerToken(request);
+  if (token) {
+    const auth = await requireAuth(request);
+    await requireHouseholdMember(auth.userId, householdId);
+    return { ...auth, kind: 'user' };
+  }
+
+  const tokenFromDevice = deviceToken(request);
+  if (tokenFromDevice) {
+    const [device] = await sql`
+      update devices
+      set last_seen_at = now()
+      where household_id = ${householdId}
+        and kind = 'household'
+        and token_hash = ${tokenHash(tokenFromDevice)}
+        and revoked_at is null
+      returning id
+    `;
+    if (!device) throw new Error('Unauthorized');
+    return { userId: null, deviceId: publicId(device), kind: 'household_device' };
+  }
+
+  throw new Error('Unauthorized');
+}
+
+async function requireHouseholdRole(userId: string, householdId: string, roles: HouseholdRole[]) {
+  const member = await requireHouseholdMember(userId, householdId);
+  const role = requireString(member.role, 'role') as HouseholdRole;
+  if (!roles.includes(role)) throw new Error('Forbidden');
+  return member;
+}
+
+async function assertHouseholdRow(table: 'bosses' | 'chores' | 'fighters' | 'rewards' | 'devices', id: string, householdId: string) {
+  const rows = await sql`
+    select id from ${sql(table)}
+    where id = ${id} and household_id = ${householdId}
+    limit 1
+  `;
+  if (rows.length === 0) throw new Error(`${table} row does not belong to household`);
+}
+
+async function assertNullableHouseholdRow(
+  table: 'fighters' | 'rewards' | 'devices',
+  id: string | null,
+  householdId: string
+) {
+  if (id) await assertHouseholdRow(table, id, householdId);
+}
+
+function publicTokenCode(length = 8) {
+  return randomBytes(length).toString('base64url').replace(/[^A-Za-z0-9]/g, '').slice(0, length).toUpperCase();
+}
+
+export async function buildApp() {
+  const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' }, trustProxy: true });
+
+  await app.register(cors, {
+    origin: process.env.CORS_ORIGIN?.split(',').map((origin) => origin.trim()).filter(Boolean) ?? true
+  });
+
+  await app.register(rateLimit, {
+    max: Number(process.env.RATE_LIMIT_MAX ?? 300),
+    timeWindow: process.env.RATE_LIMIT_WINDOW ?? '1 minute'
+  });
+
+  app.setErrorHandler((error, _request, reply) => {
+    const message = error instanceof Error ? error.message : 'Bad request';
+    if (message === 'Unauthorized') {
+      reply.code(401).send({ error: 'Unauthorized' });
+      return;
+    }
+    if (message === 'Forbidden') {
+      reply.code(403).send({ error: 'Forbidden' });
+      return;
+    }
+    reply.code(400).send({ error: message });
+  });
+
+  app.get('/health', async () => {
+    const [db] = await sql`select current_database() as database, now() as checked_at`;
+    return { ok: true, database: db.database, checkedAt: db.checked_at };
+  });
+
+  app.post('/api/auth/register', async (request) => {
+    const body = requireObject(request.body);
+    const email = requireString(body.email, 'email').toLowerCase();
+    const displayName = requireString(body.displayName, 'displayName');
+    const passwordHash = await hashPassword(requireString(body.password, 'password'));
+
+    const [user] = await sql`
+      insert into users (kind, email, password_hash, display_name)
+      values ('adult', ${email}, ${passwordHash}, ${displayName})
+      returning id, email, display_name
+    `;
+    const session = await createSession(publicId(user));
+
+    return { user, session };
+  });
+
+  app.post('/api/auth/login', async (request) => {
+    const body = requireObject(request.body);
+    const email = requireString(body.email, 'email').toLowerCase();
+    const password = requireString(body.password, 'password');
+
+    const [user] = await sql`
+      select id, email, display_name, password_hash
+      from users
+      where lower(email) = ${email}
+        and kind = 'adult'
+        and deleted_at is null
+    `;
+    if (!user || !(await verifyPassword(password, user.password_hash))) {
+      throw new Error('Unauthorized');
+    }
+
+    const session = await createSession(publicId(user));
+    return { user: { id: user.id, email: user.email, displayName: user.display_name }, session };
+  });
+
+  app.post('/api/auth/child-login', async (request) => {
+    const body = requireObject(request.body);
+    const householdId = requireString(body.householdId, 'householdId');
+    const fighterId = requireString(body.fighterId, 'fighterId');
+    const pin = requireString(body.pin, 'pin');
+    const deviceName = optionalString(body.deviceName) ?? '';
+    const platform = optionalString(body.platform) ?? 'android';
+
+    const [fighter] = await sql`
+      select id, user_id, name from fighters
+      where id = ${fighterId}
+        and household_id = ${householdId}
+        and user_id is not null
+        and deleted_at is null
+    `;
+    if (!fighter) throw new Error('Unauthorized');
+
+    const [credentials] = await sql`
+      select fighter_id, pin_hash, locked_until from fighter_credentials
+      where fighter_id = ${fighterId}
+    `;
+    if (!credentials || (credentials.locked_until && new Date(credentials.locked_until) > new Date())) {
+      throw new Error('Unauthorized');
+    }
+
+    if (!(await verifySecret(pin, credentials.pin_hash))) {
+      await sql`
+        update fighter_credentials
+        set failed_attempts = failed_attempts + 1,
+            locked_until = case when failed_attempts + 1 >= 8 then now() + interval '10 minutes' else locked_until end
+        where fighter_id = ${fighterId}
+      `;
+      throw new Error('Unauthorized');
+    }
+
+    const [device] = await sql`
+      insert into devices (household_id, user_id, kind, name, platform, token_hash, last_seen_at)
+      values (${householdId}, ${fighter.user_id}, 'personal', ${deviceName}, ${platform}, ${tokenHash(randomBytes(32).toString('base64url'))}, now())
+      returning id
+    `;
+    await sql`update fighter_credentials set failed_attempts = 0, locked_until = null where fighter_id = ${fighterId}`;
+    const session = await createSession(requireString(fighter.user_id, 'user_id'), publicId(device));
+
+    return {
+      user: { id: fighter.user_id, kind: 'child', displayName: fighter.name },
+      fighterId,
+      deviceId: publicId(device),
+      session
+    };
+  });
+
+  app.post('/api/auth/logout', async (request) => {
+    const auth = await requireAuth(request);
+    await sql`update sessions set revoked_at = now() where id = ${auth.sessionId}`;
+    return { ok: true };
+  });
+
+  app.get('/api/me', async (request) => {
+    const auth = await requireAuth(request);
+    const [user] = await sql`
+      select id, kind, email, display_name, email_verified_at, created_at, updated_at
+      from users
+      where id = ${auth.userId} and deleted_at is null
+    `;
+    const households = await sql`
+      select h.*, hm.role, hm.status
+      from household_members hm
+      join households h on h.id = hm.household_id
+      where hm.user_id = ${auth.userId}
+        and hm.status = 'active'
+        and h.deleted_at is null
+      order by h.created_at
+    `;
+    return { user, households };
+  });
+
+  app.post('/api/bootstrap', async (request) => {
+    const auth = await requireAuth(request);
+    const body = requireObject(request.body);
+    const householdName = requireString(body.householdName, 'householdName');
+    const timezone = optionalString(body.timezone) ?? 'Europe/Oslo';
+
+    const result = await sql.begin(async (tx) => {
+      const [household] = await tx`
+        insert into households (name, timezone, created_by_user_id)
+        values (${householdName}, ${timezone}, ${auth.userId})
+        returning id
+      `;
+      const [member] = await tx`
+        insert into household_members (household_id, user_id, role, status)
+        values (${household.id}, ${auth.userId}, 'owner', 'active')
+        returning id
+      `;
+      return { userId: auth.userId, householdId: publicId(household), memberId: publicId(member) };
+    });
+
+    return result;
+  });
+
+  app.get('/api/households/:householdId/config', async (request) => {
+    const auth = await requireAuth(request);
+    const householdId = (request.params as { householdId: string }).householdId;
+    await requireHouseholdMember(auth.userId, householdId);
+
+    const [household] = await sql`
+      select * from households where id = ${householdId} and deleted_at is null
+    `;
+    if (!household) return { household: null };
+
+    const [members, fighters, bosses, chores, rewards] = await Promise.all([
+      sql`select * from household_members where household_id = ${householdId} order by joined_at`,
+      sql`select * from fighters where household_id = ${householdId} order by sort, created_at`,
+      sql`select * from bosses where household_id = ${householdId} order by sort, created_at`,
+      sql`select * from chores where household_id = ${householdId} order by sort, created_at`,
+      sql`select * from rewards where household_id = ${householdId} order by scope, sort, created_at`
+    ]);
+
+    return { household, members, fighters, bosses, chores, rewards };
+  });
+
+  app.patch('/api/households/:householdId', async (request) => {
+    const auth = await requireAuth(request);
+    const householdId = (request.params as { householdId: string }).householdId;
+    await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
+    const body = requireObject(request.body);
+
+    const [household] = await sql`
+      update households
+      set name = coalesce(${optionalString(body.name)}, name),
+          timezone = coalesce(${optionalString(body.timezone)}, timezone),
+          version = version + 1
+      where id = ${householdId} and deleted_at is null
+      returning *
+    `;
+    return { household };
+  });
+
+  app.post('/api/households/:householdId/fighters', async (request) => {
+    const auth = await requireAuth(request);
+    const householdId = (request.params as { householdId: string }).householdId;
+    await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
+    const body = requireObject(request.body);
+
+    const [fighter] = await sql`
+      insert into fighters (
+        household_id, user_id, name, color, avatar_hash, require_own_device,
+        sort, created_by_user_id
+      )
+      values (
+        ${householdId}, ${optionalString(body.userId)}::uuid, ${requireString(body.name, 'name')},
+        ${requireString(body.color, 'color')}, ${optionalString(body.avatarHash)},
+        ${optionalBoolean(body.requireOwnDevice)}, ${optionalNumber(body.sort)}, ${auth.userId}
+      )
+      returning *
+    `;
+    return { fighter };
+  });
+
+  app.patch('/api/households/:householdId/fighters/:fighterId', async (request) => {
+    const auth = await requireAuth(request);
+    const { householdId, fighterId } = request.params as { householdId: string; fighterId: string };
+    await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
+    const body = requireObject(request.body);
+
+    const [fighter] = await sql`
+      update fighters
+      set name = coalesce(${optionalString(body.name)}, name),
+          color = coalesce(${optionalString(body.color)}, color),
+          avatar_hash = coalesce(${optionalString(body.avatarHash)}, avatar_hash),
+          require_own_device = coalesce(${optionalBooleanOrNull(body.requireOwnDevice)}, require_own_device),
+          sort = coalesce(${optionalNumberOrNull(body.sort)}, sort),
+          version = version + 1
+      where id = ${fighterId} and household_id = ${householdId} and deleted_at is null
+      returning *
+    `;
+    if (!fighter) throw new Error('Not found');
+    return { fighter };
+  });
+
+  app.delete('/api/households/:householdId/fighters/:fighterId', async (request) => {
+    const auth = await requireAuth(request);
+    const { householdId, fighterId } = request.params as { householdId: string; fighterId: string };
+    await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
+    const [fighter] = await sql`
+      update fighters
+      set deleted_at = now(), version = version + 1
+      where id = ${fighterId} and household_id = ${householdId} and deleted_at is null
+      returning id
+    `;
+    if (!fighter) throw new Error('Not found');
+    return { ok: true };
+  });
+
+  app.post('/api/households/:householdId/children', async (request) => {
+    const auth = await requireAuth(request);
+    const householdId = (request.params as { householdId: string }).householdId;
+    await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
+    const body = requireObject(request.body);
+    const displayName = requireString(body.displayName, 'displayName');
+    const pin = requireString(body.pin, 'pin');
+    if (pin.length < 4) throw new Error('PIN must be at least 4 digits');
+
+    const result = await sql.begin(async (tx) => {
+      const [user] = await tx`
+        insert into users (kind, display_name)
+        values ('child', ${displayName})
+        returning id, kind, display_name
+      `;
+      const [member] = await tx`
+        insert into household_members (household_id, user_id, role, status, invited_by_user_id)
+        values (${householdId}, ${user.id}, 'child', 'active', ${auth.userId})
+        returning id
+      `;
+      const [fighter] = await tx`
+        insert into fighters (household_id, user_id, name, color, sort, created_by_user_id)
+        values (
+          ${householdId}, ${user.id}, ${displayName}, ${requireString(body.color, 'color')},
+          ${optionalNumber(body.sort)}, ${auth.userId}
+        )
+        returning *
+      `;
+      await tx`
+        insert into fighter_credentials (fighter_id, pin_hash)
+        values (${fighter.id}, ${await hashSecret(pin)})
+      `;
+      return { user, memberId: publicId(member), fighter };
+    });
+
+    return result;
+  });
+
+  app.post('/api/households/:householdId/pairings', async (request) => {
+    const auth = await requireAuth(request);
+    const householdId = (request.params as { householdId: string }).householdId;
+    await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
+    const body = requireObject(request.body);
+    const role = optionalString(body.role) ?? 'household_device';
+    if (role !== 'household_device' && role !== 'fighter') throw new Error('Invalid pairing role');
+    const fighterId = optionalString(body.fighterId);
+    if (fighterId) await assertHouseholdRow('fighters', fighterId, householdId);
+
+    const code = publicTokenCode(8);
+    const [pairing] = await sql`
+      insert into device_pairings (
+        household_id, fighter_id, role, code_hash, created_by_user_id, expires_at
+      )
+      values (
+        ${householdId}, ${fighterId}::uuid, ${role}, ${tokenHash(code)}, ${auth.userId},
+        now() + interval '15 minutes'
+      )
+      returning id, household_id, fighter_id, role, expires_at, created_at
+    `;
+    return { pairing, code };
+  });
+
+  app.post('/api/households/:householdId/invites', async (request) => {
+    const auth = await requireAuth(request);
+    const householdId = (request.params as { householdId: string }).householdId;
+    await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
+    const body = requireObject(request.body);
+    const invitedEmail = requireString(body.email, 'email').toLowerCase();
+    const role = optionalString(body.role) ?? 'member';
+    if (role !== 'parent' && role !== 'member') throw new Error('Invalid invite role');
+    const fighterId = optionalString(body.fighterId);
+    if (fighterId) await assertHouseholdRow('fighters', fighterId, householdId);
+
+    const token = randomBytes(32).toString('base64url');
+    const [invite] = await sql`
+      insert into household_invites (
+        household_id, invited_email, role, fighter_id, token_hash, created_by_user_id, expires_at
+      )
+      values (
+        ${householdId}, ${invitedEmail}, ${role}, ${fighterId}::uuid,
+        ${tokenHash(token)}, ${auth.userId}, now() + interval '7 days'
+      )
+      returning id, household_id, invited_email, role, fighter_id, expires_at, created_at
+    `;
+
+    return { invite, token };
+  });
+
+  app.post('/api/invites/accept', async (request) => {
+    const auth = await requireAuth(request);
+    const body = requireObject(request.body);
+    const token = requireString(body.token, 'token');
+
+    const result = await sql.begin(async (tx) => {
+      const [user] = await tx`
+        select id, email from users where id = ${auth.userId} and deleted_at is null
+      `;
+      if (!user?.email) throw new Error('Authenticated user has no email');
+
+      const [invite] = await tx`
+        select * from household_invites
+        where token_hash = ${tokenHash(token)}
+          and accepted_at is null
+          and expires_at > now()
+        for update
+      `;
+      if (!invite || String(invite.invited_email).toLowerCase() !== String(user.email).toLowerCase()) {
+        throw new Error('Unauthorized');
+      }
+
+      const [member] = await tx`
+        insert into household_members (household_id, user_id, role, status, invited_by_user_id)
+        values (${invite.household_id}, ${auth.userId}, ${invite.role}, 'active', ${invite.created_by_user_id})
+        on conflict (household_id, user_id)
+        do update set status = 'active', role = excluded.role, version = household_members.version + 1
+        returning id, household_id, user_id, role, status
+      `;
+
+      let fighter = null;
+      if (invite.fighter_id) {
+        const [claimed] = await tx`
+          update fighters
+          set user_id = ${auth.userId}, version = version + 1
+          where id = ${invite.fighter_id}
+            and household_id = ${invite.household_id}
+            and user_id is null
+            and deleted_at is null
+          returning *
+        `;
+        fighter = claimed ?? null;
+      }
+
+      await tx`
+        update household_invites
+        set accepted_at = now(), accepted_by_user_id = ${auth.userId}
+        where id = ${invite.id}
+      `;
+
+      return { member, fighter };
+    });
+
+    return result;
+  });
+
+  app.post('/api/pairings/claim-household-device', async (request) => {
+    const body = requireObject(request.body);
+    const householdId = requireString(body.householdId, 'householdId');
+    const code = requireString(body.code, 'code').toUpperCase();
+    const name = optionalString(body.name) ?? '';
+    const platform = optionalString(body.platform) ?? 'android';
+
+    const deviceToken = randomBytes(32).toString('base64url');
+    const result = await sql.begin(async (tx) => {
+      const [pairing] = await tx`
+        select id from device_pairings
+        where household_id = ${householdId}
+          and role = 'household_device'
+          and code_hash = ${tokenHash(code)}
+          and claimed_at is null
+          and expires_at > now()
+        for update
+      `;
+      if (!pairing) throw new Error('Unauthorized');
+
+      const [device] = await tx`
+        insert into devices (household_id, kind, name, platform, token_hash, last_seen_at)
+        values (${householdId}, 'household', ${name}, ${platform}, ${tokenHash(deviceToken)}, now())
+        returning id, household_id, kind, name, platform
+      `;
+      await tx`
+        update device_pairings
+        set claimed_at = now(), claimed_device_id = ${device.id}
+        where id = ${pairing.id}
+      `;
+      return { device, deviceToken };
+    });
+
+    return result;
+  });
+
+  app.post('/api/households/:householdId/bosses', async (request) => {
+    const auth = await requireAuth(request);
+    const householdId = (request.params as { householdId: string }).householdId;
+    await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
+    const body = requireObject(request.body);
+
+    const [boss] = await sql`
+      insert into bosses (
+        household_id, name, sprite, frames, rare, hue, trigger_type, trigger_day,
+        trigger_date, trigger_note, dormant, unlock_at, sort
+      )
+      values (
+        ${householdId}, ${requireString(body.name, 'name')}, ${requireString(body.sprite, 'sprite')},
+        ${optionalNumber(body.frames)}, ${optionalBoolean(body.rare)}, ${optionalNumberOrNull(body.hue)},
+        ${optionalString(body.triggerType) ?? 'alltid'}, ${optionalNumberOrNull(body.triggerDay)},
+        ${optionalNumberOrNull(body.triggerDate)}, ${optionalString(body.triggerNote)},
+        ${optionalBoolean(body.dormant)}, ${optionalNumber(body.unlockAt)}, ${optionalNumber(body.sort)}
+      )
+      returning *
+    `;
+    return { boss };
+  });
+
+  app.patch('/api/households/:householdId/bosses/:bossId', async (request) => {
+    const auth = await requireAuth(request);
+    const { householdId, bossId } = request.params as { householdId: string; bossId: string };
+    await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
+    const body = requireObject(request.body);
+
+    const [boss] = await sql`
+      update bosses
+      set name = coalesce(${optionalString(body.name)}, name),
+          sprite = coalesce(${optionalString(body.sprite)}, sprite),
+          frames = coalesce(${optionalNumberOrNull(body.frames)}, frames),
+          rare = coalesce(${optionalBooleanOrNull(body.rare)}, rare),
+          hue = coalesce(${optionalNumberOrNull(body.hue)}, hue),
+          trigger_type = coalesce(${optionalString(body.triggerType)}, trigger_type),
+          trigger_day = coalesce(${optionalNumberOrNull(body.triggerDay)}, trigger_day),
+          trigger_date = coalesce(${optionalNumberOrNull(body.triggerDate)}, trigger_date),
+          trigger_note = coalesce(${optionalString(body.triggerNote)}, trigger_note),
+          dormant = coalesce(${optionalBooleanOrNull(body.dormant)}, dormant),
+          unlock_at = coalesce(${optionalNumberOrNull(body.unlockAt)}, unlock_at),
+          sort = coalesce(${optionalNumberOrNull(body.sort)}, sort),
+          version = version + 1
+      where id = ${bossId} and household_id = ${householdId} and deleted_at is null
+      returning *
+    `;
+    if (!boss) throw new Error('Not found');
+    return { boss };
+  });
+
+  app.delete('/api/households/:householdId/bosses/:bossId', async (request) => {
+    const auth = await requireAuth(request);
+    const { householdId, bossId } = request.params as { householdId: string; bossId: string };
+    await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
+    const [boss] = await sql`
+      update bosses set deleted_at = now(), version = version + 1
+      where id = ${bossId} and household_id = ${householdId} and deleted_at is null
+      returning id
+    `;
+    if (!boss) throw new Error('Not found');
+    return { ok: true };
+  });
+
+  app.post('/api/households/:householdId/chores', async (request) => {
+    const auth = await requireAuth(request);
+    const householdId = (request.params as { householdId: string }).householdId;
+    await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
+    const body = requireObject(request.body);
+    const bossId = requireString(body.bossId, 'bossId');
+    await assertHouseholdRow('bosses', bossId, householdId);
+
+    const [chore] = await sql`
+      insert into chores (household_id, boss_id, title, damage, repeatable, sort)
+      values (
+        ${householdId}, ${bossId}, ${requireString(body.title, 'title')},
+        ${optionalNumber(body.damage)}, ${optionalBoolean(body.repeatable)}, ${optionalNumber(body.sort)}
+      )
+      returning *
+    `;
+    return { chore };
+  });
+
+  app.patch('/api/households/:householdId/chores/:choreId', async (request) => {
+    const auth = await requireAuth(request);
+    const { householdId, choreId } = request.params as { householdId: string; choreId: string };
+    await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
+    const body = requireObject(request.body);
+    if (body.bossId) await assertHouseholdRow('bosses', requireString(body.bossId, 'bossId'), householdId);
+
+    const [chore] = await sql`
+      update chores
+      set boss_id = coalesce(${optionalString(body.bossId)}::uuid, boss_id),
+          title = coalesce(${optionalString(body.title)}, title),
+          damage = coalesce(${optionalNumberOrNull(body.damage)}, damage),
+          repeatable = coalesce(${optionalBooleanOrNull(body.repeatable)}, repeatable),
+          sort = coalesce(${optionalNumberOrNull(body.sort)}, sort),
+          version = version + 1
+      where id = ${choreId} and household_id = ${householdId} and deleted_at is null
+      returning *
+    `;
+    if (!chore) throw new Error('Not found');
+    return { chore };
+  });
+
+  app.delete('/api/households/:householdId/chores/:choreId', async (request) => {
+    const auth = await requireAuth(request);
+    const { householdId, choreId } = request.params as { householdId: string; choreId: string };
+    await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
+    const [chore] = await sql`
+      update chores set deleted_at = now(), version = version + 1
+      where id = ${choreId} and household_id = ${householdId} and deleted_at is null
+      returning id
+    `;
+    if (!chore) throw new Error('Not found');
+    return { ok: true };
+  });
+
+  app.post('/api/households/:householdId/rewards', async (request) => {
+    const auth = await requireAuth(request);
+    const householdId = (request.params as { householdId: string }).householdId;
+    await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
+    const body = requireObject(request.body);
+
+    const [reward] = await sql`
+      insert into rewards (household_id, scope, icon, title, descr, cost, sort)
+      values (
+        ${householdId}, ${requireString(body.scope, 'scope')}, ${optionalString(body.icon) ?? ''},
+        ${requireString(body.title, 'title')}, ${optionalString(body.descr) ?? ''},
+        ${optionalNumber(body.cost)}, ${optionalNumber(body.sort)}
+      )
+      returning *
+    `;
+    return { reward };
+  });
+
+  app.patch('/api/households/:householdId/rewards/:rewardId', async (request) => {
+    const auth = await requireAuth(request);
+    const { householdId, rewardId } = request.params as { householdId: string; rewardId: string };
+    await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
+    const body = requireObject(request.body);
+
+    const [reward] = await sql`
+      update rewards
+      set scope = coalesce(${optionalString(body.scope)}, scope),
+          icon = coalesce(${optionalString(body.icon)}, icon),
+          title = coalesce(${optionalString(body.title)}, title),
+          descr = coalesce(${optionalString(body.descr)}, descr),
+          cost = coalesce(${optionalNumberOrNull(body.cost)}, cost),
+          sort = coalesce(${optionalNumberOrNull(body.sort)}, sort),
+          version = version + 1
+      where id = ${rewardId} and household_id = ${householdId} and deleted_at is null
+      returning *
+    `;
+    if (!reward) throw new Error('Not found');
+    return { reward };
+  });
+
+  app.delete('/api/households/:householdId/rewards/:rewardId', async (request) => {
+    const auth = await requireAuth(request);
+    const { householdId, rewardId } = request.params as { householdId: string; rewardId: string };
+    await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
+    const [reward] = await sql`
+      update rewards set deleted_at = now(), version = version + 1
+      where id = ${rewardId} and household_id = ${householdId} and deleted_at is null
+      returning id
+    `;
+    if (!reward) throw new Error('Not found');
+    return { ok: true };
+  });
+
+  app.get('/api/sync/pull', async (request) => {
+    const query = request.query as Record<string, string | undefined>;
+    const householdId = requireString(query.household_id, 'household_id');
+    await requireHouseholdPrincipal(request, householdId);
+
+    const since = {
+      chore_completions: optionalNumber(query.since_chore_completions),
+      boss_resets: optionalNumber(query.since_boss_resets),
+      boss_victories: optionalNumber(query.since_boss_victories),
+      wallet_transactions: optionalNumber(query.since_wallet_transactions),
+      reward_redemptions: optionalNumber(query.since_reward_redemptions)
+    };
+
+    const [households, members, devices, fighters, avatars, bosses, chores, rewards] = await Promise.all([
+      sql`select * from households where id = ${householdId}`,
+      sql`select * from household_members where household_id = ${householdId}`,
+      sql`select * from devices where household_id = ${householdId}`,
+      sql`select * from fighters where household_id = ${householdId}`,
+      sql`
+        select fa.* from fighter_avatars fa
+        join fighters f on f.id = fa.fighter_id
+        where f.household_id = ${householdId}
+      `,
+      sql`select * from bosses where household_id = ${householdId}`,
+      sql`select * from chores where household_id = ${householdId}`,
+      sql`select * from rewards where household_id = ${householdId}`
+    ]);
+
+    const [completions, resets, victories, wallet, redemptions] = await Promise.all([
+      sql`
+        select * from chore_completions
+        where household_id = ${householdId} and server_seq > ${since.chore_completions}
+        order by server_seq
+      `,
+      sql`
+        select * from boss_resets
+        where household_id = ${householdId} and server_seq > ${since.boss_resets}
+        order by server_seq
+      `,
+      sql`
+        select * from boss_victories
+        where household_id = ${householdId} and server_seq > ${since.boss_victories}
+        order by server_seq
+      `,
+      sql`
+        select * from wallet_transactions
+        where household_id = ${householdId} and server_seq > ${since.wallet_transactions}
+        order by server_seq
+      `,
+      sql`
+        select * from reward_redemptions
+        where household_id = ${householdId} and server_seq > ${since.reward_redemptions}
+        order by server_seq
+      `
+    ]);
+
+    return {
+      serverTime: new Date().toISOString(),
+      mutable: { households, household_members: members, devices, fighters, fighter_avatars: avatars, bosses, chores, rewards },
+      events: { chore_completions: completions, boss_resets: resets, boss_victories: victories, wallet_transactions: wallet, reward_redemptions: redemptions }
+    };
+  });
+
+  app.post('/api/sync/push', async (request) => {
+    const body = requireObject(request.body);
+    const householdId = requireString(body.householdId, 'householdId');
+    const auth = await requireHouseholdPrincipal(request, householdId);
+
+    const mutations = Array.isArray(body.mutations) ? body.mutations : [];
+    const accepted: JsonObject[] = [];
+
+    await sql.begin(async (tx) => {
+      for (const mutation of mutations) {
+        const item = requireObject(mutation);
+        const type = requireString(item.type, 'type');
+        const payload = requireObject(item.payload);
+
+        if (type === 'chore_completion') {
+          const bossId = requireString(payload.bossId, 'bossId');
+          const choreId = requireString(payload.choreId, 'choreId');
+          const fighterId = requireString(payload.fighterId, 'fighterId');
+          const performedByDeviceId = auth.deviceId ?? optionalString(payload.performedByDeviceId);
+          await assertHouseholdRow('bosses', bossId, householdId);
+          await assertHouseholdRow('chores', choreId, householdId);
+          await assertHouseholdRow('fighters', fighterId, householdId);
+          await assertNullableHouseholdRow('devices', performedByDeviceId, householdId);
+          const [chore] = await tx`
+            select boss_id, title, damage from chores
+            where id = ${choreId} and household_id = ${householdId}
+          `;
+          if (!chore || chore.boss_id !== bossId) throw new Error('Chore does not belong to boss');
+
+          const [row] = await tx`
+            insert into chore_completions (
+              id, household_id, boss_id, chore_id, fighter_id, cycle_key, reset_seq,
+              chore_title, damage, performed_by_user_id, performed_by_device_id,
+              acted_on_behalf, completed_at
+            )
+            values (
+              coalesce(${optionalString(payload.id)}::uuid, gen_random_uuid()),
+              ${householdId}, ${bossId},
+              ${choreId}, ${fighterId},
+              ${requireString(payload.cycleKey, 'cycleKey')}, ${optionalNumber(payload.resetSeq)},
+              ${optionalString(payload.choreTitle) ?? chore.title}, ${optionalNumber(payload.damage, Number(chore.damage))},
+              ${auth.userId}, ${performedByDeviceId}::uuid,
+              ${Boolean(payload.actedOnBehalf)}, ${requireString(payload.completedAt, 'completedAt')}::timestamptz
+            )
+            on conflict (id) do nothing
+            returning id, server_seq
+          `;
+          if (row) accepted.push({ type, id: row.id, serverSeq: row.server_seq });
+        } else if (type === 'boss_reset') {
+          const bossId = requireString(payload.bossId, 'bossId');
+          await assertHouseholdRow('bosses', bossId, householdId);
+          const [row] = await tx`
+            insert into boss_resets (
+              id, household_id, boss_id, cycle_key, reset_seq, reason, created_by_user_id
+            )
+            values (
+              coalesce(${optionalString(payload.id)}::uuid, gen_random_uuid()),
+              ${householdId}, ${bossId},
+              ${requireString(payload.cycleKey, 'cycleKey')}, ${optionalNumber(payload.resetSeq)},
+              ${requireString(payload.reason, 'reason')}, ${auth.userId}
+            )
+            on conflict (household_id, boss_id, cycle_key, reset_seq) do nothing
+            returning id, server_seq
+          `;
+          if (row) accepted.push({ type, id: row.id, serverSeq: row.server_seq });
+        } else if (type === 'boss_victory') {
+          const bossId = requireString(payload.bossId, 'bossId');
+          await assertHouseholdRow('bosses', bossId, householdId);
+          const [row] = await tx`
+            insert into boss_victories (
+              id, household_id, boss_id, cycle_key, reset_seq, elite, rare, won_at
+            )
+            values (
+              coalesce(${optionalString(payload.id)}::uuid, gen_random_uuid()),
+              ${householdId}, ${bossId},
+              ${requireString(payload.cycleKey, 'cycleKey')}, ${optionalNumber(payload.resetSeq)},
+              ${Boolean(payload.elite)}, ${Boolean(payload.rare)},
+              ${requireString(payload.wonAt, 'wonAt')}::timestamptz
+            )
+            on conflict (household_id, boss_id, cycle_key, reset_seq) do nothing
+            returning id, server_seq
+          `;
+          if (row) {
+            const payouts = Array.isArray(payload.payouts) ? payload.payouts : [];
+            for (const payout of payouts) {
+              const payoutBody = requireObject(payout);
+              const fighterId = requireString(payoutBody.fighterId, 'fighterId');
+              const amount = optionalNumber(payoutBody.amount);
+              if (amount <= 0) throw new Error('Victory payout amount must be positive');
+              await assertHouseholdRow('fighters', fighterId, householdId);
+              await tx`
+                insert into wallet_transactions (
+                  household_id, fighter_id, amount, kind, reference_type, reference_id, created_by_user_id
+                )
+                values (${householdId}, ${fighterId}, ${amount}, 'boss_reward', 'boss_victory', ${row.id}, ${auth.userId})
+                on conflict do nothing
+              `;
+            }
+            accepted.push({ type, id: row.id, serverSeq: row.server_seq });
+          }
+        } else if (type === 'wallet_transaction') {
+          const fighterId = optionalString(payload.fighterId);
+          await assertNullableHouseholdRow('fighters', fighterId, householdId);
+          const [row] = await tx`
+            insert into wallet_transactions (
+              id, household_id, fighter_id, amount, kind, transfer_group,
+              reference_type, reference_id, note, created_by_user_id
+            )
+            values (
+              coalesce(${optionalString(payload.id)}::uuid, gen_random_uuid()),
+              ${householdId}, ${fighterId}::uuid,
+              ${optionalNumber(payload.amount)}, ${requireString(payload.kind, 'kind')},
+              ${optionalString(payload.transferGroup)}::uuid, ${optionalString(payload.referenceType)},
+              ${optionalString(payload.referenceId)}::uuid, ${optionalString(payload.note)}, ${auth.userId}
+            )
+            on conflict (id) do nothing
+            returning id, server_seq
+          `;
+          if (row) accepted.push({ type, id: row.id, serverSeq: row.server_seq });
+        } else if (type === 'reward_redemption') {
+          const rewardId = optionalString(payload.rewardId);
+          const fighterId = optionalString(payload.fighterId);
+          const scope = requireString(payload.scope, 'scope');
+          await assertNullableHouseholdRow('rewards', rewardId, householdId);
+          await assertNullableHouseholdRow('fighters', fighterId, householdId);
+          const [row] = await tx`
+            insert into reward_redemptions (
+              id, household_id, reward_id, scope, fighter_id, icon, title, cost,
+              status, requested_by_user_id, approved_by_user_id
+            )
+            values (
+              coalesce(${optionalString(payload.id)}::uuid, gen_random_uuid()),
+              ${householdId}, ${rewardId}::uuid,
+              ${scope}, ${fighterId}::uuid,
+              ${optionalString(payload.icon) ?? ''}, ${requireString(payload.title, 'title')},
+              ${optionalNumber(payload.cost)}, ${optionalString(payload.status) ?? 'active'},
+              ${auth.userId}, ${optionalString(payload.approvedByUserId)}::uuid
+            )
+            on conflict (id) do nothing
+            returning id, server_seq
+          `;
+          if (row) {
+            const status = optionalString(payload.status) ?? 'active';
+            if (status === 'active') {
+              const cost = optionalNumber(payload.cost);
+              await tx`
+                insert into wallet_transactions (
+                  household_id, fighter_id, amount, kind, reference_type, reference_id, created_by_user_id
+                )
+                values (${householdId}, ${fighterId}::uuid, ${-cost}, 'redemption', 'reward_redemption', ${row.id}, ${auth.userId})
+                on conflict do nothing
+              `;
+            }
+            accepted.push({ type, id: row.id, serverSeq: row.server_seq });
+          }
+        } else {
+          throw new Error(`Unsupported mutation type: ${type}`);
+        }
+      }
+    });
+
+    return { accepted };
+  });
+
+  app.get('/api/meta', async () => ({
+    service: 'boss-kamp-api',
+    database: 'boss_kamp',
+    auth: 'bearer-session',
+    mutableTables,
+    appendTables
+  }));
+
+  return app;
+}
+
+const app = await buildApp();
+await app.listen({ port: Number(process.env.PORT ?? 3002), host: '0.0.0.0' });

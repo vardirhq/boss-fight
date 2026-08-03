@@ -16,7 +16,7 @@ a roster of bosses you defeat together instead of another beige checklist.
 [![SQLite WASM](https://img.shields.io/badge/SQLite-WebAssembly-003B57?logo=sqlite&logoColor=white&labelColor=20232a)](https://sqlite.org/wasm)
 [![PWA](https://img.shields.io/badge/PWA-offline--first-F4B942?labelColor=20232a)](https://vite-pwa-org.netlify.app)
 
-*Norsk 🇳🇴 first, English 🇬🇧 built in · no accounts · no server · your data never leaves the device*
+*Norsk 🇳🇴 first, English 🇬🇧 built in · offline-first by default · optional synced household backend*
 
 </div>
 
@@ -166,11 +166,33 @@ code, chores are *gjøremål*, coins are *mynter*, the shared pool is the
 *fellespott*. Every user-facing string exists in both `no` and `en` tables in
 `src/game/i18n.ts`; if you touch UI copy, keep both languages in sync.
 
+## 🔄 Sync Backend
+
+Boss Kamp started as a local-only offline PWA. The repository now also includes
+the synced household backend in [`server/`](server/):
+
+- adult account registration and bearer sessions
+- child PIN login
+- household/device pairing
+- parent-managed fighters, bosses, chores, and rewards
+- append-only battle/economy sync
+- PostgreSQL schema for the household data model
+
+The app should still treat offline local SQLite as the first-class play
+experience. Sync uploads immutable gameplay events and downloads household
+configuration/events from the backend when available.
+
+See [`docs/api.md`](docs/api.md) for the HTTP API contract.
+
 ## 🔒 Privacy
 
-There is no backend, no account, no analytics, and no network requirement after
+In local-only mode there is no account, analytics, or network requirement after
 install. Everything — bosses, fighters, avatars, coins, history — lives in a
 SQLite database inside your browser's private storage on your own device.
+
+When household sync is enabled, account, household, and append-only gameplay
+events are sent to the configured Boss Kamp backend. Children use PIN-backed
+identities without email addresses or passwords.
 
 ## 🤝 Contributing
 
