@@ -51,6 +51,8 @@ export function slumberInfo(bosses: Boss[], victories: number): { count: number;
 export const ELITE_CHANCE = 22;
 /** Coin multiplier awarded for defeating an elite (enraged) boss. */
 export const ELITE_COIN_MULT = 1.5;
+/** Percentage chance that a rare boss appears on any calendar day. */
+export const RARE_DAILY_CHANCE = 3;
 
 /** Stable key for the window an elite roll belongs to (daily for always-on bosses). */
 function eliteKey(boss: Boss, now: Date): string {
@@ -76,15 +78,21 @@ export function bossFilter(boss: Boss, elite = false): string {
   return parts.join(' ');
 }
 
+/** Stable local-date key used for a once-per-day rare boss roll. */
+function localDateKey(now: Date): string {
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 /** Whether a boss is currently due (spawned) for its schedule. */
-export function isDue(boss: Boss, goldenRevealed: boolean, now = new Date()): boolean {
+export function isDue(boss: Boss, _goldenRevealed: boolean, now = new Date()): boolean {
   const t = boss.trigger;
   if (t.type === 'sjelden') {
-    if (!goldenRevealed) return true;
-    const seed = now.getFullYear() * 1000 + (weekOf(now) * 7 + now.getDay());
-    let x = Math.sin(seed * 12.9898) * 43758.5453;
-    x = x - Math.floor(x);
-    return x < 0.12;
+    // One stable roll per local calendar day. Reopening the app cannot re-roll it,
+    // and the encounter automatically expires when the date changes.
+    return hashStr(`${boss.id}|rare|${localDateKey(now)}`) % 100 < RARE_DAILY_CHANCE;
   }
   if (t.type === 'ukentlig') {
     const today = (now.getDay() + 6) % 7;
