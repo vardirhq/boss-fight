@@ -21,6 +21,9 @@ export function App() {
   const [accountOpen, setAccountOpen] = useState(false);
   const currentBoss = game.bosses.find((boss) => boss.id === game.currentBossId) ?? game.bosses[0];
   const showBattleIntro = ui.phase === 'app' && ui.tab === 'battle' && ui.intro && currentBoss;
+  const accountCopy = game.settings.lang === 'en'
+    ? { button: '☁ Account & sync', title: 'ACCOUNT & SYNC', back: 'Back' }
+    : { button: '☁ Konto og synk', title: 'KONTO OG SYNK', back: 'Tilbake' };
 
   useEffect(() => {
     for (const fighter of game.fighters) {
@@ -54,16 +57,16 @@ export function App() {
           onClick={() => setAccountOpen(true)}
           style={{ position: 'fixed', right: 18, bottom: 'calc(22px + env(safe-area-inset-bottom))', zIndex: 91, border: '1px solid rgba(91,155,232,.5)', borderRadius: 13, background: '#18243a', color: '#8fc0ff', padding: '12px 15px', fontWeight: 800, cursor: 'pointer', boxShadow: '0 8px 22px rgba(0,0,0,.45)' }}
         >
-          ☁ Konto og synk
+          {accountCopy.button}
         </button>
       )}
       {ui.settingsOpen && accountOpen && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 92, background: '#0b0e16', display: 'flex', flexDirection: 'column' }}>
           <div style={{ flex: 'none', padding: 'calc(20px + env(safe-area-inset-top)) 18px 14px', borderBottom: '1px solid #222a3c', display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ flex: 1, fontFamily: PS, fontSize: 11, color: '#5B9BE8' }}>KONTO OG SYNK</div>
-            <button onClick={() => setAccountOpen(false)} style={{ border: '1px solid #333c50', borderRadius: 11, background: '#1b2130', color: '#F6EBDD', padding: '10px 14px', fontWeight: 700, cursor: 'pointer' }}>Tilbake</button>
+            <div style={{ flex: 1, fontFamily: PS, fontSize: 11, color: '#5B9BE8' }}>{accountCopy.title}</div>
+            <button onClick={() => setAccountOpen(false)} style={{ border: '1px solid #333c50', borderRadius: 11, background: '#1b2130', color: '#F6EBDD', padding: '10px 14px', fontWeight: 700, cursor: 'pointer' }}>{accountCopy.back}</button>
           </div>
-          <div className="scr" style={{ flex: 1, overflowY: 'auto', padding: 18 }}><AccountSettings /></div>
+          <div className="scr" style={{ flex: 1, overflowY: 'auto', padding: 18 }}><AccountSettings lang={game.settings.lang} /></div>
         </div>
       )}
       {ui.phase === 'splash' && <Splash />}
