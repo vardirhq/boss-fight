@@ -30,6 +30,9 @@ jobs:
       - name: Build PWA
         run: npm run build
 
+      - name: Check release metadata
+        run: npm run release:check
+
       - name: Audit PWA dependencies
         run: npm audit --audit-level=critical
 

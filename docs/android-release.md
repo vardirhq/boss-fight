@@ -46,6 +46,13 @@ Run the manual workflow:
 Android signed release
 ```
 
+or push a matching version tag:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
 It restores the keystore into:
 
 ```text
@@ -60,6 +67,10 @@ boss-kamp-release.aab
 ```
 
 Both artifacts are uploaded to the workflow run.
+
+The same artifacts are also attached to the matching GitHub Release.
+
+The release tag must match `package.json.version`, prefixed with `v`.
 
 ## Version Codes
 
