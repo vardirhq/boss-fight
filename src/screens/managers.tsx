@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useGame } from '../store/GameContext';
 import { useT, Avatar, initialOf, GOLD } from '../ui/common';
 import { maxHpOf, bossFilter } from '../game/logic';
@@ -190,6 +191,12 @@ export function FighterRows() {
 function FighterOnlineControls({ fighter }: { fighter: Fighter }) {
   const online = useOnline();
   const { state: gameState, actions: gameActions } = useGame();
+  const [setupMode, setSetupMode] = useState<'adult' | 'child' | null>(null);
+  const [email, setEmail] = useState('');
+  const [pin, setPin] = useState('');
+  const [code, setCode] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const connected = Boolean(online.state.sessionToken && online.state.householdId && online.state.configurationConnectedAt);
   const mayManage = online.state.role === 'owner' || online.state.role === 'parent';
   if (!connected || !mayManage) return null;
@@ -199,7 +206,7 @@ function FighterOnlineControls({ fighter }: { fighter: Fighter }) {
   const serverBacked = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(fighter.id);
 
   if (!serverBacked) {
-    return <div style={{ marginTop: 12, color: '#F4B942', fontSize: 10 }}>{en ? 'Waiting for server sync…' : 'Venter på serversynk…'}</div>;
+    return <div style={{ marginTop: 12, color: '#F4B942', fontSize: 11 }}>{en ? 'Saving this fighter…' : 'Lagrer spilleren…'}</div>;
   }
 
   const refresh = async () => {
@@ -207,51 +214,67 @@ function FighterOnlineControls({ fighter }: { fighter: Fighter }) {
     if (sync) gameActions.replaceGame(serverSyncToGameState(sync, gameState.game));
   };
   const setupChild = async () => {
-    const pin = window.prompt(en ? `Choose a PIN for ${fighter.name}` : `Velg PIN for ${fighter.name}`)?.trim();
-    if (!pin || pin.length < 4) return;
+    if (pin.length < 4 || busy) return;
+    setBusy(true); setError(null);
     try {
       await setupChildFighter(token, householdId, fighter.id, pin);
       const pairing = await createFighterPairing(token, householdId, fighter.id);
-      window.alert(en ? `Pairing code for ${fighter.name}: ${pairing.code}` : `Paringskode for ${fighter.name}: ${pairing.code}`);
+      setCode(pairing.code);
+      setPin('');
+      setSetupMode(null);
       await refresh();
-    } catch (error) {
-      window.alert(error instanceof Error ? error.message : String(error));
+    } catch {
+      setError(en ? 'Could not create the child login.' : 'Kunne ikke opprette barneinnloggingen.');
+    } finally {
+      setBusy(false);
     }
   };
   const inviteAdult = async () => {
-    const email = window.prompt(en ? `Email address for ${fighter.name}` : `E-postadresse for ${fighter.name}`)?.trim();
-    if (!email) return;
+    if (!email.trim() || busy) return;
+    setBusy(true); setError(null);
     try {
       const invite = await inviteAdultFighter(token, householdId, fighter.id, email);
-      window.alert(en ? `Invitation token: ${invite.token}` : `Invitasjonskode: ${invite.token}`);
-    } catch (error) {
-      window.alert(error instanceof Error ? error.message : String(error));
+      setCode(invite.token);
+      setEmail('');
+    } catch {
+      setError(en ? 'Could not create the invitation.' : 'Kunne ikke opprette invitasjonen.');
+    } finally {
+      setBusy(false);
     }
   };
   const pairChild = async () => {
+    if (busy) return;
+    setBusy(true); setError(null);
     try {
       const pairing = await createFighterPairing(token, householdId, fighter.id);
-      window.alert(en ? `Pairing code for ${fighter.name}: ${pairing.code}` : `Paringskode for ${fighter.name}: ${pairing.code}`);
-    } catch (error) {
-      window.alert(error instanceof Error ? error.message : String(error));
+      setCode(pairing.code);
+    } catch {
+      setError(en ? 'Could not create a device code.' : 'Kunne ikke lage enhetskode.');
+    } finally {
+      setBusy(false);
     }
   };
   const resetPin = async () => {
-    const pin = window.prompt(en ? `New PIN for ${fighter.name}` : `Ny PIN for ${fighter.name}`)?.trim();
-    if (!pin || pin.length < 4) return;
+    if (setupMode !== 'child') {
+      setSetupMode('child'); setCode(null); setError(null); return;
+    }
+    if (pin.length < 4 || busy) return;
+    setBusy(true); setError(null);
     try {
       await resetChildPin(token, householdId, fighter.id, pin);
-      window.alert(en ? 'PIN updated.' : 'PIN-koden er oppdatert.');
-    } catch (error) {
-      window.alert(error instanceof Error ? error.message : String(error));
+      setPin(''); setSetupMode(null);
+    } catch {
+      setError(en ? 'Could not change the PIN.' : 'Kunne ikke endre PIN-koden.');
+    } finally {
+      setBusy(false);
     }
   };
   const toggleAccess = async () => {
     try {
       await updateFighterAccess(token, householdId, fighter.id, !fighter.requireOwnDevice);
       await refresh();
-    } catch (error) {
-      window.alert(error instanceof Error ? error.message : String(error));
+    } catch {
+      setError(en ? 'Could not change device access.' : 'Kunne ikke endre enhetstilgangen.');
     }
   };
   const suspendAccess = async () => {
@@ -262,8 +285,8 @@ function FighterOnlineControls({ fighter }: { fighter: Fighter }) {
     try {
       await suspendFighterAccess(token, householdId, fighter.id, fighter.accountStatus !== 'suspended');
       await refresh();
-    } catch (error) {
-      window.alert(error instanceof Error ? error.message : String(error));
+    } catch {
+      setError(en ? 'Could not change the access.' : 'Kunne ikke endre tilgangen.');
     }
   };
   const unlinkAccount = async () => {
@@ -271,32 +294,34 @@ function FighterOnlineControls({ fighter }: { fighter: Fighter }) {
     try {
       await unlinkFighterAccount(token, householdId, fighter.id);
       await refresh();
-    } catch (error) {
-      window.alert(error instanceof Error ? error.message : String(error));
+    } catch {
+      setError(en ? 'Could not unlink the account.' : 'Kunne ikke koble fra kontoen.');
     }
   };
 
   return (
     <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #2b3346' }}>
-      <div style={{ fontSize: 10, color: fighter.userId ? '#67D391' : '#8b93a5', fontWeight: 700, marginBottom: 8 }}>
+      <div style={{ fontSize: 11, color: fighter.userId ? '#67D391' : '#A8B0BF', fontWeight: 750, marginBottom: 9 }}>
         {fighter.userId
           ? fighter.accountStatus === 'suspended'
             ? (en ? 'Access suspended' : 'Tilgang sperret')
-            : (en ? 'Connected account' : 'Tilknyttet konto')
-          : (en ? 'Shared local profile' : 'Delt spillerprofil')}
+            : fighter.userKind === 'child'
+              ? (en ? 'Child login enabled' : 'Har egen barneinnlogging')
+              : (en ? 'Connected to an adult' : 'Koblet til en voksen')
+          : (en ? 'Plays on this family device' : 'Spiller på denne familieenheten')}
       </div>
       <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
         {!fighter.userId && <>
-          <button onClick={() => void inviteAdult()} style={smallAction}>{en ? 'Invite adult' : 'Inviter voksen'}</button>
-          <button onClick={() => void setupChild()} style={smallAction}>{en ? 'Set up child' : 'Sett opp barn'}</button>
+          <button onClick={() => { setSetupMode('adult'); setCode(null); setError(null); }} style={smallAction}>{en ? 'Connect an adult' : 'Koble til en voksen'}</button>
+          <button onClick={() => { setSetupMode('child'); setCode(null); setError(null); }} style={smallAction}>{en ? 'Create child login' : 'Lag barneinnlogging'}</button>
         </>}
         {fighter.userKind === 'child' && <>
-          <button onClick={() => void pairChild()} style={smallAction}>{en ? 'Pair device' : 'Par enhet'}</button>
-          <button onClick={() => void resetPin()} style={smallAction}>{en ? 'Reset PIN' : 'Nullstill PIN'}</button>
+          <button onClick={() => void pairChild()} style={smallAction}>{en ? 'Connect a device' : 'Koble til en enhet'}</button>
+          <button onClick={() => void resetPin()} style={smallAction}>{en ? 'Change PIN' : 'Bytt PIN'}</button>
         </>}
         {fighter.userId && (
           <button onClick={() => void toggleAccess()} style={{ ...smallAction, color: fighter.requireOwnDevice ? '#F4B942' : '#67D391' }}>
-            {fighter.requireOwnDevice ? (en ? 'Own device required' : 'Krever egen enhet') : (en ? 'Shared device allowed' : 'Delt enhet tillatt')}
+            {fighter.requireOwnDevice ? (en ? 'Only their device' : 'Bare egen enhet') : (en ? 'Can play here' : 'Kan spille her')}
           </button>
         )}
         {fighter.userId && <>
@@ -304,6 +329,31 @@ function FighterOnlineControls({ fighter }: { fighter: Fighter }) {
           <button onClick={() => void unlinkAccount()} style={{ ...smallAction, color: '#ff8f85' }}>{en ? 'Unlink account' : 'Koble fra konto'}</button>
         </>}
       </div>
+      {setupMode === 'adult' && !fighter.userId && (
+        <div style={setupCard}>
+          <div style={setupTitle}>{en ? `Connect ${fighter.name} to an adult` : `Koble ${fighter.name} til en voksen`}</div>
+          <div style={setupHelp}>{en ? 'They sign in with their own account and keep this fighter.' : 'De logger inn med sin egen konto og beholder denne spilleren.'}</div>
+          <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" placeholder={en ? 'Email address' : 'E-postadresse'} style={onlineInput} />
+          <button disabled={!email.trim() || busy} onClick={() => void inviteAdult()} style={{ ...smallAction, width: '100%', padding: 10, opacity: busy ? .6 : 1 }}>{busy ? '…' : (en ? 'Create invitation' : 'Lag invitasjon')}</button>
+        </div>
+      )}
+      {setupMode === 'child' && (
+        <div style={setupCard}>
+          <div style={setupTitle}>{fighter.userId ? (en ? `Change ${fighter.name}'s PIN` : `Bytt PIN for ${fighter.name}`) : (en ? `Create a login for ${fighter.name}` : `Lag innlogging for ${fighter.name}`)}</div>
+          <div style={setupHelp}>{en ? 'Choose a PIN with at least 4 digits. You will get a short code for the child’s device.' : 'Velg en PIN med minst 4 sifre. Etterpå får du en kort kode til barnets enhet.'}</div>
+          <input value={pin} onChange={(event) => setPin(event.target.value.replace(/\D/g, '').slice(0, 8))} inputMode="numeric" type="password" placeholder="PIN" style={onlineInput} />
+          <button disabled={pin.length < 4 || busy} onClick={() => void (fighter.userId ? resetPin() : setupChild())} style={{ ...smallAction, width: '100%', padding: 10, opacity: busy ? .6 : 1 }}>{busy ? '…' : (fighter.userId ? (en ? 'Save PIN' : 'Lagre PIN') : (en ? 'Create login' : 'Lag innlogging'))}</button>
+        </div>
+      )}
+      {code && (
+        <div style={{ ...setupCard, borderColor: 'rgba(91,155,232,.45)', background: 'rgba(91,155,232,.08)' }}>
+          <div style={setupTitle}>{en ? 'Code for the other device' : 'Kode til den andre enheten'}</div>
+          <div style={setupHelp}>{en ? 'Open Boss Kamp there and choose “I have a code”.' : 'Åpne Boss Kamp der og velg «Jeg har fått en kode».'}</div>
+          <div style={{ color: '#F6EBDD', fontSize: 21, fontWeight: 900, letterSpacing: 2, textAlign: 'center', padding: '8px 0' }}>{code}</div>
+          <button onClick={() => void navigator.clipboard?.writeText(code)} style={{ ...smallAction, width: '100%' }}>{en ? 'Copy code' : 'Kopier kode'}</button>
+        </div>
+      )}
+      {error && <div style={{ marginTop: 9, color: '#ff8f85', fontSize: 11, lineHeight: 1.4 }}>{error}</div>}
     </div>
   );
 }
@@ -312,6 +362,10 @@ const smallAction: React.CSSProperties = {
   border: '1px solid #3b465e', borderRadius: 9, background: '#20293a', color: '#8fc0ff',
   padding: '8px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer',
 };
+const setupCard: React.CSSProperties = { marginTop: 10, padding: 12, borderRadius: 11, background: '#121827', border: '1px solid #333c50', display: 'flex', flexDirection: 'column', gap: 9 };
+const setupTitle: React.CSSProperties = { color: '#F6EBDD', fontSize: 12.5, fontWeight: 800 };
+const setupHelp: React.CSSProperties = { color: '#8b93a5', fontSize: 11, lineHeight: 1.45 };
+const onlineInput: React.CSSProperties = { width: '100%', boxSizing: 'border-box', background: '#0f1420', border: '1px solid #333c50', borderRadius: 9, padding: '10px 11px', color: '#F6EBDD', fontSize: 13, outline: 'none' };
 
 export function PartyManager() {
   const { actions } = useGame();
