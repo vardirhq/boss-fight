@@ -225,7 +225,13 @@ jobs:
           fi
 
           "$APKSIGNER" verify --verbose --print-certs boss-kamp-release.apk
-          jarsigner -verify -strict boss-kamp-release.aab
+
+          AAB_VERIFY_LOG="$(mktemp)"
+          jarsigner -verify -verbose -certs boss-kamp-release.aab | tee "$AAB_VERIFY_LOG"
+          if ! grep -q '^jar verified' "$AAB_VERIFY_LOG"; then
+            echo "The release AAB does not contain a valid signature"
+            exit 1
+          fi
 
       - name: Upload signed release APK
         uses: actions/upload-artifact@v4
