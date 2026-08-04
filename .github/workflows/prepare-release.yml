@@ -1,0 +1,91 @@
+name: Prepare release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version in x.y.z format, for example 1.1.0'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: prepare-release
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test release tooling
+        run: npm run release:test
+
+      - name: Prepare release files
+        id: release
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: npm run release:prepare -- "$RELEASE_VERSION"
+
+      - name: Validate release metadata
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: npm run release:check
+
+      - name: Validate application
+        run: |
+          npm run lint
+          npm run build
+
+      - name: Commit release branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.release.outputs.version }}
+          TAG: ${{ steps.release.outputs.tag }}
+          ANDROID_VERSION_CODE: ${{ steps.release.outputs.android_version_code }}
+        shell: bash
+        run: |
+          BRANCH="release/$TAG"
+
+          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+            echo "Release branch $BRANCH already exists"
+            exit 1
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add package.json package-lock.json deploid.config.mjs CHANGELOG.md
+          git commit -m "Release $VERSION"
+          git push --set-upstream origin "$BRANCH"
+
+          BODY="$(printf '%s\n\n%s\n\n%s' \
+            "Prepares Boss Kamp $VERSION for release." \
+            "- Android version code: $ANDROID_VERSION_CODE" \
+            "Merging this PR creates $TAG and starts the signed Android release workflow.")"
+
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "Release $VERSION" \
+            --body "$BODY"

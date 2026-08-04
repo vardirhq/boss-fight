@@ -10,7 +10,9 @@
     "preview": "vite preview",
     "lint": "tsc --noEmit",
     "release:check": "node scripts/release-metadata.mjs",
-    "release:notes": "node scripts/release-metadata.mjs --notes"
+    "release:notes": "node scripts/release-metadata.mjs --notes",
+    "release:prepare": "node scripts/prepare-release.mjs",
+    "release:test": "node --test scripts/prepare-release.test.mjs"
   },
   "dependencies": {
     "@sqlite.org/sqlite-wasm": "^3.50.1-build1",
