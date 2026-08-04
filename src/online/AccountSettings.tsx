@@ -45,7 +45,7 @@ const COPY = {
     parentInviteSent: 'Invitasjonen er sendt til {email}.', inviteSendFailed: 'E-posten kunne ikke sendes. Prøv igjen senere.',
     createSharedCode: 'Koble til en felles enhet', sharedCodeTitle: 'Skriv denne koden på familieenheten', copy: 'Kopier', copied: 'Kopiert',
     joinHousehold: 'Bytt eller bli med i en annen familie', logout: 'Logg ut',
-    advanced: 'Teknisk informasjon', pending: 'endringer venter', lastSync: 'Sist lagret', syncNow: 'Synkroniser nå', role: 'Tilgang',
+    advanced: 'Teknisk informasjon', pending: 'endringer venter', rejected: 'avviste endringer krever oppfølging', revision: 'Konfigurasjonsversjon', lastSync: 'Sist lagret', syncNow: 'Synkroniser nå', role: 'Tilgang',
     fighterNameRequired: 'Gi alle spillerne et navn før familien opprettes.', joinFailed: 'Invitasjonen kunne ikke godtas.',
     errors: {
       'invalid-credentials': 'E-post eller passord er feil.', 'account-exists': 'Det finnes allerede en konto med denne e-postadressen.',
@@ -73,7 +73,7 @@ const COPY = {
     parentInviteSent: 'The invitation was sent to {email}.', inviteSendFailed: 'The email could not be sent. Try again later.',
     createSharedCode: 'Connect a shared device', sharedCodeTitle: 'Enter this code on the family device', copy: 'Copy', copied: 'Copied',
     joinHousehold: 'Switch or join another family', logout: 'Sign out',
-    advanced: 'Technical information', pending: 'changes waiting', lastSync: 'Last saved', syncNow: 'Sync now', role: 'Access',
+    advanced: 'Technical information', pending: 'changes waiting', rejected: 'rejected changes need attention', revision: 'Configuration revision', lastSync: 'Last saved', syncNow: 'Sync now', role: 'Access',
     fighterNameRequired: 'Name every fighter before creating the family.', joinFailed: 'The invitation could not be accepted.',
     errors: {
       'invalid-credentials': 'The email or password is incorrect.', 'account-exists': 'An account already exists for this email address.',
@@ -394,6 +394,8 @@ export function AccountSettings({ lang, setup = false }: { lang: Lang; setup?: b
         <summary style={summary}>{copy.advanced}</summary>
         <div style={{ color: '#7D8698', fontSize: 12, lineHeight: 1.65, marginTop: 11 }}>
           {state.pendingMutationCount} {copy.pending}<br />
+          {state.rejectedMutationCount > 0 && <><span style={{ color: '#E0564A' }}>{state.rejectedMutationCount} {copy.rejected}</span><br /></>}
+          {copy.revision}: {state.configurationRevision}<br />
           {state.lastSuccessfulSyncAt && <>{copy.lastSync}: {new Date(state.lastSuccessfulSyncAt).toLocaleString(lang === 'en' ? 'en-GB' : 'nb-NO')}<br /></>}
           {state.role && <>{copy.role}: {state.role}</>}
         </div>

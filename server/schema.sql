@@ -42,6 +42,7 @@ create table households (
   join_code_hash       text,
   join_code_expires_at timestamptz,
   victories_baseline   integer not null default 0,
+  configuration_revision bigint not null default 0,
   created_by_user_id   uuid not null references users(id),
   created_at           timestamptz not null default now(),
   updated_at           timestamptz not null default now(),

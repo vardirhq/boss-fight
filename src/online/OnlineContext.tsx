@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   ApiError,
   bootstrapHousehold as bootstrapHouseholdRequest,
@@ -22,6 +22,7 @@ import {
   type ServerSyncState,
   type SyncMutationType,
 } from './api';
+import { applyMutationResults, sendableMutations } from './syncQueue';
 import type { Fighter } from '../game/types';
 
 const STORAGE_KEY = 'boss-kamp-online-state-v2';
@@ -47,6 +48,8 @@ export interface OnlineState {
   lastSyncCursor: string | number | null;
   lastSuccessfulSyncAt: string | null;
   pendingMutationCount: number;
+  rejectedMutationCount: number;
+  configurationRevision: number;
   configurationConnectedAt: string | null;
   entityMappings: BootstrapResult['ids'] | null;
   error: OnlineError | null;
@@ -67,6 +70,7 @@ interface PersistedOnlineState {
   householdName: string | null;
   lastSyncCursor: string | number | null;
   lastSuccessfulSyncAt: string | null;
+  configurationRevision: number;
   configurationConnectedAt: string | null;
   entityMappings: BootstrapResult['ids'] | null;
 }
@@ -95,7 +99,7 @@ const localState: OnlineState = {
   mode: 'local', status: 'idle', sessionToken: null, householdDeviceToken: null, sessionExpiresAt: null,
   userId: null, deviceId: null, householdId: null, fighterId: null, role: null,
   account: null, householdName: null, lastSyncCursor: null,
-  lastSuccessfulSyncAt: null, pendingMutationCount: 0,
+  lastSuccessfulSyncAt: null, pendingMutationCount: 0, rejectedMutationCount: 0, configurationRevision: 0,
   configurationConnectedAt: null, entityMappings: null, error: null,
 };
 
@@ -205,6 +209,7 @@ function loadPersistedState(): OnlineState {
       householdName: value.householdName ?? null,
       lastSyncCursor: value.lastSyncCursor ?? null,
       lastSuccessfulSyncAt: value.lastSuccessfulSyncAt ?? null,
+      configurationRevision: typeof value.configurationRevision === 'number' && Number.isSafeInteger(value.configurationRevision) ? value.configurationRevision : 0,
       configurationConnectedAt: value.configurationConnectedAt ?? null,
       entityMappings: value.entityMappings ?? null,
     };
@@ -236,6 +241,7 @@ function persistState(state: OnlineState) {
     householdName: state.householdName,
     lastSyncCursor: state.lastSyncCursor,
     lastSuccessfulSyncAt: state.lastSuccessfulSyncAt,
+    configurationRevision: state.configurationRevision,
     configurationConnectedAt: state.configurationConnectedAt,
     entityMappings: state.entityMappings,
   };
@@ -272,11 +278,14 @@ const OnlineContext = createContext<OnlineContextValue | null>(null);
 export function OnlineProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<OnlineState>(loadPersistedState);
   const [pendingMutations, setPendingMutations] = useState<PendingMutation[]>(loadPendingMutations);
+  const syncPromiseRef = useRef<Promise<ServerSyncState | null> | null>(null);
+  const syncRerunRef = useRef(false);
 
   useEffect(() => {
     setState((current) => ({
       ...current,
-      pendingMutationCount: pendingMutations.filter((mutation) => mutation.householdId === current.householdId).length,
+      pendingMutationCount: pendingMutations.filter((mutation) => mutation.householdId === current.householdId && !mutation.rejectedAt).length,
+      rejectedMutationCount: pendingMutations.filter((mutation) => mutation.householdId === current.householdId && Boolean(mutation.rejectedAt)).length,
     }));
   }, [pendingMutations, state.householdId]);
 
@@ -377,13 +386,13 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
       id,
       householdId: state.householdId,
       type,
-      payload,
+      payload: type === 'configuration_replace' ? { ...payload, expectedRevision: state.configurationRevision } : payload,
       createdAt: new Date().toISOString(),
       attempts: 0,
     };
     setPendingMutations((current) => {
       const retained = type === 'configuration_replace'
-        ? current.filter((item) => item.householdId !== mutation.householdId || item.type !== 'configuration_replace')
+        ? current.filter((item) => item.householdId !== mutation.householdId || item.type !== 'configuration_replace' || Boolean(item.rejectedAt))
         : current;
       const next = [...retained, mutation];
       persistPendingMutations(next);
@@ -391,54 +400,59 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
       return next;
     });
     return id;
-  }, [state.householdId]);
+  }, [state.configurationRevision, state.householdId]);
 
   const flushMutations = useCallback(async (): Promise<ServerSyncState | null> => {
+    if (syncPromiseRef.current) {
+      syncRerunRef.current = true;
+      return syncPromiseRef.current;
+    }
     const token = state.sessionToken;
     const householdDeviceToken = state.householdDeviceToken;
     const householdId = state.householdId;
     if ((!token && !householdDeviceToken) || !householdId) return null;
     // Read durable storage so a mutation enqueued immediately before this call
     // is included even if React has not committed the state update yet.
-    const pending = loadPendingMutations().filter((mutation) => mutation.householdId === householdId);
-    setState((current) => ({ ...current, status: 'syncing', error: null }));
-    try {
-      if (pending.length > 0) await pushSyncMutations(token, householdId, pending, householdDeviceToken);
-      const pulled = await pullSyncState(token, householdId, householdDeviceToken);
-      const sentIds = new Set(pending.map((mutation) => mutation.id));
-      setPendingMutations((current) => {
-        const next = current.filter((mutation) => !sentIds.has(mutation.id));
-        persistPendingMutations(next);
-        return next;
-      });
-      const syncedAt = new Date().toISOString();
-      setState((current) => {
-        const next = {
-          ...current,
-          status: 'authenticated' as const,
-          pendingMutationCount: Math.max(0, current.pendingMutationCount - sentIds.size),
-          lastSuccessfulSyncAt: syncedAt,
-          error: null,
-        };
-        persistState(next);
-        return next;
-      });
-      return pulled;
-    } catch (error) {
-      setPendingMutations((current) => {
-        const next = current.map((mutation) => sentIdsForHousehold(mutation, householdId)
-          ? { ...mutation, attempts: mutation.attempts + 1, lastError: error instanceof Error ? error.message : String(error) }
-          : mutation);
-        persistPendingMutations(next);
-        return next;
-      });
-      setState((current) => ({
-        ...current,
-        status: error instanceof ApiError && error.isTransient ? 'offline' : 'error',
-        error: errorCode(error, 'other'),
-      }));
-      throw error;
-    }
+    const run = async () => {
+      let latest: ServerSyncState | null = null;
+      do {
+        syncRerunRef.current = false;
+        const pending = sendableMutations(loadPendingMutations(), householdId);
+        setState((current) => ({ ...current, status: 'syncing', error: null }));
+        try {
+          if (pending.length > 0) {
+            const pushed = await pushSyncMutations(token, householdId, pending, householdDeviceToken);
+            const rejectedAt = new Date().toISOString();
+            setPendingMutations((current) => {
+              const next = applyMutationResults(current, householdId, pushed.results, rejectedAt);
+              persistPendingMutations(next);
+              return next;
+            });
+          }
+          latest = await pullSyncState(token, householdId, householdDeviceToken);
+          const syncedAt = new Date().toISOString();
+          const revision = latest.configurationRevision;
+          setState((current) => {
+            const next = { ...current, status: 'authenticated' as const, configurationRevision: revision, lastSuccessfulSyncAt: syncedAt, error: null };
+            persistState(next);
+            return next;
+          });
+        } catch (error) {
+          setPendingMutations((current) => {
+            const next = current.map((mutation) => sentIdsForHousehold(mutation, householdId) && !mutation.rejectedAt
+              ? { ...mutation, attempts: mutation.attempts + 1, lastError: error instanceof Error ? error.message : String(error) }
+              : mutation);
+            persistPendingMutations(next);
+            return next;
+          });
+          setState((current) => ({ ...current, status: error instanceof ApiError && error.isTransient ? 'offline' : 'error', error: errorCode(error, 'other') }));
+          throw error;
+        }
+      } while (syncRerunRef.current);
+      return latest;
+    };
+    syncPromiseRef.current = run().finally(() => { syncPromiseRef.current = null; });
+    return syncPromiseRef.current;
   }, [pendingMutations, state.householdDeviceToken, state.householdId, state.sessionToken]);
 
   const actions = useMemo<OnlineActions>(() => ({
@@ -491,6 +505,7 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
           configurationConnectedAt: connectedAt,
           entityMappings: result.ids,
           lastSuccessfulSyncAt: connectedAt,
+          configurationRevision: Number(configuration.household.configuration_revision ?? 0),
           error: null,
         };
         replaceState(next);
