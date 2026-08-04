@@ -12,6 +12,8 @@ increasing Android version codes for install/update compatibility.
 - Automated release preparation that updates application and Android versions,
   rolls changelog entries into a dated release, opens a release pull request,
   and starts the signed Android build after merge.
+- Focused client and server synchronization tests, including CI coverage for
+  queue recovery, configuration conflicts, and reward-redemption rules.
 
 ### Fixed
 
@@ -19,6 +21,11 @@ increasing Android version codes for install/update compatibility.
 - Rename the default laundry boss to match its knight-like artwork, keep fighter
   ordering stable across synchronization, and prevent accounts from acting as
   fighters linked to someone else, including before an offline cache refresh.
+- Prevent stale offline configuration snapshots from overwriting newer household
+  changes, isolate rejected mutations so they cannot block the offline queue,
+  retain rejected changes as visible diagnostics, and serialize overlapping syncs.
+- Derive reward redemption status, metadata, cost, requester, and approval data
+  on the server; enforce final-state transitions and refund cancellations once.
 
 ## [1.0.0] - 2026-08-04
 
