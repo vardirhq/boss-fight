@@ -1063,12 +1063,6 @@ export async function buildApp() {
 
     const token = randomBytes(32).toString('base64url');
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-    await sql`
-      delete from household_invites
-      where household_id = ${householdId}
-        and lower(invited_email) = ${invitedEmail}
-        and accepted_at is null
-    `;
     const [invite] = await sql`
       insert into household_invites (
         household_id, invited_email, role, fighter_id, token_hash, created_by_user_id, expires_at
@@ -1089,8 +1083,25 @@ export async function buildApp() {
         expiresAt,
       });
     } catch (error) {
-      await sql`delete from household_invites where id = ${invite.id}`;
+      try {
+        await sql`update household_invites set expires_at = now() where id = ${invite.id}`;
+      } catch (cleanupError) {
+        request.log.error({ err: cleanupError, inviteId: invite.id }, 'Could not expire undelivered invitation');
+      }
       throw error;
+    }
+
+    try {
+      await sql`
+        update household_invites
+        set expires_at = now()
+        where household_id = ${householdId}
+          and lower(invited_email) = ${invitedEmail}
+          and accepted_at is null
+          and id <> ${invite.id}
+      `;
+    } catch (cleanupError) {
+      request.log.warn({ err: cleanupError, inviteId: invite.id }, 'Could not expire older invitations');
     }
 
     return { invite, delivered: true };
