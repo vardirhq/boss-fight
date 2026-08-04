@@ -101,6 +101,38 @@ The root audit findings are concentrated in Vite, Workbox, and their build-time
 dependency trees. They do not indicate a confirmed production exploit in Boss Kamp,
 but the current CI threshold ignores all root findings below Critical severity.
 
+### 5.1 Remediation tracker
+
+This tracker records work completed after the audit snapshot. The original findings
+below remain unchanged so that the audit evidence is preserved. `Remediated` means
+the reported risk has been addressed and merged; `In progress` means useful work has
+landed but the recommendation is not yet satisfied in full.
+
+| Finding | Status | Evidence / remaining work |
+| --- | --- | --- |
+| BF-001 | Remediated | Household configuration revisions reject stale snapshots; merged in [PR #36](https://github.com/vardirhq/boss-fight/pull/36) (`c423064`). |
+| BF-002 | Remediated | Mutations commit independently and rejected items are quarantined without blocking later work; [PR #36](https://github.com/vardirhq/boss-fight/pull/36). |
+| BF-003 | Remediated | Redemption metadata, status, identity, cost, charging, refunds, and final transitions are server-authoritative; [PR #37](https://github.com/vardirhq/boss-fight/pull/37) (`087f84f`). |
+| BF-004 | Open | Role hierarchy and household-scoped session administration remain. |
+| BF-005 | Open | Privacy notice, consent/authorization records, export, erasure, and retention remain. |
+| BF-006 | In progress | Sync queue and reward-integrity tests now run in CI; broad game, database, authorization, offline, and UI coverage remains. |
+| BF-007 | Open | A formal versioned production migration and rollback workflow remains. |
+| BF-008 | Open | Native credential storage hardening remains. |
+| BF-009 | Open | Incremental mutable-state and avatar synchronization remains. |
+| BF-010 | Remediated | Client synchronization uses a single-flight coordinator with a pending rerun; [PR #36](https://github.com/vardirhq/boss-fight/pull/36). |
+| BF-011 | Open | Explicit sync response projections remain. |
+| BF-012 | Open | Transactionally persistent child-PIN failure accounting remains. |
+| BF-013 | Open | Authentication and API hardening work remains. |
+| BF-014 | Open | Reproducible Android release inputs remain. |
+| BF-015 | Open | Deployment rollback, artifact promotion, and recovery automation remain. |
+| BF-016 | Open | Accessibility remediation remains. |
+| BF-017 | Open | Remaining Norwegian strings in English mode remain. |
+| BF-018 | Open | Persistent user-visible save-failure handling remains. |
+| BF-019 | Open | Backend route/service decomposition remains. |
+| BF-020 | Open | Centralized strict request/response schemas remain. |
+| BF-021 | Open | Client and operational observability remain. |
+| BF-022 | Open | Planned build-dependency upgrades remain. |
+
 ## 6. Detailed findings
 
 ### BF-001 — Stale configuration replacement can destroy newer household changes

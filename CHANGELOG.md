@@ -14,6 +14,8 @@ increasing Android version codes for install/update compatibility.
   and starts the signed Android build after merge.
 - Focused client and server synchronization tests, including CI coverage for
   queue recovery, configuration conflicts, and reward-redemption rules.
+- An audit remediation tracker linking each finding to its current status and
+  merged implementation evidence.
 
 ### Fixed
 
