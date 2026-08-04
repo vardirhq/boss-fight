@@ -58,7 +58,6 @@ jobs:
           npm run build
 
       - name: Commit release branch
-        env:
           VERSION: ${{ steps.release.outputs.version }}
           TAG: ${{ steps.release.outputs.tag }}
           ANDROID_VERSION_CODE: ${{ steps.release.outputs.android_version_code }}
