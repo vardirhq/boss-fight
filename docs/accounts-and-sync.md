@@ -15,9 +15,10 @@ flows, and broader integration coverage).
 
 ## Principles
 
-1. **A fighter is a game profile; a user is an authenticated person.** A fighter
-   can exist with no user forever. A fighter may later be claimed by exactly one
-   user.
+1. **A fighter is a game profile; a user is an authenticated person.** Every
+   adult account gets one linked fighter automatically when they create or join
+   a household. Manually created fighters are reserved for people who play
+   through a parent or shared device, and may later be claimed by one user.
 2. **Claimed ≠ locked.** Claiming a fighter lets that person play from their own
    device. It does *not* have to stop the family tablet from logging their
    chores. Those are two separate flags (see [Authority](#authority-rules)).
