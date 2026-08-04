@@ -29,8 +29,8 @@ export function App() {
   const { ui, game } = state;
   const [accountOpen, setAccountOpen] = useState(false);
   const currentBoss = game.bosses.find((boss) => boss.id === game.currentBossId) ?? game.bosses[0];
-  const showBattleIntro = ui.phase === 'app' && ui.tab === 'battle' && ui.intro && currentBoss;
   const householdReady = Boolean(online.state.householdId && online.state.configurationConnectedAt);
+  const showBattleIntro = ui.phase === 'app' && householdReady && ui.tab === 'battle' && ui.intro && currentBoss;
   const showAccountSetup = ui.phase === 'app' && !householdReady;
   const accountCopy = game.settings.lang === 'en'
     ? { button: 'Account', title: 'ACCOUNT', back: 'Back' }
