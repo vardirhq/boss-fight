@@ -5,6 +5,14 @@ All notable production changes should be documented here.
 This project uses semver-style version names for app releases and monotonically
 increasing Android version codes for install/update compatibility.
 
+## [Unreleased]
+
+### Added
+
+- Automated release preparation that updates application and Android versions,
+  rolls changelog entries into a dated release, opens a release pull request,
+  and starts the signed Android build after merge.
+
 ## [1.0.0] - 2026-08-04
 
 ### Added
