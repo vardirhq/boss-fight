@@ -594,7 +594,8 @@ configured SMTP service. It stores only the token hash and does not return the
 raw token to the client. Delivery uses `Boss Kamp <chris@vardir.no>` by default,
 can be overridden with `SMTP_FROM`, and must be accepted by SMTP before this
 endpoint succeeds. Invitations expire after seven days. A failed delivery
-returns `502` with code `mail_delivery_failed` and removes the unusable invite.
+returns `502` with code `mail_delivery_failed` and expires the unusable invite.
+Invite cleanup is best-effort and never masks the SMTP delivery result.
 
 ### `POST /api/invites/accept`
 
