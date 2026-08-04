@@ -3,6 +3,7 @@ dist
 dist-ssr
 .env
 .env.*
+secrets/
 *.local
 .DS_Store
 .vite

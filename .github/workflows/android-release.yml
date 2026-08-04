@@ -1,0 +1,184 @@
+name: Android signed release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install icon tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes imagemagick
+
+      - name: Restore PNG icon source
+        shell: bash
+        run: |
+          base64 --decode public/icons/icon-source.jpg.b64 > public/icons/icon-source.jpg
+          convert public/icons/icon-source.jpg -resize '1024x1024^' -gravity center -extent 1024x1024 public/icons/icon-source.png
+          file public/icons/icon-source.png | grep -q 'PNG image data'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Restore Android signing keystore
+        shell: bash
+        run: |
+          install -m 700 -d secrets
+          printf '%s' "${{ secrets.BOSS_KAMP_ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > secrets/boss-kamp-upload.jks
+          chmod 600 secrets/boss-kamp-upload.jks
+          test -s secrets/boss-kamp-upload.jks
+
+      - name: Install web dependencies
+        run: npm ci
+
+      - name: Install Deploid and Capacitor
+        run: |
+          npm install --global @deploid/cli
+          npm install --no-save @capacitor/cli @capacitor/core @capacitor/android
+
+      - name: Package Android app with Deploid
+        env:
+          DEPLOID_ANDROID_STORE_PASSWORD: ${{ secrets.DEPLOID_ANDROID_STORE_PASSWORD }}
+          DEPLOID_ANDROID_KEY_PASSWORD: ${{ secrets.DEPLOID_ANDROID_KEY_PASSWORD }}
+        run: deploid package
+
+      - name: Configure Android system bars
+        shell: bash
+        run: |
+          MAIN_ACTIVITY="$(find android/app/src/main/java -name MainActivity.java | head -n 1)"
+          if [[ -z "$MAIN_ACTIVITY" ]]; then
+            echo "Could not find generated MainActivity.java"
+            exit 1
+          fi
+
+          PACKAGE_NAME="$(sed -n 's/^package \(.*\);/\1/p' "$MAIN_ACTIVITY" | head -n 1)"
+          if [[ -z "$PACKAGE_NAME" ]]; then
+            echo "Could not determine Android package name"
+            exit 1
+          fi
+
+          cat > "$MAIN_ACTIVITY" <<EOF
+          package $PACKAGE_NAME;
+
+          import android.os.Bundle;
+          import androidx.core.view.WindowCompat;
+          import androidx.core.view.WindowInsetsCompat;
+          import androidx.core.view.WindowInsetsControllerCompat;
+          import com.getcapacitor.BridgeActivity;
+
+          public class MainActivity extends BridgeActivity {
+              @Override
+              public void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+                  configureSystemBars();
+              }
+
+              @Override
+              public void onWindowFocusChanged(boolean hasFocus) {
+                  super.onWindowFocusChanged(hasFocus);
+                  if (hasFocus) {
+                      configureSystemBars();
+                  }
+              }
+
+              private void configureSystemBars() {
+                  WindowCompat.setDecorFitsSystemWindows(getWindow(), true);
+
+                  WindowInsetsControllerCompat controller =
+                      WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
+                  if (controller == null) return;
+
+                  controller.show(WindowInsetsCompat.Type.statusBars());
+                  controller.hide(WindowInsetsCompat.Type.navigationBars());
+                  controller.setSystemBarsBehavior(
+                      WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                  );
+              }
+          }
+          EOF
+
+      - name: Normalize generated Kotlin dependencies
+        shell: bash
+        run: |
+          cat >> android/build.gradle <<'EOF'
+
+          allprojects {
+              configurations.configureEach {
+                  exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk7'
+                  exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk8'
+              }
+          }
+          EOF
+
+      - name: Build signed release bundle with Deploid
+        env:
+          DEPLOID_ANDROID_STORE_PASSWORD: ${{ secrets.DEPLOID_ANDROID_STORE_PASSWORD }}
+          DEPLOID_ANDROID_KEY_PASSWORD: ${{ secrets.DEPLOID_ANDROID_KEY_PASSWORD }}
+        run: deploid build
+
+      - name: Build signed release APK with Gradle
+        working-directory: android
+        env:
+          DEPLOID_ANDROID_STORE_PASSWORD: ${{ secrets.DEPLOID_ANDROID_STORE_PASSWORD }}
+          DEPLOID_ANDROID_KEY_PASSWORD: ${{ secrets.DEPLOID_ANDROID_KEY_PASSWORD }}
+        run: ./gradlew assembleRelease
+
+      - name: Locate release artifacts
+        id: artifacts
+        shell: bash
+        run: |
+          APK_PATH="$(find android/app/build/outputs/apk -type f -name '*release*.apk' | head -n 1)"
+          AAB_PATH="$(find android/app/build/outputs/bundle -type f -name '*release*.aab' | head -n 1)"
+
+          if [[ -z "$APK_PATH" ]]; then
+            echo "No release APK was produced"
+            find android/app/build/outputs -maxdepth 5 -type f 2>/dev/null || true
+            exit 1
+          fi
+
+          if [[ -z "$AAB_PATH" ]]; then
+            echo "No release AAB was produced"
+            find android/app/build/outputs -maxdepth 5 -type f 2>/dev/null || true
+            exit 1
+          fi
+
+          cp "$APK_PATH" boss-kamp-release.apk
+          cp "$AAB_PATH" boss-kamp-release.aab
+
+      - name: Upload signed release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: boss-kamp-release-apk
+          path: boss-kamp-release.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload signed release AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: boss-kamp-release-aab
+          path: boss-kamp-release.aab
+          if-no-files-found: error
+          retention-days: 30

@@ -18,6 +18,12 @@ export default {
       code: 1,
       name: '1.0.0',
     },
+    signing: {
+      keystorePath: 'secrets/boss-kamp-upload.jks',
+      alias: 'boss-kamp',
+      storePasswordEnv: 'DEPLOID_ANDROID_STORE_PASSWORD',
+      keyPasswordEnv: 'DEPLOID_ANDROID_KEY_PASSWORD',
+    },
   },
   assets: {
     source: 'public/icons/icon-source.png',
