@@ -5,6 +5,7 @@ import Fastify, { type FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import { sql } from './db.js';
+import { sendHouseholdInviteEmail } from './email.js';
 
 type JsonObject = Record<string, unknown>;
 type AuthContext = { userId: string; sessionId: string };
@@ -323,6 +324,10 @@ export async function buildApp() {
       reply.code(429).send({ error: 'Too many requests', code: 'rate_limited' });
       return;
     }
+    if (errorInfo.code === 'mail_delivery_failed') {
+      reply.code(502).send({ error: 'Invitation email could not be delivered', code: 'mail_delivery_failed' });
+      return;
+    }
     if (message === 'Unauthorized') {
       reply.code(401).send({ error: 'Unauthorized', code: 'unauthenticated' });
       return;
@@ -346,7 +351,7 @@ export async function buildApp() {
     const validationMessages = [
       'is required', 'must be an array', 'must be a string', 'Expected JSON object', 'Expected numeric value',
       'Password must be at least', 'PIN must be at least', 'Invalid pairing role', 'Invalid invite role',
-      'Unsupported redemption status'
+      'Unsupported redemption status', 'email must be valid'
     ];
     if (validationMessages.some((part) => message.includes(part))) {
       reply.code(400).send({ error: message, code: 'invalid_request' });
@@ -1034,30 +1039,61 @@ export async function buildApp() {
     return { pairing, code };
   });
 
-  app.post('/api/households/:householdId/invites', async (request) => {
+  app.post('/api/households/:householdId/invites', {
+    config: { rateLimit: { max: 10, timeWindow: '1 hour' } },
+  }, async (request) => {
     const auth = await requireAuth(request);
     const householdId = (request.params as { householdId: string }).householdId;
     await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
     const body = requireObject(request.body);
     const invitedEmail = requireString(body.email, 'email').toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(invitedEmail)) throw new Error('email must be valid');
     const role = optionalString(body.role) ?? 'member';
     if (role !== 'parent' && role !== 'member') throw new Error('Invalid invite role');
     const fighterId = optionalString(body.fighterId);
     if (fighterId) await assertHouseholdRow('fighters', fighterId, householdId);
 
+    const [context] = await sql`
+      select h.name as household_name, u.display_name as inviter_name
+      from households h
+      join users u on u.id = ${auth.userId}
+      where h.id = ${householdId} and h.deleted_at is null and u.deleted_at is null
+    `;
+    if (!context) throw new Error('Not found');
+
     const token = randomBytes(32).toString('base64url');
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    await sql`
+      delete from household_invites
+      where household_id = ${householdId}
+        and lower(invited_email) = ${invitedEmail}
+        and accepted_at is null
+    `;
     const [invite] = await sql`
       insert into household_invites (
         household_id, invited_email, role, fighter_id, token_hash, created_by_user_id, expires_at
       )
       values (
         ${householdId}, ${invitedEmail}, ${role}, ${fighterId}::uuid,
-        ${tokenHash(token)}, ${auth.userId}, now() + interval '7 days'
+        ${tokenHash(token)}, ${auth.userId}, ${expiresAt}
       )
       returning id, household_id, invited_email, role, fighter_id, expires_at, created_at
     `;
 
-    return { invite, token };
+    try {
+      await sendHouseholdInviteEmail({
+        to: invitedEmail,
+        householdName: requireString(context.household_name, 'household_name'),
+        inviterName: requireString(context.inviter_name, 'inviter_name'),
+        inviteToken: token,
+        expiresAt,
+      });
+    } catch (error) {
+      await sql`delete from household_invites where id = ${invite.id}`;
+      throw error;
+    }
+
+    return { invite, delivered: true };
   });
 
   app.post('/api/invites/accept', async (request) => {
