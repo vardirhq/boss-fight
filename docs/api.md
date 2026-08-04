@@ -41,6 +41,13 @@ Response:
 }
 ```
 
+Each mutation is committed independently. The response has a `results` entry for
+every submitted mutation with an `outcome` of `accepted`, `duplicate`, `conflict`,
+or `rejected`. A rejected item never rolls back or blocks later items. `accepted`
+is retained as a compatibility view containing successful results only.
+Result `id` identifies the submitted mutation; when the affected resource has a
+different identifier it is returned as `resourceId`.
+
 ## Auth
 
 ### `POST /api/auth/register`
@@ -840,6 +847,13 @@ reward configuration using the same deterministic ID mapping as bootstrap. Rows 
 from the snapshot are soft-deleted. The response includes fresh client-to-server
 ID mappings. Chore changes advance the affected boss reset sequence so old
 completion events cannot corrupt the edited fight.
+
+The payload must include `expectedRevision`, copied from the most recent pull.
+The server locks the household and rejects a stale snapshot with outcome
+`conflict` and code `configuration_revision_conflict`; a successful replacement
+increments and returns `configurationRevision`. Clients pull authoritative state
+after every push, quarantine permanent failures for diagnostics, and continue
+sending later mutations.
 
 ### Mutation: `reward_redemption`
 

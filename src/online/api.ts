@@ -108,10 +108,23 @@ export interface PendingMutation {
   createdAt: string;
   attempts: number;
   lastError?: string;
+  rejectedAt?: string;
+  rejectionCode?: string;
+}
+
+export interface SyncMutationResult {
+  id: string;
+  type: SyncMutationType;
+  outcome: 'accepted' | 'duplicate' | 'conflict' | 'rejected';
+  code?: string;
+  error?: string;
+  configurationRevision?: number;
+  ids?: Record<string, Record<string, string>>;
 }
 
 export interface ServerSyncState {
   serverTime: string;
+  configurationRevision: number;
   mutable: {
     households: Array<Record<string, unknown>>;
     household_members: Array<Record<string, unknown>>;
@@ -360,7 +373,7 @@ export async function getHouseholdConfig(token: string, householdId: string) {
 }
 
 export async function pushSyncMutations(token: string | null, householdId: string, mutations: PendingMutation[], householdDeviceToken?: string | null) {
-  return request<{ accepted: Array<Record<string, unknown>> }>('/api/sync/push', {
+  return request<{ results: SyncMutationResult[]; accepted: Array<Record<string, unknown>> }>('/api/sync/push', {
     method: 'POST',
     body: JSON.stringify({
       householdId,
@@ -385,7 +398,9 @@ export async function pullSyncState(token: string | null, householdId: string, h
   if (!result.mutable || !result.events || typeof result.serverTime !== 'string') {
     throw new ApiError('Invalid API response: sync state', 'server');
   }
-  return result as ServerSyncState;
+  const household = result.mutable.households[0];
+  const revision = household?.configuration_revision;
+  return { ...result, configurationRevision: typeof revision === 'number' ? revision : Number(revision ?? 0) } as ServerSyncState;
 }
 
 export async function createHouseholdDevicePairing(token: string, householdId: string) {

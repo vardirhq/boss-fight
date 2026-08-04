@@ -21,7 +21,8 @@ below).
 - **React 18 + TypeScript** (strict mode, `noUnusedLocals`/`noUnusedParameters`)
 - **`@sqlite.org/sqlite-wasm`** — genuine SQLite in the browser (OPFS, in-memory fallback)
 - **`vite-plugin-pwa`** (Workbox) — web manifest + service worker
-- No CSS framework, no component library, no state library, no test framework.
+- No CSS framework, no component library, or state library. Focused tests use
+  Node's built-in test runner.
   UI is plain React with **inline styles**; global keyframes live in `src/styles.css`.
 
 ## Commands
@@ -32,11 +33,13 @@ npm run dev       # Vite dev server (service worker DISABLED in dev)
 npm run build     # tsc -b (type-check via project refs) + vite build
 npm run preview   # serve the production build — the only way to exercise the PWA/SW
 npm run lint      # tsc --noEmit (type-check only — there is no ESLint/Prettier config)
+npm test          # focused client sync-queue tests
 ```
 
-There is **no test suite and no linter binary**. "Lint" is a TypeScript
-type-check. Before committing, run `npm run build` (or at minimum `npm run lint`)
-to confirm the strict compiler is happy — unused locals/params are hard errors.
+There is no linter binary; "lint" is a TypeScript type-check. Before committing,
+run `npm test` and `npm run build` (or at minimum `npm run lint`) to confirm the
+strict compiler is happy — unused locals/params are hard errors. Server tests run
+with `npm test` from `server/`.
 
 The PWA service worker only registers in the production build. Behaviour that
 depends on caching or install must be verified with `build` + `preview`, not

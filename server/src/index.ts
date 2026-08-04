@@ -5,6 +5,7 @@ import Fastify, { type FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import { sql } from './db.js';
+import { expectedRevision, mutationError } from './sync.js';
 import { sendHouseholdInviteEmail } from './email.js';
 
 type JsonObject = Record<string, unknown>;
@@ -313,6 +314,7 @@ function decorateBosses(rows: JsonObject[], householdId: string, timezone: strin
 }
 
 export async function buildApp() {
+  await sql`alter table households add column if not exists configuration_revision bigint not null default 0`;
   const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' }, trustProxy: true });
 
   await app.register(cors, {
@@ -1458,6 +1460,7 @@ export async function buildApp() {
     const timezone = requireString(households[0]?.timezone, 'timezone');
     return {
       serverTime: new Date().toISOString(),
+      configurationRevision: Number(households[0]?.configuration_revision ?? 0),
       mutable: {
         households, household_members: members, devices, fighters, fighter_avatars: avatars,
         bosses: decorateBosses(bosses, householdId, timezone), chores, rewards
@@ -1472,17 +1475,29 @@ export async function buildApp() {
     const auth = await requireHouseholdPrincipal(request, householdId);
 
     const mutations = Array.isArray(body.mutations) ? body.mutations : [];
-    const accepted: JsonObject[] = [];
+    const results: JsonObject[] = [];
 
-    await sql.begin(async (tx) => {
-      for (const mutation of mutations) {
-        const item = requireObject(mutation);
-        const type = requireString(item.type, 'type');
-        const payload = requireObject(item.payload);
+    for (const mutation of mutations) {
+      const item = requireObject(mutation);
+      const mutationId = optionalString(requireObject(item.payload).id);
+      try {
+        const accepted = await sql.begin(async (tx) => {
+          const accepted: JsonObject[] = [];
+          const type = requireString(item.type, 'type');
+          const payload = requireObject(item.payload);
 
         if (type === 'configuration_replace') {
           if (!auth.userId) throw new Error('Forbidden');
           await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
+          const revision = expectedRevision(payload.expectedRevision);
+          const [lockedHousehold] = await tx`
+            select configuration_revision from households
+            where id = ${householdId} and deleted_at is null
+            for update
+          `;
+          if (!lockedHousehold || Number(lockedHousehold.configuration_revision) !== revision) {
+            throw new Error('Configuration revision conflict');
+          }
           const fighters = requireObjects(payload.fighters, 'fighters');
           const bosses = requireObjects(payload.bosses, 'bosses');
           const chores = requireObjects(payload.chores, 'chores');
@@ -1695,7 +1710,13 @@ export async function buildApp() {
               on conflict do nothing
             `;
           }
-          accepted.push({ type, id: optionalString(payload.id), ids });
+          const [updatedHousehold] = await tx`
+            update households
+            set configuration_revision = configuration_revision + 1, version = version + 1
+            where id = ${householdId}
+            returning configuration_revision
+          `;
+          accepted.push({ type, id: optionalString(payload.id), ids, configurationRevision: Number(updatedHousehold.configuration_revision) });
         } else if (type === 'chore_completion') {
           const bossId = requireString(payload.bossId, 'bossId');
           const choreId = requireString(payload.choreId, 'choreId');
@@ -1708,7 +1729,7 @@ export async function buildApp() {
           `;
           if (duplicate) {
             accepted.push({ type, id: duplicate.id, serverSeq: duplicate.server_seq, duplicate: true });
-            continue;
+            return accepted;
           }
           const [boss] = await tx`
             select id, rare, dormant, unlock_at, trigger_type, trigger_day, trigger_date from bosses
@@ -1841,7 +1862,7 @@ export async function buildApp() {
           `;
           if (duplicate) {
             accepted.push({ type, id: duplicate.id, serverSeq: duplicate.server_seq, duplicate: true });
-            continue;
+            return accepted;
           }
           const [boss] = await tx`
             select id, trigger_type, trigger_day, trigger_date from bosses
@@ -1882,7 +1903,7 @@ export async function buildApp() {
           `;
           if (duplicate) {
             accepted.push({ type, id: duplicate.id, serverSeq: duplicate.server_seq, duplicate: true });
-            continue;
+            return accepted;
           }
           const fighterId = requireString(payload.fighterId, 'fighterId');
           const amount = optionalNumber(payload.amount);
@@ -1936,7 +1957,7 @@ export async function buildApp() {
           `;
           if (alreadyUpdated) {
             accepted.push({ type, id: alreadyUpdated.id, serverSeq: alreadyUpdated.server_seq, duplicate: true });
-            continue;
+            return accepted;
           }
           const [redemption] = await tx`
             update reward_redemptions
@@ -1956,7 +1977,7 @@ export async function buildApp() {
           `;
           if (duplicate) {
             accepted.push({ type, id: duplicate.id, serverSeq: duplicate.server_seq, duplicate: true });
-            continue;
+            return accepted;
           }
           const submittedRewardId = optionalString(payload.rewardId);
           const fighterId = optionalString(payload.fighterId);
@@ -2029,10 +2050,25 @@ export async function buildApp() {
         } else {
           throw new Error(`Unsupported mutation type: ${type}`);
         }
+          return accepted;
+        });
+        for (const result of accepted) {
+          results.push({
+            ...result,
+            resourceId: result.id,
+            id: mutationId ?? result.id,
+            outcome: result.duplicate ? 'duplicate' : 'accepted'
+          });
+        }
+      } catch (error) {
+        results.push({ type: optionalString(item.type), id: mutationId, ...mutationError(error) });
       }
-    });
+    }
 
-    return { accepted };
+    return {
+      results,
+      accepted: results.filter((result) => result.outcome === 'accepted' || result.outcome === 'duplicate')
+    };
   });
 
   app.get('/api/meta', async () => ({
