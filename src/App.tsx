@@ -33,8 +33,11 @@ export function App() {
   const showBattleIntro = ui.phase === 'app' && householdReady && ui.tab === 'battle' && ui.intro && currentBoss;
   const showAccountSetup = ui.phase === 'app' && !householdReady;
   const accountCopy = game.settings.lang === 'en'
-    ? { button: 'Account', title: 'ACCOUNT', back: 'Back' }
-    : { button: 'Konto', title: 'KONTO', back: 'Tilbake' };
+    ? { title: 'Account & household', back: 'Back', connected: 'Connected household', shared: 'Shared household device' }
+    : { title: 'Konto og husholdning', back: 'Tilbake', connected: 'Tilkoblet husholdning', shared: 'Delt familieenhet' };
+  const accountSubtitle = online.state.mode === 'household-device'
+    ? `${accountCopy.shared}${online.state.householdName ? ` · ${online.state.householdName}` : ''}`
+    : [online.state.account?.displayName, online.state.householdName || accountCopy.connected].filter(Boolean).join(' · ');
 
   useEffect(() => {
     for (const fighter of game.fighters) {
@@ -104,20 +107,21 @@ export function App() {
       {ui.editBosses && mayManageHousehold(online.state) && <BossManager />}
       {ui.editParty && mayManageHousehold(online.state) && <PartyManager />}
       {ui.editingChores && mayManageHousehold(online.state) && <ChoreEditor />}
-      {ui.settingsOpen && <SettingsPanel />}
       {ui.settingsOpen && !accountOpen && (
-        <button
-          onClick={() => setAccountOpen(true)}
-          style={{ position: 'fixed', right: 18, bottom: 'calc(22px + env(safe-area-inset-bottom))', zIndex: 91, border: '1px solid rgba(91,155,232,.5)', borderRadius: 13, background: '#18243a', color: '#8fc0ff', padding: '12px 15px', fontWeight: 800, cursor: 'pointer', boxShadow: '0 8px 22px rgba(0,0,0,.45)' }}
-        >
-          {accountCopy.button}
-        </button>
+        <SettingsPanel
+          onOpenAccount={() => setAccountOpen(true)}
+          accountSubtitle={accountSubtitle}
+          accountConnected={householdReady}
+        />
       )}
       {ui.settingsOpen && accountOpen && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 92, background: '#0b0e16', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ flex: 'none', padding: 'calc(20px + env(safe-area-inset-top)) 18px 14px', borderBottom: '1px solid #222a3c', display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ flex: 1, fontFamily: PS, fontSize: 11, color: '#5B9BE8' }}>{accountCopy.title}</div>
-            <button onClick={() => setAccountOpen(false)} style={{ border: '1px solid #333c50', borderRadius: 11, background: '#1b2130', color: '#F6EBDD', padding: '10px 14px', fontWeight: 700, cursor: 'pointer' }}>{accountCopy.back}</button>
+          <div style={{ flex: 'none', minHeight: 64, padding: 'calc(12px + env(safe-area-inset-top)) 16px 10px', borderBottom: '1px solid rgba(255,255,255,.07)', display: 'flex', alignItems: 'center', gap: 12, background: 'rgba(11,14,22,.96)' }}>
+            <button type="button" aria-label={accountCopy.back} onClick={() => setAccountOpen(false)} style={{ width: 42, height: 42, padding: 0, border: '1px solid #293143', borderRadius: '50%', background: '#171d2a', color: '#d9deea', display: 'grid', placeItems: 'center', cursor: 'pointer' }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
+            </button>
+            <div style={{ flex: 1, fontSize: 21, fontWeight: 800, letterSpacing: '-.35px', color: '#f6ebdd' }}>{accountCopy.title}</div>
+            <div style={{ width: 42 }} />
           </div>
           <div className="scr" style={{ flex: 1, overflowY: 'auto', padding: 18 }}><AccountSettings lang={game.settings.lang} /></div>
         </div>
