@@ -30,6 +30,8 @@ export function App() {
   const [accountOpen, setAccountOpen] = useState(false);
   const currentBoss = game.bosses.find((boss) => boss.id === game.currentBossId) ?? game.bosses[0];
   const showBattleIntro = ui.phase === 'app' && ui.tab === 'battle' && ui.intro && currentBoss;
+  const householdReady = Boolean(online.state.householdId && online.state.configurationConnectedAt);
+  const showAccountSetup = ui.phase === 'app' && !householdReady;
   const accountCopy = game.settings.lang === 'en'
     ? { button: 'Account', title: 'ACCOUNT', back: 'Back' }
     : { button: 'Konto', title: 'KONTO', back: 'Tilbake' };
@@ -118,6 +120,16 @@ export function App() {
             <button onClick={() => setAccountOpen(false)} style={{ border: '1px solid #333c50', borderRadius: 11, background: '#1b2130', color: '#F6EBDD', padding: '10px 14px', fontWeight: 700, cursor: 'pointer' }}>{accountCopy.back}</button>
           </div>
           <div className="scr" style={{ flex: 1, overflowY: 'auto', padding: 18 }}><AccountSettings lang={game.settings.lang} /></div>
+        </div>
+      )}
+      {showAccountSetup && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 96, background: '#0b0e16', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ flex: 'none', padding: 'calc(24px + env(safe-area-inset-top)) 20px 14px', textAlign: 'center' }}>
+            <div style={{ fontFamily: PS, fontSize: 13, color: GOLD }}>BOSS KAMP</div>
+          </div>
+          <div className="scr" style={{ flex: 1, overflowY: 'auto', padding: '8px 18px calc(24px + env(safe-area-inset-bottom))' }}>
+            <AccountSettings lang={game.settings.lang} setup />
+          </div>
         </div>
       )}
       {ui.phase === 'splash' && <Splash />}
