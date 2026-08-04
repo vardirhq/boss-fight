@@ -58,6 +58,8 @@ jobs:
           npm run build
 
       - name: Commit release branch
+        env:
+          GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.release.outputs.version }}
           TAG: ${{ steps.release.outputs.tag }}
           ANDROID_VERSION_CODE: ${{ steps.release.outputs.android_version_code }}
@@ -87,5 +89,3 @@ jobs:
             --head "$BRANCH" \
             --title "Release $VERSION" \
             --body "$BODY"
-        env:
-          GH_TOKEN: ${{ github.token }}
