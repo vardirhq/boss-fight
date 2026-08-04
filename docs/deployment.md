@@ -106,3 +106,33 @@ sudo -u bosskamp-deploy bash -lc '
   docker compose up -d --build
 '
 ```
+
+## Android Release Flow
+
+Normal feature and fix pull requests add user-facing notes beneath
+`## [Unreleased]` in `CHANGELOG.md`. They do not change application versions.
+
+To prepare a production release:
+
+1. Open **Actions → Prepare release → Run workflow** on `main`.
+2. Enter the next version in `x.y.z` form, for example `1.1.0`.
+3. Review and merge the generated `Release 1.1.0` pull request.
+
+The preparation workflow:
+
+- updates `package.json` and the root entries in `package-lock.json`
+- updates Android `version.name`
+- increments Android `version.code`
+- moves `[Unreleased]` notes into a dated version section
+- restores a fresh empty `[Unreleased]` section
+- validates release metadata, release tooling, TypeScript, and the production build
+
+After the release pull request is merged, `finalize-release.yml` creates the
+matching `vX.Y.Z` tag and dispatches `android-release.yml`. The Android
+workflow verifies both APK and AAB signatures before publishing the GitHub
+Release assets.
+
+The manual dispatch on `android-release.yml` remains available for recovery.
+It must reference a version already committed to all release metadata files.
+Do not overwrite an existing production release after it has been distributed;
+prepare a new patch version instead.
