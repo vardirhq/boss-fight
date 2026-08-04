@@ -863,20 +863,22 @@ Request payload:
 {
   "id": "stable-client-generated-uuid",
   "rewardId": "uuid",
-  "scope": "personal",
-  "fighterId": "uuid",
-  "status": "active"
+  "fighterId": "uuid"
 }
 ```
 
-The server resolves the reward configuration, verifies scope, fighter authority,
-and derived balance, snapshots its title/icon/cost, and inserts the redemption
-and debit atomically. A retry with the same ID cannot charge twice.
+The server resolves the reward configuration and derives scope, title, icon,
+cost, initial `active` status, requester, and approval identity. It verifies
+fighter authority and the derived balance, then inserts the redemption and debit
+atomically. Client-supplied display, cost, status, scope, requester, and approver
+fields are ignored. A retry with the same ID cannot charge twice.
 
 ### Mutation: `reward_redemption_update`
 
-An owner/parent may mark a redemption `used` or `cancelled`. The operation is
-idempotent.
+An owner/parent may transition an `active` redemption to `used` or `cancelled`.
+Authorization is checked server-side, cancellation refunds the original
+server-snapshotted cost exactly once, and repeated transitions to the same state
+are idempotent. Final states cannot transition to one another.
 
 ## Error Responses
 

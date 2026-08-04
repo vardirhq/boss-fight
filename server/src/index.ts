@@ -6,6 +6,10 @@ import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import { sql } from './db.js';
 import { expectedRevision, mutationError } from './sync.js';
+import {
+  assertRedemptionFunds, assertRedemptionManagerRole, initialRedemption,
+  redemptionTransition, requestedRedemptionStatus,
+} from './redemption.js';
 import { sendHouseholdInviteEmail } from './email.js';
 
 type JsonObject = Record<string, unknown>;
@@ -1947,16 +1951,18 @@ export async function buildApp() {
           }
         } else if (type === 'reward_redemption_update') {
           if (!auth.userId) throw new Error('Forbidden');
-          await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
+          const manager = await requireHouseholdMember(auth.userId, householdId);
+          assertRedemptionManagerRole(manager.role);
           const redemptionId = requireString(payload.redemptionId, 'redemptionId');
-          const status = requireString(payload.status, 'status');
-          if (status !== 'used' && status !== 'cancelled') throw new Error('Unsupported redemption status');
-          const [alreadyUpdated] = await tx`
-            select id, server_seq from reward_redemptions
-            where id = ${redemptionId} and household_id = ${householdId} and status = ${status}
+          const status = requestedRedemptionStatus(payload.status);
+          const [currentRedemption] = await tx`
+            select id, server_seq, status, fighter_id, cost from reward_redemptions
+            where id = ${redemptionId} and household_id = ${householdId}
+            for update
           `;
-          if (alreadyUpdated) {
-            accepted.push({ type, id: alreadyUpdated.id, serverSeq: alreadyUpdated.server_seq, duplicate: true });
+          if (!currentRedemption) throw new Error('Not found');
+          if (redemptionTransition(currentRedemption.status, status) === 'duplicate') {
+            accepted.push({ type, id: currentRedemption.id, serverSeq: currentRedemption.server_seq, duplicate: true });
             return accepted;
           }
           const [redemption] = await tx`
@@ -1964,10 +1970,20 @@ export async function buildApp() {
             set status = ${status}, used_at = case when ${status} = 'used' then now() else used_at end,
                 version = version + 1
             where id = ${redemptionId} and household_id = ${householdId}
-              and status in ('active', 'pending')
+              and status = 'active'
             returning id, server_seq
           `;
           if (!redemption) throw new Error('Not found');
+          if (status === 'cancelled') {
+            await tx`
+              insert into wallet_transactions (
+                household_id, fighter_id, amount, kind, reference_type, reference_id, created_by_user_id
+              ) values (
+                ${householdId}, ${currentRedemption.fighter_id}::uuid, ${Number(currentRedemption.cost)},
+                'refund', 'reward_refund', ${redemptionId}, ${auth.userId}
+              ) on conflict do nothing
+            `;
+          }
           accepted.push({ type, id: redemption.id, serverSeq: redemption.server_seq });
         } else if (type === 'reward_redemption') {
           const eventId = requireString(payload.id, 'id');
@@ -1981,7 +1997,6 @@ export async function buildApp() {
           }
           const submittedRewardId = optionalString(payload.rewardId);
           const fighterId = optionalString(payload.fighterId);
-          const scope = requireString(payload.scope, 'scope');
           await assertNullableHouseholdRow('fighters', fighterId, householdId);
           const [reward] = submittedRewardId ? await tx`
             select id, scope, icon, title, cost from rewards
@@ -1990,7 +2005,8 @@ export async function buildApp() {
             limit 1
           ` : [null];
           if (!reward) throw new Error('rewards row does not belong to household');
-          if ((scope === 'personal') !== Boolean(fighterId) || reward.scope !== scope) {
+          const scope = requireString(reward.scope, 'reward.scope');
+          if ((scope === 'personal') !== Boolean(fighterId)) {
             throw new Error('Reward scope does not match fighter');
           }
           if (fighterId) {
@@ -2016,7 +2032,8 @@ export async function buildApp() {
             where household_id = ${householdId}
               and fighter_id is not distinct from ${fighterId}::uuid
           `;
-          if (Number(balance.amount) < Number(reward.cost)) throw new Error('Insufficient wallet balance');
+          assertRedemptionFunds(balance.amount, reward.cost);
+          const initial = initialRedemption();
           const [row] = await tx`
             insert into reward_redemptions (
               id, household_id, reward_id, scope, fighter_id, icon, title, cost,
@@ -2027,24 +2044,21 @@ export async function buildApp() {
               ${householdId}, ${reward.id}::uuid,
               ${scope}, ${fighterId}::uuid,
               ${reward.icon}, ${reward.title},
-              ${Number(reward.cost)}, ${optionalString(payload.status) ?? 'active'},
-              ${auth.userId}, ${optionalString(payload.approvedByUserId)}::uuid
+              ${Number(reward.cost)}, ${initial.status},
+              ${auth.userId}, ${initial.approvedByUserId}::uuid
             )
             on conflict (id) do nothing
             returning id, server_seq
           `;
           if (row) {
-            const status = optionalString(payload.status) ?? 'active';
-            if (status === 'active') {
-              const cost = Number(reward.cost);
-              await tx`
-                insert into wallet_transactions (
-                  household_id, fighter_id, amount, kind, reference_type, reference_id, created_by_user_id
-                )
-                values (${householdId}, ${fighterId}::uuid, ${-cost}, 'redemption', 'reward_redemption', ${row.id}, ${auth.userId})
-                on conflict do nothing
-              `;
-            }
+            const cost = Number(reward.cost);
+            await tx`
+              insert into wallet_transactions (
+                household_id, fighter_id, amount, kind, reference_type, reference_id, created_by_user_id
+              )
+              values (${householdId}, ${fighterId}::uuid, ${-cost}, 'redemption', 'reward_redemption', ${row.id}, ${auth.userId})
+              on conflict do nothing
+            `;
             accepted.push({ type, id: row.id, serverSeq: row.server_seq });
           }
         } else {

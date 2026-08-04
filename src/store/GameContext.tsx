@@ -727,12 +727,7 @@ export function GameProvider({ db, initial, children }: { db: Db; initial: GameS
         if (!fighter || fighter.coins < r.cost) return;
         queueMutation('reward_redemption', {
           rewardId: r.id,
-          scope: 'personal',
           fighterId: fighter.id,
-          icon: r.icon,
-          title: r.title,
-          cost: r.cost,
-          status: 'active',
         });
         buzz('crit', s.game.settings.haptics);
         patchGame((g) => ({
@@ -750,12 +745,7 @@ export function GameProvider({ db, initial, children }: { db: Db; initial: GameS
         if (s.game.pool < r.cost) return;
         queueMutation('reward_redemption', {
           rewardId: r.id,
-          scope: 'group',
           fighterId: null,
-          icon: r.icon,
-          title: r.title,
-          cost: r.cost,
-          status: 'active',
         });
         buzz('win', s.game.settings.haptics);
         patchGame((g) => ({
