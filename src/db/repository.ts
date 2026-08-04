@@ -1,6 +1,6 @@
 import type { Db } from './sqlite';
 import { ALL_TABLES, SCHEMA_VERSION, ensureSchema, readSchemaVersion, writeSchemaVersion } from './schema';
-import { seedBosses, extraSeedBosses, remapSprite } from '../game/seed';
+import { seedBosses, extraSeedBosses, remapBossName, remapSprite } from '../game/seed';
 import type {
   Boss, Chore, Fighter, GameState, Lang, LogEntry, Redemption, Settings, Trigger, TriggerType,
 } from '../game/types';
@@ -69,7 +69,7 @@ export function loadState(db: Db): GameState {
     if (r.trigger_date != null) trigger.date = Number(r.trigger_date);
     return {
       id: String(r.id),
-      name: String(r.name),
+      name: remapBossName(String(r.name), String(r.sprite)),
       sprite: remapSprite(String(r.sprite)),
       frames: Number(r.frames) || 0,
       rare: !!Number(r.rare),
@@ -94,6 +94,12 @@ export function loadState(db: Db): GameState {
       streak: Number(r.streak) || 0,
       coins: Number(r.coins) || 0,
       careerXp: Number(r.career_xp) || 0,
+      userId: r.user_id == null ? undefined : String(r.user_id),
+      userKind: r.user_kind === 'child' ? 'child' : r.user_kind === 'adult' ? 'adult' : undefined,
+      accountStatus: r.account_status === 'suspended' ? 'suspended'
+        : r.account_status === 'left' ? 'left'
+          : r.account_status === 'invited' ? 'invited'
+            : r.account_status === 'active' ? 'active' : undefined,
     }));
 
   const log: LogEntry[] = db
@@ -174,8 +180,13 @@ export function saveState(db: Db, state: GameState): void {
 
     state.fighters.forEach((f, fi) => {
       db.run(
-        'INSERT INTO fighters (id, name, color, avatar, streak, coins, career_xp, sort) VALUES (?,?,?,?,?,?,?,?)',
-        [f.id, f.name, f.color, f.avatar ?? null, f.streak, f.coins, f.careerXp, fi],
+        `INSERT INTO fighters
+           (id, name, color, avatar, streak, coins, career_xp, user_id, user_kind, account_status, sort)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+        [
+          f.id, f.name, f.color, f.avatar ?? null, f.streak, f.coins, f.careerXp,
+          f.userId ?? null, f.userKind ?? null, f.accountStatus ?? null, fi,
+        ],
       );
     });
 

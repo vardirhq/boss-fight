@@ -1,6 +1,6 @@
 import type { Db } from './sqlite';
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS meta (
@@ -50,6 +50,9 @@ CREATE TABLE IF NOT EXISTS fighters (
   streak    INTEGER NOT NULL DEFAULT 0,
   coins     INTEGER NOT NULL DEFAULT 0,
   career_xp INTEGER NOT NULL DEFAULT 0,
+  user_id   TEXT,
+  user_kind TEXT,
+  account_status TEXT,
   sort      INTEGER NOT NULL DEFAULT 0
 );
 
@@ -83,6 +86,11 @@ const ADDED_COLUMNS: Record<string, [string, string][]> = {
     ['dormant', 'INTEGER NOT NULL DEFAULT 0'],
     ['unlock_at', 'INTEGER NOT NULL DEFAULT 0'],
     ['hue', 'INTEGER'],
+  ],
+  fighters: [
+    ['user_id', 'TEXT'],
+    ['user_kind', 'TEXT'],
+    ['account_status', 'TEXT'],
   ],
 };
 

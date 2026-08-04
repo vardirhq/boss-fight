@@ -1,5 +1,5 @@
 import { maxHpOf } from '../game/logic';
-import { REWARDS_GROUP, REWARDS_PERSONAL } from '../game/seed';
+import { REWARDS_GROUP, REWARDS_PERSONAL, remapBossName } from '../game/seed';
 import type { Boss, Chore, Fighter, GameState, TriggerType } from '../game/types';
 import type { BootstrapSnapshot, ServerHouseholdConfig, ServerSyncState } from './api';
 
@@ -14,6 +14,13 @@ function stringValue(value: unknown, fallback = '') {
 
 function booleanValue(value: unknown) {
   return value === true || value === 1 || value === '1';
+}
+
+function compareConfiguredRows(a: Record<string, unknown>, b: Record<string, unknown>) {
+  const bySort = numberValue(a.sort) - numberValue(b.sort);
+  if (bySort !== 0) return bySort;
+  const byCreatedAt = stringValue(a.created_at).localeCompare(stringValue(b.created_at));
+  return byCreatedAt !== 0 ? byCreatedAt : stringValue(a.id).localeCompare(stringValue(b.id));
 }
 
 async function avatarPayload(dataUrl: string) {
@@ -98,7 +105,7 @@ export function serverConfigToGameState(config: ServerHouseholdConfig, current: 
     const chores = choresByBoss.get(stringValue(row.id)) ?? [];
     return {
       id: stringValue(row.id),
-      name: stringValue(row.name),
+      name: remapBossName(stringValue(row.name), stringValue(row.sprite)),
       sprite: stringValue(row.sprite),
       frames: numberValue(row.frames),
       rare: booleanValue(row.rare),
@@ -120,22 +127,24 @@ export function serverConfigToGameState(config: ServerHouseholdConfig, current: 
       elite: row.elite == null ? undefined : booleanValue(row.elite),
     };
   });
-  const fighters: Fighter[] = config.fighters.filter((row) => !row.deleted_at).map((row) => ({
-    id: stringValue(row.id),
-    name: stringValue(row.name),
-    color: stringValue(row.color),
-    avatar: avatars.get(stringValue(row.id)),
-    streak: numberValue(row.streak),
-    coins: balances.get(stringValue(row.id)) ?? numberValue(row.coins_cached),
-    careerXp: numberValue(row.career_xp_cached),
-    userId: row.user_id == null ? undefined : stringValue(row.user_id),
-    userKind: row.user_kind === 'child' ? ('child' as const) : row.user_kind === 'adult' ? ('adult' as const) : undefined,
-    accountStatus: row.account_status === 'suspended' ? 'suspended'
-      : row.account_status === 'left' ? 'left'
-        : row.account_status === 'invited' ? 'invited'
-          : row.account_status === 'active' ? 'active' : undefined,
-    requireOwnDevice: booleanValue(row.require_own_device),
-  }));
+  const fighters: Fighter[] = config.fighters
+    .filter((row) => !row.deleted_at)
+    .sort(compareConfiguredRows)
+    .map((row) => ({
+      id: stringValue(row.id),
+      name: stringValue(row.name),
+      color: stringValue(row.color),
+      avatar: avatars.get(stringValue(row.id)),
+      streak: numberValue(row.streak),
+      coins: balances.get(stringValue(row.id)) ?? numberValue(row.coins_cached),
+      careerXp: numberValue(row.career_xp_cached),
+      userId: row.user_id == null ? undefined : stringValue(row.user_id),
+      userKind: row.user_kind === 'child' ? ('child' as const) : row.user_kind === 'adult' ? ('adult' as const) : undefined,
+      accountStatus: row.account_status === 'suspended' ? 'suspended'
+        : row.account_status === 'left' ? 'left'
+          : row.account_status === 'invited' ? 'invited'
+            : row.account_status === 'active' ? 'active' : undefined,
+    }));
 
   return {
     ...current,

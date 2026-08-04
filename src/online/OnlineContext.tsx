@@ -531,10 +531,7 @@ export function useOnline() {
 export function mayActAsFighter(state: OnlineState, fighter: Fighter) {
   if (state.mode === 'local') return true;
   const ownsFighter = Boolean(state.userId && fighter.userId === state.userId);
-  if (state.mode === 'fighter-account') return ownsFighter;
-  if (state.mode === 'household-device') return !fighter.requireOwnDevice;
-  if (ownsFighter) return true;
-  return (state.role === 'owner' || state.role === 'parent') && !fighter.requireOwnDevice;
+  return ownsFighter || !fighter.userId;
 }
 
 export function mayManageHousehold(state: OnlineState) {
