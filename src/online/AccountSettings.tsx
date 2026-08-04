@@ -3,7 +3,7 @@ import type { Lang } from '../game/types';
 import { useGame } from '../store/GameContext';
 import { useOnline, type OnlineError } from './OnlineContext';
 import { createBootstrapSnapshot, serverConfigToGameState, serverSyncToGameState } from './gameSync';
-import { acceptHouseholdInvite, createHouseholdDevicePairing, inviteParent } from './api';
+import { acceptHouseholdInvite, ApiError, createHouseholdDevicePairing, inviteParent } from './api';
 
 const field: React.CSSProperties = {
   width: '100%', boxSizing: 'border-box', background: '#0f1420', border: '1px solid #333c50', borderRadius: 12,
@@ -41,7 +41,8 @@ const COPY = {
     safeRetry: 'Endringen er trygg på denne enheten. Vi prøver igjen automatisk.', retry: 'Prøv igjen',
     household: 'Familie', fighters: 'Spillere', peopleDevices: 'Personer og enheter',
     yourFighter: 'Din spiller', yourFighterSub: 'Laget fra kontoen din', otherPlayers: 'Andre spillere', otherPlayersSub: 'Legg bare til personer som spiller på denne enheten', addPlayer: 'Legg til barn eller annen spiller', playerName: 'Navn på spiller',
-    inviteParent: 'Inviter en annen forelder', parentEmail: 'E-post til den andre forelderen', parentCodeTitle: 'Send denne koden til den andre forelderen', createInvite: 'Lag invitasjon',
+    inviteParent: 'Inviter en annen forelder', parentEmail: 'E-post til den andre forelderen', createInvite: 'Send invitasjon',
+    parentInviteSent: 'Invitasjonen er sendt til {email}.', inviteSendFailed: 'E-posten kunne ikke sendes. Prøv igjen senere.',
     createSharedCode: 'Koble til en felles enhet', sharedCodeTitle: 'Skriv denne koden på familieenheten', copy: 'Kopier', copied: 'Kopiert',
     joinHousehold: 'Bytt eller bli med i en annen familie', logout: 'Logg ut',
     advanced: 'Teknisk informasjon', pending: 'endringer venter', lastSync: 'Sist lagret', syncNow: 'Synkroniser nå', role: 'Tilgang',
@@ -68,7 +69,8 @@ const COPY = {
     safeRetry: 'The change is safe on this device. We will retry automatically.', retry: 'Try again',
     household: 'Family', fighters: 'Fighters', peopleDevices: 'People and devices',
     yourFighter: 'Your fighter', yourFighterSub: 'Created from your account', otherPlayers: 'Other fighters', otherPlayersSub: 'Only add people who play on this device', addPlayer: 'Add a child or another fighter', playerName: 'Fighter name',
-    inviteParent: 'Invite another parent', parentEmail: 'The other parent’s email', parentCodeTitle: 'Send this code to the other parent', createInvite: 'Create invitation',
+    inviteParent: 'Invite another parent', parentEmail: 'The other parent’s email', createInvite: 'Send invitation',
+    parentInviteSent: 'The invitation was sent to {email}.', inviteSendFailed: 'The email could not be sent. Try again later.',
     createSharedCode: 'Connect a shared device', sharedCodeTitle: 'Enter this code on the family device', copy: 'Copy', copied: 'Copied',
     joinHousehold: 'Switch or join another family', logout: 'Sign out',
     advanced: 'Technical information', pending: 'changes waiting', lastSync: 'Last saved', syncNow: 'Sync now', role: 'Access',
@@ -101,7 +103,7 @@ export function AccountSettings({ lang, setup = false }: { lang: Lang; setup?: b
   const [householdName, setHouseholdName] = useState<string>(copy.family);
   const [sharedCode, setSharedCode] = useState<string | null>(null);
   const [parentEmail, setParentEmail] = useState('');
-  const [parentCode, setParentCode] = useState<string | null>(null);
+  const [parentInviteSentTo, setParentInviteSentTo] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [setupError, setSetupError] = useState<string | null>(null);
   const busy = state.status === 'syncing' || state.status === 'restoring';
@@ -170,12 +172,16 @@ export function AccountSettings({ lang, setup = false }: { lang: Lang; setup?: b
   async function createParentInvitation() {
     if (!state.sessionToken || !state.householdId || !parentEmail.trim()) return;
     setSetupError(null);
+    setParentInviteSentTo(null);
+    const invitedEmail = parentEmail.trim();
     try {
-      const invitation = await inviteParent(state.sessionToken, state.householdId, parentEmail.trim());
-      setParentCode(invitation.token);
+      await inviteParent(state.sessionToken, state.householdId, invitedEmail);
+      setParentInviteSentTo(invitedEmail);
       setParentEmail('');
-    } catch {
-      setSetupError(copy.errors['invalid-request']);
+    } catch (error) {
+      setSetupError(error instanceof ApiError && error.code === 'mail_delivery_failed'
+        ? copy.inviteSendFailed
+        : copy.errors['invalid-request']);
     }
   }
 
@@ -369,7 +375,7 @@ export function AccountSettings({ lang, setup = false }: { lang: Lang; setup?: b
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
               <input value={parentEmail} onChange={(event) => setParentEmail(event.target.value)} type="email" placeholder={copy.parentEmail} style={field} />
               <button disabled={!parentEmail.trim() || busy} onClick={() => void createParentInvitation()} style={primary}>{copy.createInvite}</button>
-              {parentCode && <CodeCard title={copy.parentCodeTitle} code={parentCode} button={copied ? copy.copied : copy.copy} onCopy={() => void navigator.clipboard?.writeText(parentCode)} />}
+              {parentInviteSentTo && <Notice color="#67D391">{copy.parentInviteSent.replace('{email}', parentInviteSentTo)}</Notice>}
             </div>
           </details>}
           {isParent && <button onClick={() => void createSharedPairing()} style={secondary}>{copy.createSharedCode}</button>}
