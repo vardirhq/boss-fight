@@ -1,6 +1,5 @@
 import { useGame } from '../store/GameContext';
 import { useT, GOLD } from '../ui/common';
-import { FighterRows } from './managers';
 import type { Lang } from '../game/types';
 
 const PS = "'Press Start 2P'";
@@ -126,7 +125,7 @@ export function Onboarding() {
         <button onClick={actions.finishOnboarding} style={{ background: 'none', border: 'none', color: '#6C7486', fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: 8 }}>{t.skip}</button>
       </div>
       <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
-        <div style={{ display: 'flex', height: '100%', width: '600%', transform: `translateX(-${step * (100 / 6)}%)`, transition: 'transform .45s cubic-bezier(.4,0,.2,1)' }}>
+        <div style={{ display: 'flex', height: '100%', width: '500%', transform: `translateX(-${step * 20}%)`, transition: 'transform .45s cubic-bezier(.4,0,.2,1)' }}>
           <Step>
             <div style={{ fontSize: 52 }}>🌍</div>
             <StepTitle color={GOLD}>{t.langStepTitle}</StepTitle>
@@ -163,26 +162,17 @@ export function Onboarding() {
             <StepTitle color="#67D391">{t.ob4Title}</StepTitle>
             <StepBody>{t.ob4Body}</StepBody>
           </Step>
-          <div style={{ flex: '0 0 16.6666%', height: '100%', display: 'flex', flexDirection: 'column', padding: '8px 20px 0' }}>
-            <div style={{ flex: 'none', textAlign: 'center', padding: '0 8px 14px' }}>
-              <div style={{ fontFamily: PS, fontSize: 15, color: '#5B9BE8', lineHeight: 1.5, textShadow: '0 3px 0 rgba(0,0,0,.5)' }}>{t.obSetupTitle}</div>
-              <div style={{ fontSize: 14, color: '#C6CDDA', lineHeight: 1.5, fontWeight: 500, marginTop: 12 }}>{t.obSetupBody}</div>
-            </div>
-            <div className="scr" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12, padding: '4px 0 8px' }}>
-              <FighterRows />
-            </div>
-          </div>
         </div>
       </div>
       <div style={{ flex: 'none', padding: '16px 24px calc(24px + env(safe-area-inset-bottom))', display: 'flex', flexDirection: 'column', gap: 18, alignItems: 'center' }}>
         <div style={{ display: 'flex', gap: 8 }}>
-          {[0, 1, 2, 3, 4, 5].map((i) => (
+          {[0, 1, 2, 3, 4].map((i) => (
             <div key={i} style={{ width: i === step ? 22 : 8, height: 8, borderRadius: 4, background: i === step ? GOLD : '#333c50', transition: 'all .3s' }} />
           ))}
         </div>
         <div style={{ display: 'flex', gap: 12, width: '100%', maxWidth: 360 }}>
           {step > 0 && <button onClick={actions.obPrev} style={{ flex: 'none', padding: '15px 22px', borderRadius: 14, border: '1px solid #333c50', background: '#1b2130', color: '#A8B0BF', fontFamily: PS, fontSize: 9, letterSpacing: .5, cursor: 'pointer' }}>‹</button>}
-          <button onClick={actions.obNext} style={{ flex: 1, padding: 15, border: 'none', borderRadius: 14, background: 'linear-gradient(180deg,#ffd873,#F4B942)', color: '#20160A', fontFamily: PS, fontSize: 10, letterSpacing: 1, cursor: 'pointer', boxShadow: '0 5px 0 #b8801f' }}>{step === 5 ? t.getStarted : t.next}</button>
+          <button onClick={actions.obNext} style={{ flex: 1, padding: 15, border: 'none', borderRadius: 14, background: 'linear-gradient(180deg,#ffd873,#F4B942)', color: '#20160A', fontFamily: PS, fontSize: 10, letterSpacing: 1, cursor: 'pointer', boxShadow: '0 5px 0 #b8801f' }}>{step === 4 ? t.getStarted : t.next}</button>
         </div>
       </div>
     </div>
@@ -190,7 +180,7 @@ export function Onboarding() {
 }
 
 function Step({ children }: { children: React.ReactNode }) {
-  return <div style={{ flex: '0 0 16.6666%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '24px 32px', gap: 22 }}>{children}</div>;
+  return <div style={{ flex: '0 0 20%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '24px 32px', gap: 22 }}>{children}</div>;
 }
 function StepTitle({ color, children }: { color: string; children: React.ReactNode }) {
   return <div style={{ fontFamily: PS, fontSize: 18, color, lineHeight: 1.5, textShadow: '0 3px 0 rgba(0,0,0,.5)' }}>{children}</div>;
