@@ -155,6 +155,29 @@ jobs:
           }
           EOF
 
+      - name: Configure Gradle release signing
+        shell: bash
+        run: |
+          cat >> android/app/build.gradle <<'EOF'
+
+          android {
+              signingConfigs {
+                  release {
+                      storeFile rootProject.file('../secrets/boss-kamp-upload.jks')
+                      storePassword System.getenv('DEPLOID_ANDROID_STORE_PASSWORD')
+                      keyAlias 'boss-kamp'
+                      keyPassword System.getenv('DEPLOID_ANDROID_KEY_PASSWORD')
+                  }
+              }
+
+              buildTypes {
+                  release {
+                      signingConfig signingConfigs.release
+                  }
+              }
+          }
+          EOF
+
       - name: Build signed release bundle with Deploid
         env:
           DEPLOID_ANDROID_STORE_PASSWORD: ${{ secrets.DEPLOID_ANDROID_STORE_PASSWORD }}
@@ -168,21 +191,21 @@ jobs:
           DEPLOID_ANDROID_KEY_PASSWORD: ${{ secrets.DEPLOID_ANDROID_KEY_PASSWORD }}
         run: ./gradlew assembleRelease
 
-      - name: Locate release artifacts
+      - name: Locate signed release artifacts
         id: artifacts
         shell: bash
         run: |
-          APK_PATH="$(find android/app/build/outputs/apk -type f -name '*release*.apk' | head -n 1)"
-          AAB_PATH="$(find android/app/build/outputs/bundle -type f -name '*release*.aab' | head -n 1)"
+          APK_PATH="android/app/build/outputs/apk/release/app-release.apk"
+          AAB_PATH="android/app/build/outputs/bundle/release/app-release.aab"
 
-          if [[ -z "$APK_PATH" ]]; then
-            echo "No release APK was produced"
+          if [[ ! -f "$APK_PATH" ]]; then
+            echo "No signed release APK was produced"
             find android/app/build/outputs -maxdepth 5 -type f 2>/dev/null || true
             exit 1
           fi
 
-          if [[ -z "$AAB_PATH" ]]; then
-            echo "No release AAB was produced"
+          if [[ ! -f "$AAB_PATH" ]]; then
+            echo "No signed release AAB was produced"
             find android/app/build/outputs -maxdepth 5 -type f 2>/dev/null || true
             exit 1
           fi
@@ -191,6 +214,18 @@ jobs:
           cp "$AAB_PATH" boss-kamp-release.aab
           echo "apk=boss-kamp-release.apk" >> "$GITHUB_OUTPUT"
           echo "aab=boss-kamp-release.aab" >> "$GITHUB_OUTPUT"
+
+      - name: Verify release signatures
+        shell: bash
+        run: |
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          if [[ -z "$APKSIGNER" ]]; then
+            echo "Could not find apksigner"
+            exit 1
+          fi
+
+          "$APKSIGNER" verify --verbose --print-certs boss-kamp-release.apk
+          jarsigner -verify -strict boss-kamp-release.aab
 
       - name: Upload signed release APK
         uses: actions/upload-artifact@v4
