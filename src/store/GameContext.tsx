@@ -379,7 +379,7 @@ export function GameProvider({ db, initial, children }: { db: Db; initial: GameS
           : accessible[0]?.id ?? null;
         return {
         game: { ...game, activeFighterId },
-        ui: { ...current.ui, intro: true, won: false, dying: false, combo: 0, dmgNums: [], ping: null },
+        ui: { ...current.ui, won: false, dying: false, combo: 0, dmgNums: [], ping: null },
       };
       }),
       go: (tab) => patchUi((u) => ({ ...u, tab })),
