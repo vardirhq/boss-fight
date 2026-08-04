@@ -111,6 +111,7 @@ export interface GameActions {
   openPartyManager(): void;
   closePartyManager(): void;
   editFighter(id: string, patch: Partial<Fighter>): void;
+  ensureAccountFighter(userId: string, displayName: string): void;
   addFighter(): void;
   deleteFighter(id: string): void;
   setAvatarFile(id: string, file: File): void;
@@ -529,7 +530,7 @@ export function GameProvider({ db, initial, children }: { db: Db; initial: GameS
 
       obNext: () => {
         const step = stateRef.current.ui.obStep;
-        if (step >= 5) {
+        if (step >= 4) {
           setState((s) => ({ game: { ...s.game, onboarded: true }, ui: { ...s.ui, phase: 'app' } }));
         } else {
           patchUi((u) => ({ ...u, obStep: u.obStep + 1 }));
@@ -554,6 +555,30 @@ export function GameProvider({ db, initial, children }: { db: Db; initial: GameS
       closePartyManager: () => patchUi((u) => ({ ...u, editParty: false })),
       editFighter: (id, patch) =>
         patchGame((g) => ({ ...g, fighters: g.fighters.map((f) => (f.id === id ? { ...f, ...patch } : f)) })),
+      ensureAccountFighter: (userId, displayName) =>
+        patchGame((g) => {
+          const id = `account-${userId}`;
+          const existing = g.fighters.find((fighter) => fighter.userId === userId || fighter.id === id);
+          const name = displayName.trim() || existing?.name || 'Spiller';
+          if (existing) {
+            const fighters = g.fighters.map((fighter) => fighter.id === existing.id
+              ? { ...fighter, name, userId, userKind: 'adult' as const, accountStatus: 'active' as const }
+              : fighter);
+            return { ...g, fighters, activeFighterId: g.activeFighterId ?? existing.id };
+          }
+          const fighter: Fighter = {
+            id,
+            name,
+            color: FIGHTER_COLORS[0],
+            streak: 0,
+            coins: 0,
+            careerXp: 0,
+            userId,
+            userKind: 'adult',
+            accountStatus: 'active',
+          };
+          return { ...g, fighters: [fighter, ...g.fighters], activeFighterId: fighter.id };
+        }),
       addFighter: () =>
         patchGame((g) => {
           const id = 'f' + Date.now();
