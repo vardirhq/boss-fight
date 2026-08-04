@@ -1,0 +1,90 @@
+name: Finalize release
+
+on:
+  pull_request:
+    types:
+      - closed
+    branches:
+      - main
+
+permissions:
+  actions: write
+  contents: write
+
+jobs:
+  finalize:
+    if: >-
+      github.event.pull_request.merged == true &&
+      startsWith(github.event.pull_request.head.ref, 'release/v') &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout release commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Resolve and validate release
+        id: release
+        env:
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+        shell: bash
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          TAG="v$VERSION"
+          EXPECTED_BRANCH="release/$TAG"
+
+          if [[ "$HEAD_BRANCH" != "$EXPECTED_BRANCH" ]]; then
+            echo "Release branch $HEAD_BRANCH does not match package version $VERSION"
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+          RELEASE_TAG="$TAG" npm run release:check
+          npm run release:test
+
+      - name: Create release tag
+        env:
+          TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_COMMIT: ${{ github.event.pull_request.merge_commit_sha }}
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            git fetch --force origin "refs/tags/$TAG:refs/tags/$TAG"
+            TAG_COMMIT="$(git rev-list -n 1 "$TAG")"
+
+            if [[ "$TAG_COMMIT" != "$RELEASE_COMMIT" ]]; then
+              echo "$TAG already exists on $TAG_COMMIT, expected $RELEASE_COMMIT"
+              exit 1
+            fi
+          else
+            git tag --annotate "$TAG" --message "Boss Kamp $TAG" "$RELEASE_COMMIT"
+            git push origin "$TAG"
+          fi
+
+      - name: Start signed Android release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          gh workflow run android-release.yml \
+            --ref main \
+            --field release_tag="$TAG" \
+            --field prerelease=false
