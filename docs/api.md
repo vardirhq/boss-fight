@@ -585,12 +585,16 @@ Response:
     "fighter_id": null,
     "expires_at": "timestamp"
   },
-  "token": "invite-token-to-send-out-of-band"
+  "delivered": true
 }
 ```
 
-The raw invite token is returned once and only a hash is stored in the database.
-Email delivery is not implemented yet.
+The API sends the raw invitation token to the invited address through the
+configured SMTP service. It stores only the token hash and does not return the
+raw token to the client. Delivery uses `Boss Kamp <chris@vardir.no>` by default,
+can be overridden with `SMTP_FROM`, and must be accepted by SMTP before this
+endpoint succeeds. Invitations expire after seven days. A failed delivery
+returns `502` with code `mail_delivery_failed` and removes the unusable invite.
 
 ### `POST /api/invites/accept`
 
