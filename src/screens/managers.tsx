@@ -8,6 +8,7 @@ import type { TriggerType } from '../game/types';
 import type { Fighter } from '../game/types';
 import { useOnline } from '../online/OnlineContext';
 import {
+  ApiError,
   createFighterPairing,
   inviteAdultFighter,
   resetChildPin,
@@ -197,6 +198,7 @@ function FighterOnlineControls({ fighter }: { fighter: Fighter }) {
   const [email, setEmail] = useState('');
   const [pin, setPin] = useState('');
   const [code, setCode] = useState<string | null>(null);
+  const [inviteSentTo, setInviteSentTo] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const connected = Boolean(online.state.sessionToken && online.state.householdId && online.state.configurationConnectedAt);
@@ -234,13 +236,16 @@ function FighterOnlineControls({ fighter }: { fighter: Fighter }) {
   };
   const inviteAdult = async () => {
     if (!email.trim() || busy) return;
-    setBusy(true); setError(null);
+    setBusy(true); setError(null); setInviteSentTo(null);
+    const invitedEmail = email.trim();
     try {
-      const invite = await inviteAdultFighter(token, householdId, fighter.id, email);
-      setCode(invite.token);
+      await inviteAdultFighter(token, householdId, fighter.id, invitedEmail);
+      setInviteSentTo(invitedEmail);
       setEmail('');
-    } catch {
-      setError(en ? 'Could not create the invitation.' : 'Kunne ikke opprette invitasjonen.');
+    } catch (caught) {
+      setError(caught instanceof ApiError && caught.code === 'mail_delivery_failed'
+        ? (en ? 'The invitation email could not be sent.' : 'Invitasjonen kunne ikke sendes på e-post.')
+        : (en ? 'Could not create the invitation.' : 'Kunne ikke opprette invitasjonen.'));
     } finally {
       setBusy(false);
     }
@@ -339,7 +344,8 @@ function FighterOnlineControls({ fighter }: { fighter: Fighter }) {
           <div style={setupTitle}>{en ? `Connect ${fighter.name} to an adult` : `Koble ${fighter.name} til en voksen`}</div>
           <div style={setupHelp}>{en ? 'They sign in with their own account and keep this fighter.' : 'De logger inn med sin egen konto og beholder denne spilleren.'}</div>
           <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" placeholder={en ? 'Email address' : 'E-postadresse'} style={onlineInput} />
-          <button disabled={!email.trim() || busy} onClick={() => void inviteAdult()} style={{ ...smallAction, width: '100%', padding: 10, opacity: busy ? .6 : 1 }}>{busy ? '…' : (en ? 'Create invitation' : 'Lag invitasjon')}</button>
+          <button disabled={!email.trim() || busy} onClick={() => void inviteAdult()} style={{ ...smallAction, width: '100%', padding: 10, opacity: busy ? .6 : 1 }}>{busy ? '…' : (en ? 'Send invitation' : 'Send invitasjon')}</button>
+          {inviteSentTo && <div style={{ color: '#67D391', fontSize: 11, lineHeight: 1.45 }}>{en ? `Invitation sent to ${inviteSentTo}.` : `Invitasjonen er sendt til ${inviteSentTo}.`}</div>}
         </div>
       )}
       {setupMode === 'child' && (

@@ -149,6 +149,10 @@ Two paths, deliberately. Adults get email invites; children get a code shown on
 the parent's screen and typed (or scanned) on the child's device. Never store a
 raw token — only a hash, exactly as with password resets.
 
+Adult invitations are delivered through the server's SMTP configuration. The
+message contains the raw one-time token, while the database and client receive
+only the token hash and delivery status respectively.
+
 ```sql
 create table household_invites (            -- adults only
   id                  uuid primary key,

@@ -20,6 +20,20 @@ Runtime environment file:
 
 The environment file is intentionally ignored by git.
 
+It must include working SMTP credentials for invitation delivery:
+
+```text
+SMTP_HOST=<smtp-host>
+SMTP_PORT=587
+SMTP_USER=<smtp-user>
+SMTP_PASS=<smtp-password>
+SMTP_FROM="Boss Kamp <chris@vardir.no>"
+SMTP_REPLY_TO=chris@vardir.no
+```
+
+The sender address must be permitted by the configured SMTP service. These
+values belong in `.env.production`, not in GitHub Actions or the repository.
+
 ## GitHub Actions
 
 `.github/workflows/ci-deploy.yml` runs on pushes and pull requests targeting
