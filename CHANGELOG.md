@@ -13,6 +13,10 @@ increasing Android version codes for install/update compatibility.
   rolls changelog entries into a dated release, opens a release pull request,
   and starts the signed Android build after merge.
 
+### Fixed
+
+- Keep the boss-introduction overlay dismissed during background synchronization.
+
 ## [1.0.0] - 2026-08-04
 
 ### Added
