@@ -154,18 +154,20 @@ export function ChoreEditor() {
 /** Shared fighter editor cards, used by the party manager and onboarding setup. */
 export function FighterRows() {
   const { state, actions } = useGame();
+  const online = useOnline();
   const t = useT();
   const g = state.game;
   return (
     <>
       {g.fighters.map((f) => (
         <div key={f.id} style={{ background: '#1b2130', border: '1px solid #2b3346', borderRadius: 16, padding: 14 }}>
+          {f.userId === online.state.userId && <div style={{ color: '#F4B942', fontSize: 10, fontWeight: 800, marginBottom: 9 }}>{g.settings.lang === 'en' ? 'YOUR ACCOUNT FIGHTER' : 'DIN KONTOSPILLER'}</div>}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{ position: 'relative', flex: 'none', width: 46, height: 46, borderRadius: 13, background: '#2C3548', border: `2px solid ${f.color}`, display: 'grid', placeItems: 'center', fontFamily: PS, fontSize: 14, color: f.color, overflow: 'hidden' }}>
               <Avatar fighter={f} />{!f.avatar && <span>{initialOf(f.name)}</span>}
             </div>
-            <input value={f.name} onChange={(e) => actions.editFighter(f.id, { name: e.target.value })} placeholder={t.namePh} style={textInput} />
-            <button onClick={() => actions.deleteFighter(f.id)} style={delBtn}>×</button>
+            <input value={f.name} readOnly={f.userId === online.state.userId} onChange={(e) => actions.editFighter(f.id, { name: e.target.value })} placeholder={t.namePh} style={{ ...textInput, opacity: f.userId === online.state.userId ? .72 : 1 }} />
+            {f.userId !== online.state.userId && <button onClick={() => actions.deleteFighter(f.id)} style={delBtn}>×</button>}
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
             <label style={{ flex: 1, textAlign: 'center', background: '#232c3e', border: '1px solid #333c50', borderRadius: 10, padding: 10, color: '#F6EBDD', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
@@ -204,6 +206,7 @@ function FighterOnlineControls({ fighter }: { fighter: Fighter }) {
   const token = online.state.sessionToken!;
   const householdId = online.state.householdId!;
   const serverBacked = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(fighter.id);
+  const isOwnFighter = fighter.userId === online.state.userId;
 
   if (!serverBacked) {
     return <div style={{ marginTop: 12, color: '#F4B942', fontSize: 11 }}>{en ? 'Saving this fighter…' : 'Lagrer spilleren…'}</div>;
@@ -305,7 +308,9 @@ function FighterOnlineControls({ fighter }: { fighter: Fighter }) {
         {fighter.userId
           ? fighter.accountStatus === 'suspended'
             ? (en ? 'Access suspended' : 'Tilgang sperret')
-            : fighter.userKind === 'child'
+            : isOwnFighter
+              ? (en ? 'Your account fighter' : 'Din kontospiller')
+              : fighter.userKind === 'child'
               ? (en ? 'Child login enabled' : 'Har egen barneinnlogging')
               : (en ? 'Connected to an adult' : 'Koblet til en voksen')
           : (en ? 'Plays on this family device' : 'Spiller på denne familieenheten')}
@@ -324,7 +329,7 @@ function FighterOnlineControls({ fighter }: { fighter: Fighter }) {
             {fighter.requireOwnDevice ? (en ? 'Only their device' : 'Bare egen enhet') : (en ? 'Can play here' : 'Kan spille her')}
           </button>
         )}
-        {fighter.userId && <>
+        {fighter.userId && !isOwnFighter && <>
           <button onClick={() => void suspendAccess()} style={{ ...smallAction, color: '#F4B942' }}>{fighter.accountStatus === 'suspended' ? (en ? 'Restore access' : 'Gjenopprett tilgang') : (en ? 'Suspend access' : 'Sperr tilgang')}</button>
           <button onClick={() => void unlinkAccount()} style={{ ...smallAction, color: '#ff8f85' }}>{en ? 'Unlink account' : 'Koble fra konto'}</button>
         </>}

@@ -229,6 +229,7 @@ Request:
 {
   "householdName": "The Household",
   "timezone": "Europe/Oslo",
+  "ownerFighterClientId": "f1",
   "victoriesBaseline": 4,
   "pool": 12,
   "fighters": [
@@ -268,6 +269,11 @@ Request:
   "rewards": []
 }
 ```
+
+`ownerFighterClientId` must reference one submitted fighter. That fighter is
+linked to the authenticated owner in the same transaction; all other submitted
+fighters remain unclaimed profiles for people who play through a parent or
+shared household device.
 
 Fighters may include an `avatar` object with `mime`, base64 `bytesBase64`, and
 its SHA-256 `hash`. All nested rows are committed in one database transaction;
@@ -562,8 +568,8 @@ Request:
 ```json
 {
   "email": "other-parent@example.com",
-  "role": "member",
-  "fighterId": "optional-unclaimed-fighter-uuid"
+  "role": "parent",
+  "fighterId": null
 }
 ```
 
@@ -575,8 +581,8 @@ Response:
     "id": "uuid",
     "household_id": "uuid",
     "invited_email": "other-parent@example.com",
-    "role": "member",
-    "fighter_id": "uuid",
+    "role": "parent",
+    "fighter_id": null,
     "expires_at": "timestamp"
   },
   "token": "invite-token-to-send-out-of-band"
@@ -617,8 +623,10 @@ Response:
 }
 ```
 
-`fighter` is `null` if the invite did not include a fighter or the fighter was
-already claimed.
+When an adult accepts an invitation without `fighterId`, the server creates and
+links a fighter from that adult's account name. An invitation with `fighterId`
+claims that existing fighter instead. This keeps account-backed adults automatic
+while preserving explicit fighter claiming for an existing profile.
 
 ## Household Device Pairing
 

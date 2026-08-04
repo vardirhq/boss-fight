@@ -13,6 +13,7 @@ type HouseholdRole = 'owner' | 'parent' | 'member' | 'child';
 
 const scrypt = promisify(scryptCallback);
 const passwordKeyLength = 64;
+const fighterColors = ['#F4B942', '#E0564A', '#67D391', '#5B9BE8', '#B57BE0', '#5FD0C8', '#EE8FB0', '#E8A44C'];
 
 const appendTables = [
   'chore_completions',
@@ -547,9 +548,13 @@ export async function buildApp() {
     const timezone = optionalString(body.timezone) ?? 'Europe/Oslo';
     const hasConfiguration = body.fighters !== undefined;
     const fighters = hasConfiguration ? requireObjects(body.fighters, 'fighters') : [];
+    const ownerFighterClientId = optionalString(body.ownerFighterClientId);
     const bosses = hasConfiguration ? requireObjects(body.bosses, 'bosses') : [];
     const chores = hasConfiguration ? requireObjects(body.chores, 'chores') : [];
     const rewards = hasConfiguration ? requireObjects(body.rewards, 'rewards') : [];
+    if (ownerFighterClientId && !fighters.some((fighter) => requireString(fighter.clientId, 'fighter.clientId') === ownerFighterClientId)) {
+      throw new Error('ownerFighterClientId does not reference a submitted fighter');
+    }
 
     const result = await sql.begin(async (tx) => {
       // Serialize first-household creation per user. A retry after a lost HTTP
@@ -609,16 +614,18 @@ export async function buildApp() {
           const name = requireString(item.name, 'fighter.name');
           const [fighter] = await tx`
             insert into fighters (
-              id, household_id, name, color, streak, coins_cached,
+              id, household_id, user_id, name, color, streak, coins_cached,
               career_xp_cached, sort, created_by_user_id
             ) values (
-              ${stableId}, ${householdId}, ${name}, ${requireString(item.color, 'fighter.color')},
+              ${stableId}, ${householdId}, ${clientId === ownerFighterClientId ? auth.userId : null}::uuid,
+              ${name}, ${requireString(item.color, 'fighter.color')},
               ${optionalNumber(item.streak)}, ${optionalNumber(item.coins)},
               ${optionalNumber(item.careerXp)}, ${optionalNumber(item.sort, sort)}, ${auth.userId}
             )
             on conflict (id) do update
             set name = excluded.name, color = excluded.color, streak = excluded.streak,
                 coins_cached = excluded.coins_cached, career_xp_cached = excluded.career_xp_cached,
+                user_id = coalesce(excluded.user_id, fighters.user_id),
                 sort = excluded.sort, deleted_at = null, version = fighters.version + 1
             where fighters.household_id = excluded.household_id
             returning id
@@ -762,7 +769,14 @@ export async function buildApp() {
 
     const [members, fighters, avatars, bosses, chores, rewards, balances] = await Promise.all([
       sql`select * from household_members where household_id = ${householdId} order by joined_at`,
-      sql`select * from fighters where household_id = ${householdId} order by sort, created_at`,
+      sql`
+        select f.*, u.kind as user_kind, hm.status as account_status
+        from fighters f
+        left join users u on u.id = f.user_id
+        left join household_members hm on hm.household_id = f.household_id and hm.user_id = f.user_id
+        where f.household_id = ${householdId}
+        order by f.sort, f.created_at
+      `,
       sql`
         select fa.fighter_id, fa.mime, encode(fa.bytes, 'base64') as bytes_base64, fa.hash
         from fighter_avatars fa
@@ -1053,7 +1067,7 @@ export async function buildApp() {
 
     const result = await sql.begin(async (tx) => {
       const [user] = await tx`
-        select id, email from users where id = ${auth.userId} and deleted_at is null
+        select id, email, display_name, kind from users where id = ${auth.userId} and deleted_at is null
       `;
       if (!user?.email) throw new Error('Authenticated user has no email');
 
@@ -1088,6 +1102,38 @@ export async function buildApp() {
           returning *
         `;
         fighter = claimed ?? null;
+      } else if (user.kind === 'adult') {
+        const [existingFighter] = await tx`
+          select * from fighters
+          where household_id = ${invite.household_id}
+            and user_id = ${auth.userId}
+            and deleted_at is null
+          limit 1
+        `;
+        if (existingFighter) {
+          fighter = existingFighter;
+        } else {
+          const [{ fighter_count: fighterCount }] = await tx`
+            select count(*)::integer as fighter_count
+            from fighters
+            where household_id = ${invite.household_id} and deleted_at is null
+          `;
+          const sort = Number(fighterCount) || 0;
+          const generatedId = entityId(requireString(invite.household_id, 'household_id'), 'fighter', `account-${auth.userId}`);
+          const [generated] = await tx`
+            insert into fighters (id, household_id, user_id, name, color, sort, created_by_user_id)
+            values (
+              ${generatedId}, ${invite.household_id}, ${auth.userId},
+              ${requireString(user.display_name, 'display_name')}, ${fighterColors[sort % fighterColors.length]},
+              ${sort}, ${auth.userId}
+            )
+            on conflict (id) do update
+            set user_id = excluded.user_id, name = excluded.name, deleted_at = null,
+                version = fighters.version + 1
+            returning *
+          `;
+          fighter = generated;
+        }
       }
 
       await tx`
