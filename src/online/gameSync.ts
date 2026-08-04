@@ -40,6 +40,7 @@ export async function createBootstrapSnapshot(game: GameState): Promise<Bootstra
   if (fighters.some((fighter) => !fighter.name)) throw new Error('fighter_name_required');
 
   return {
+    ownerFighterClientId: game.fighters.find((fighter) => fighter.userKind === 'adult' && fighter.userId)?.id,
     victoriesBaseline: game.victories,
     pool: game.pool,
     fighters,
