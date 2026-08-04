@@ -26,6 +26,8 @@ export interface AuthSession {
 }
 
 export interface BootstrapSnapshot {
+  /** The fighter generated from the authenticated household owner's account. */
+  ownerFighterClientId?: string;
   victoriesBaseline: number;
   pool: number;
   fighters: Array<{
@@ -293,6 +295,12 @@ export async function createFighterPairing(token: string, householdId: string, f
 export async function inviteAdultFighter(token: string, householdId: string, fighterId: string, email: string) {
   return request<{ token: string; invite: Record<string, unknown> }>(`/api/households/${encodeURIComponent(householdId)}/invites`, {
     method: 'POST', body: JSON.stringify({ fighterId, email, role: 'member' }),
+  }, token);
+}
+
+export async function inviteParent(token: string, householdId: string, email: string) {
+  return request<{ token: string; invite: Record<string, unknown> }>(`/api/households/${encodeURIComponent(householdId)}/invites`, {
+    method: 'POST', body: JSON.stringify({ email, role: 'parent' }),
   }, token);
 }
 
