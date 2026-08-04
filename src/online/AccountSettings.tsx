@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Lang } from '../game/types';
 import { useGame } from '../store/GameContext';
 import { useOnline, type OnlineError } from './OnlineContext';
 import { createBootstrapSnapshot, serverConfigToGameState, serverSyncToGameState } from './gameSync';
-import { acceptHouseholdInvite, createHouseholdDevicePairing } from './api';
+import { acceptHouseholdInvite, createHouseholdDevicePairing, inviteParent } from './api';
 
 const field: React.CSSProperties = {
   width: '100%', boxSizing: 'border-box', background: '#0f1420', border: '1px solid #333c50', borderRadius: 12,
@@ -30,15 +30,18 @@ const COPY = {
     accountStep: '1 av 2 · Din konto', familyStep: '2 av 2 · Familien',
     register: 'Opprett konto', login: 'Logg inn', name: 'Navn', email: 'E-post', password: 'Passord, minst 10 tegn',
     childLogin: 'Jeg har en barnekode', sharedLogin: 'Dette er en familieenhet', sharedDevice: 'Familieenhet', otherLogin: 'Har du fått en kode?',
+    familyInvite: 'Jeg har en familieinvitasjon', createAndJoin: 'Opprett konto og bli med', loginAndJoin: 'Logg inn og bli med',
     pairingCode: 'Kode', pin: 'PIN', deviceName: 'Navn på enheten', connecting: 'Kobler til…',
     familyTitle: 'Hvordan vil du fortsette?', familyBody: 'Start familiens Boss Kamp, eller bruk en invitasjon for å bli med i en som finnes.',
-    createChoice: 'Start en familie', createChoiceSub: 'Bruk spillerne du nettopp satte opp', joinChoice: 'Bli med i en familie', joinChoiceSub: 'Skriv inn invitasjonskoden du har fått',
+    createChoice: 'Start en familie', createChoiceSub: 'Din spiller lages automatisk', joinChoice: 'Bli med i en familie', joinChoiceSub: 'Skriv inn invitasjonskoden du har fått',
     family: 'Familien', householdName: 'Navn på familien', createHousehold: 'Start familiens Boss Kamp', creating: 'Gjør klart…',
     bootstrapNote: 'Vi tar med spillerne, bossene og fremgangen din. Kampen som pågår starter på nytt.',
     back: 'Tilbake', inviteToken: 'Invitasjonskode', acceptInvite: 'Bli med', joining: 'Blir med…',
     connected: 'Familien er tilkoblet', saved: 'Alt er lagret', saving: 'Lagrer…', checking: 'Sjekker tilkoblingen…',
     safeRetry: 'Endringen er trygg på denne enheten. Vi prøver igjen automatisk.', retry: 'Prøv igjen',
     household: 'Familie', fighters: 'Spillere', peopleDevices: 'Personer og enheter',
+    yourFighter: 'Din spiller', yourFighterSub: 'Laget fra kontoen din', otherPlayers: 'Andre spillere', otherPlayersSub: 'Legg bare til personer som spiller på denne enheten', addPlayer: 'Legg til barn eller annen spiller', playerName: 'Navn på spiller',
+    inviteParent: 'Inviter en annen forelder', parentEmail: 'E-post til den andre forelderen', parentCodeTitle: 'Send denne koden til den andre forelderen', createInvite: 'Lag invitasjon',
     createSharedCode: 'Koble til en felles enhet', sharedCodeTitle: 'Skriv denne koden på familieenheten', copy: 'Kopier', copied: 'Kopiert',
     joinHousehold: 'Bytt eller bli med i en annen familie', logout: 'Logg ut',
     advanced: 'Teknisk informasjon', pending: 'endringer venter', lastSync: 'Sist lagret', syncNow: 'Synkroniser nå', role: 'Tilgang',
@@ -54,15 +57,18 @@ const COPY = {
     accountStep: '1 of 2 · Your account', familyStep: '2 of 2 · The family',
     register: 'Create account', login: 'Sign in', name: 'Name', email: 'Email', password: 'Password, at least 10 characters',
     childLogin: 'I have a child code', sharedLogin: 'This is a family device', sharedDevice: 'Family device', otherLogin: 'Have you received a code?',
+    familyInvite: 'I have a family invitation', createAndJoin: 'Create account and join', loginAndJoin: 'Sign in and join',
     pairingCode: 'Code', pin: 'PIN', deviceName: 'Device name', connecting: 'Connecting…',
     familyTitle: 'How would you like to continue?', familyBody: 'Start your family’s Boss Kamp, or use an invitation to join an existing one.',
-    createChoice: 'Start a family', createChoiceSub: 'Use the fighters you just set up', joinChoice: 'Join a family', joinChoiceSub: 'Enter the invitation code you received',
+    createChoice: 'Start a family', createChoiceSub: 'Your fighter is created automatically', joinChoice: 'Join a family', joinChoiceSub: 'Enter the invitation code you received',
     family: 'The family', householdName: 'Family name', createHousehold: 'Start the family’s Boss Kamp', creating: 'Getting ready…',
     bootstrapNote: 'We will bring your fighters, bosses, and progress. The current fight will restart.',
     back: 'Back', inviteToken: 'Invitation code', acceptInvite: 'Join', joining: 'Joining…',
     connected: 'Family connected', saved: 'Everything is saved', saving: 'Saving…', checking: 'Checking connection…',
     safeRetry: 'The change is safe on this device. We will retry automatically.', retry: 'Try again',
     household: 'Family', fighters: 'Fighters', peopleDevices: 'People and devices',
+    yourFighter: 'Your fighter', yourFighterSub: 'Created from your account', otherPlayers: 'Other fighters', otherPlayersSub: 'Only add people who play on this device', addPlayer: 'Add a child or another fighter', playerName: 'Fighter name',
+    inviteParent: 'Invite another parent', parentEmail: 'The other parent’s email', parentCodeTitle: 'Send this code to the other parent', createInvite: 'Create invitation',
     createSharedCode: 'Connect a shared device', sharedCodeTitle: 'Enter this code on the family device', copy: 'Copy', copied: 'Copied',
     joinHousehold: 'Switch or join another family', logout: 'Sign out',
     advanced: 'Technical information', pending: 'changes waiting', lastSync: 'Last saved', syncNow: 'Sync now', role: 'Access',
@@ -81,7 +87,9 @@ export function AccountSettings({ lang, setup = false }: { lang: Lang; setup?: b
   const copy = COPY[lang];
   const { state, actions } = useOnline();
   const { state: gameState, actions: gameActions } = useGame();
-  const [formMode, setFormMode] = useState<'login' | 'register' | 'child' | 'shared'>('register');
+  const [formMode, setFormMode] = useState<'login' | 'register' | 'invite' | 'child' | 'shared'>('register');
+  const [inviteAuthMode, setInviteAuthMode] = useState<'login' | 'register'>('register');
+  const [acceptInviteAfterAuth, setAcceptInviteAfterAuth] = useState(false);
   const [familyMode, setFamilyMode] = useState<FamilyMode>('pick');
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
@@ -92,6 +100,8 @@ export function AccountSettings({ lang, setup = false }: { lang: Lang; setup?: b
   const [inviteToken, setInviteToken] = useState('');
   const [householdName, setHouseholdName] = useState<string>(copy.family);
   const [sharedCode, setSharedCode] = useState<string | null>(null);
+  const [parentEmail, setParentEmail] = useState('');
+  const [parentCode, setParentCode] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [setupError, setSetupError] = useState<string | null>(null);
   const busy = state.status === 'syncing' || state.status === 'restoring';
@@ -99,16 +109,42 @@ export function AccountSettings({ lang, setup = false }: { lang: Lang; setup?: b
   const connected = Boolean(state.householdId && state.configurationConnectedAt);
   const needsRetry = connected && (state.status === 'offline' || state.status === 'error' || state.pendingMutationCount > 0);
   const isParent = state.mode === 'adult-account' && (state.role === 'owner' || state.role === 'parent');
+  const ownFighter = state.userId
+    ? gameState.game.fighters.find((fighter) => fighter.userId === state.userId || fighter.id === `account-${state.userId}`)
+    : undefined;
+  const otherFighters = gameState.game.fighters.filter((fighter) => fighter.id !== ownFighter?.id);
+
+  useEffect(() => {
+    if (state.mode !== 'adult-account' || !state.userId || !state.account || connected) return;
+    gameActions.ensureAccountFighter(state.userId, state.account.displayName);
+  }, [connected, gameActions, state.account, state.mode, state.userId]);
+
+  useEffect(() => {
+    if (!acceptInviteAfterAuth || !state.sessionToken || !inviteToken.trim()) return;
+    setAcceptInviteAfterAuth(false);
+    void acceptHouseholdInvite(state.sessionToken, inviteToken.trim())
+      .then(() => actions.refreshIdentity())
+      .catch(() => {
+        setFamilyMode('join');
+        setSetupError(copy.joinFailed);
+      });
+  }, [acceptInviteAfterAuth, actions, copy.joinFailed, inviteToken, state.sessionToken]);
 
   async function authenticate() {
     setSetupError(null);
     try {
       if (formMode === 'register') await actions.registerAdult(email.trim(), password, displayName.trim());
       else if (formMode === 'login') await actions.loginAdult(email.trim(), password);
+      else if (formMode === 'invite') {
+        setAcceptInviteAfterAuth(true);
+        if (inviteAuthMode === 'register') await actions.registerAdult(email.trim(), password, displayName.trim());
+        else await actions.loginAdult(email.trim(), password);
+      }
       else if (formMode === 'child') await actions.loginChildWithPairing(pairingCode.trim().toUpperCase(), pin, deviceName.trim(), 'android');
       else await actions.pairHouseholdDevice(pairingCode.trim().toUpperCase(), deviceName.trim(), 'android');
       setPassword('');
     } catch {
+      if (formMode === 'invite') setAcceptInviteAfterAuth(false);
       // The centralized state exposes a localized, non-sensitive error.
     }
   }
@@ -129,6 +165,18 @@ export function AccountSettings({ lang, setup = false }: { lang: Lang; setup?: b
     await navigator.clipboard?.writeText(sharedCode).catch(() => undefined);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1500);
+  }
+
+  async function createParentInvitation() {
+    if (!state.sessionToken || !state.householdId || !parentEmail.trim()) return;
+    setSetupError(null);
+    try {
+      const invitation = await inviteParent(state.sessionToken, state.householdId, parentEmail.trim());
+      setParentCode(invitation.token);
+      setParentEmail('');
+    } catch {
+      setSetupError(copy.errors['invalid-request']);
+    }
   }
 
   async function acceptInvite() {
@@ -187,6 +235,17 @@ export function AccountSettings({ lang, setup = false }: { lang: Lang; setup?: b
               <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete={formMode === 'register' ? 'new-password' : 'current-password'} placeholder={copy.password} style={field} />
             </>}
 
+            {formMode === 'invite' && <>
+              <input value={inviteToken} onChange={(event) => setInviteToken(event.target.value)} autoCapitalize="characters" placeholder={copy.inviteToken} style={{ ...field, textTransform: 'uppercase', fontWeight: 800, letterSpacing: 1 }} />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <ModeButton active={inviteAuthMode === 'register'} onClick={() => setInviteAuthMode('register')}>{copy.register}</ModeButton>
+                <ModeButton active={inviteAuthMode === 'login'} onClick={() => setInviteAuthMode('login')}>{copy.login}</ModeButton>
+              </div>
+              {inviteAuthMode === 'register' && <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder={copy.name} style={field} />}
+              <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" autoComplete="email" placeholder={copy.email} style={field} />
+              <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete={inviteAuthMode === 'register' ? 'new-password' : 'current-password'} placeholder={copy.password} style={field} />
+            </>}
+
             {(formMode === 'child' || formMode === 'shared') && <>
               <input value={pairingCode} onChange={(event) => setPairingCode(event.target.value)} autoCapitalize="characters" placeholder={copy.pairingCode} style={{ ...field, textTransform: 'uppercase', fontWeight: 800, letterSpacing: 1 }} />
               {formMode === 'child' && <input value={pin} onChange={(event) => setPin(event.target.value.replace(/\D/g, ''))} inputMode="numeric" type="password" placeholder={copy.pin} style={field} />}
@@ -194,14 +253,17 @@ export function AccountSettings({ lang, setup = false }: { lang: Lang; setup?: b
             </>}
 
             {state.error && <Notice color="#ff8f85">{copy.errors[state.error as OnlineError]}</Notice>}
-            <button disabled={busy || (formMode === 'child' || formMode === 'shared' ? pairingCode.trim().length < 4 || !deviceName.trim() || (formMode === 'child' && pin.length < 4) : !email.trim() || password.length < 10 || (formMode === 'register' && !displayName.trim()))} onClick={authenticate} style={{ ...primary, opacity: busy ? .6 : 1 }}>
-              {busy ? copy.connecting : formMode === 'register' ? copy.register : formMode === 'child' ? copy.childLogin : formMode === 'shared' ? copy.sharedLogin : copy.login}
+            <button disabled={busy || (formMode === 'child' || formMode === 'shared'
+              ? pairingCode.trim().length < 4 || !deviceName.trim() || (formMode === 'child' && pin.length < 4)
+              : !email.trim() || password.length < 10 || (formMode === 'register' && !displayName.trim()) || (formMode === 'invite' && (!inviteToken.trim() || (inviteAuthMode === 'register' && !displayName.trim()))))} onClick={authenticate} style={{ ...primary, opacity: busy ? .6 : 1 }}>
+              {busy ? copy.connecting : formMode === 'register' ? copy.register : formMode === 'invite' ? (inviteAuthMode === 'register' ? copy.createAndJoin : copy.loginAndJoin) : formMode === 'child' ? copy.childLogin : formMode === 'shared' ? copy.sharedLogin : copy.login}
             </button>
           </div>
 
           <details style={{ ...details, marginTop: 14 }}>
             <summary style={summary}>{copy.otherLogin}</summary>
             <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
+              <button onClick={() => setFormMode('invite')} style={secondary}>{copy.familyInvite}</button>
               <button onClick={() => setFormMode('child')} style={secondary}>{copy.childLogin}</button>
               <button onClick={() => setFormMode('shared')} style={secondary}>{copy.sharedLogin}</button>
             </div>
@@ -230,15 +292,30 @@ export function AccountSettings({ lang, setup = false }: { lang: Lang; setup?: b
           {familyMode === 'create' && <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
             <button onClick={() => setFamilyMode('pick')} style={backButton}>‹ {copy.back}</button>
             <input value={householdName} onChange={(event) => setHouseholdName(event.target.value)} placeholder={copy.householdName} style={field} autoFocus />
-            <div style={{ padding: 12, borderRadius: 12, background: '#121827', border: '1px solid #2b3346' }}>
-              <div style={{ color: '#7D8698', fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: .6 }}>{copy.fighters}</div>
-              <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginTop: 9 }}>
-                {gameState.game.fighters.map((fighter) => <FighterChip key={fighter.id} name={fighter.name} color={fighter.color} />)}
+            <div style={{ padding: 13, borderRadius: 12, background: 'rgba(244,185,66,.08)', border: '1px solid rgba(244,185,66,.28)' }}>
+              <div style={{ color: '#F4B942', fontSize: 11, fontWeight: 850, textTransform: 'uppercase', letterSpacing: .6 }}>{copy.yourFighter}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10 }}>
+                {ownFighter && <FighterChip name={ownFighter.name} color={ownFighter.color} />}
+                <span style={{ color: '#8E97A8', fontSize: 11.5 }}>{copy.yourFighterSub}</span>
               </div>
+            </div>
+            <div style={{ padding: 13, borderRadius: 12, background: '#121827', border: '1px solid #2b3346' }}>
+              <div style={{ color: '#D4D9E2', fontSize: 12.5, fontWeight: 800 }}>{copy.otherPlayers}</div>
+              <div style={{ color: '#7D8698', fontSize: 11.5, lineHeight: 1.4, marginTop: 3 }}>{copy.otherPlayersSub}</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: otherFighters.length ? 11 : 0 }}>
+                {otherFighters.map((fighter) => (
+                  <div key={fighter.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ width: 28, height: 28, flex: 'none', borderRadius: 9, background: fighter.color }} />
+                    <input value={fighter.name} onChange={(event) => gameActions.editFighter(fighter.id, { name: event.target.value })} placeholder={copy.playerName} style={{ ...field, padding: '10px 11px', fontSize: 13 }} />
+                    <button onClick={() => gameActions.deleteFighter(fighter.id)} aria-label="Remove" style={{ width: 36, height: 36, flex: 'none', borderRadius: 9, border: '1px solid rgba(224,86,74,.4)', background: '#241518', color: '#ff8f85', fontSize: 19, cursor: 'pointer' }}>×</button>
+                  </div>
+                ))}
+              </div>
+              <button onClick={gameActions.addFighter} style={{ ...secondary, marginTop: 11, borderStyle: 'dashed' }}>+ {copy.addPlayer}</button>
             </div>
             <p style={{ margin: 0, color: '#8E97A8', fontSize: 12.5, lineHeight: 1.5 }}>{copy.bootstrapNote}</p>
             {setupError && <Notice color="#ff8f85">{setupError}</Notice>}
-            <button disabled={busy || !householdName.trim()} onClick={createHousehold} style={primary}>{busy ? copy.creating : copy.createHousehold}</button>
+            <button disabled={busy || !householdName.trim() || !ownFighter || otherFighters.some((fighter) => !fighter.name.trim())} onClick={createHousehold} style={primary}>{busy ? copy.creating : copy.createHousehold}</button>
           </div>}
 
           {familyMode === 'join' && <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
@@ -287,6 +364,14 @@ export function AccountSettings({ lang, setup = false }: { lang: Lang; setup?: b
       {state.mode === 'adult-account' && <details style={{ ...card, ...details }}>
         <summary style={summary}>{copy.peopleDevices}</summary>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 13 }}>
+          {isParent && <details style={details}>
+            <summary style={{ ...summary, fontSize: 13 }}>{copy.inviteParent}</summary>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
+              <input value={parentEmail} onChange={(event) => setParentEmail(event.target.value)} type="email" placeholder={copy.parentEmail} style={field} />
+              <button disabled={!parentEmail.trim() || busy} onClick={() => void createParentInvitation()} style={primary}>{copy.createInvite}</button>
+              {parentCode && <CodeCard title={copy.parentCodeTitle} code={parentCode} button={copied ? copy.copied : copy.copy} onCopy={() => void navigator.clipboard?.writeText(parentCode)} />}
+            </div>
+          </details>}
           {isParent && <button onClick={() => void createSharedPairing()} style={secondary}>{copy.createSharedCode}</button>}
           {sharedCode && <CodeCard title={copy.sharedCodeTitle} code={sharedCode} button={copied ? copy.copied : copy.copy} onCopy={() => void copySharedCode()} />}
           <details style={details}>
