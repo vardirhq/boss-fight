@@ -33,9 +33,19 @@ DATABASE_URL=postgresql://boss_kamp_app:<password>@127.0.0.1:5432/boss_kamp
 CORS_ORIGIN=*
 LOG_LEVEL=info
 SESSION_DAYS=90
+SMTP_HOST=<smtp-host>
+SMTP_PORT=587
+SMTP_USER=<smtp-user>
+SMTP_PASS=<smtp-password>
+SMTP_FROM="Boss Kamp <chris@vardir.no>"
+SMTP_REPLY_TO=chris@vardir.no
 ```
 
 Never commit environment files.
+
+SMTP is required for adult and parent invitations. The API only reports an
+invitation as created after the mail server accepts the message. For local
+development, Mailpit or another SMTP catcher can be used.
 
 ## Deploy
 
