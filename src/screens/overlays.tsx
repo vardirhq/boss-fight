@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useGame } from '../store/GameContext';
 import { useT, GOLD } from '../ui/common';
 import type { Lang } from '../game/types';
@@ -6,9 +7,15 @@ const PS = "'Press Start 2P'";
 
 function Toggle({ on, onClick }: { on: boolean; onClick: () => void }) {
   return (
-    <div onClick={onClick} style={{ position: 'relative', width: 50, height: 30, borderRadius: 16, cursor: 'pointer', transition: 'background .2s', background: on ? GOLD : '#333c50' }}>
-      <div style={{ position: 'absolute', top: 3, left: 3, width: 24, height: 24, borderRadius: '50%', background: '#fff', transition: 'transform .2s', transform: `translateX(${on ? 20 : 0}px)` }} />
-    </div>
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      onClick={onClick}
+      style={{ position: 'relative', flex: 'none', width: 48, height: 28, padding: 0, border: `1px solid ${on ? '#dca32f' : '#3a4356'}`, borderRadius: 15, cursor: 'pointer', transition: 'background .2s,border-color .2s', background: on ? GOLD : '#293142' }}
+    >
+      <span style={{ position: 'absolute', top: 3, left: 3, width: 20, height: 20, borderRadius: '50%', background: on ? '#20160a' : '#a8b0bf', boxShadow: '0 1px 3px rgba(0,0,0,.35)', transition: 'transform .2s', transform: `translateX(${on ? 20 : 0}px)` }} />
+    </button>
   );
 }
 
@@ -21,43 +28,93 @@ function langBtn(active: boolean): React.CSSProperties {
   };
 }
 
-export function SettingsPanel() {
+type SettingsPanelProps = {
+  onOpenAccount: () => void;
+  accountSubtitle: string;
+  accountConnected: boolean;
+};
+
+type SettingsPage = 'main' | 'language';
+
+export function SettingsPanel({ onOpenAccount, accountSubtitle, accountConnected }: SettingsPanelProps) {
   const { state, actions } = useGame();
   const t = useT();
   const s = state.game.settings;
+  const [page, setPage] = useState<SettingsPage>('main');
   const setLang = (l: Lang) => actions.setSetting('lang', l);
+  const copy = s.lang === 'en'
+    ? {
+        title: 'Settings', account: 'Account & household', accountFallback: 'Manage family, devices and sync',
+        general: 'General', language: 'Language', currentLanguage: 'English', experience: 'Experience',
+        data: 'Data', about: 'Boss Kamp · Version 1.0', back: 'Back', close: 'Close settings',
+      }
+    : {
+        title: 'Innstillinger', account: 'Konto og husholdning', accountFallback: 'Administrer familie, enheter og synk',
+        general: 'Generelt', language: 'Språk', currentLanguage: 'Norsk', experience: 'Opplevelse',
+        data: 'Data', about: 'Boss Kamp · Versjon 1.0', back: 'Tilbake', close: 'Lukk innstillinger',
+      };
+
+  const header = (
+    <div style={{ flex: 'none', minHeight: 64, padding: 'calc(12px + env(safe-area-inset-top)) 16px 10px', borderBottom: '1px solid rgba(255,255,255,.07)', display: 'flex', alignItems: 'center', gap: 12, background: 'rgba(11,14,22,.96)' }}>
+      {page === 'language' ? (
+        <IconButton label={copy.back} onClick={() => setPage('main')}><BackIcon /></IconButton>
+      ) : <div style={{ width: 42 }} />}
+      <div style={{ flex: 1, fontSize: 22, fontWeight: 800, letterSpacing: '-.35px', color: '#f6ebdd' }}>{page === 'language' ? copy.language : copy.title}</div>
+      {page === 'main' ? (
+        <IconButton label={copy.close} onClick={actions.closeSettings}><CloseIcon /></IconButton>
+      ) : <div style={{ width: 42 }} />}
+    </div>
+  );
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 90, background: '#0b0e16', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ flex: 'none', padding: 'calc(20px + env(safe-area-inset-top)) 18px 14px', borderBottom: '1px solid #222a3c', display: 'flex', alignItems: 'center', gap: 12 }}>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontFamily: PS, fontSize: 13, color: GOLD }}>{t.settings}</div>
-          <div style={{ fontSize: 12, color: '#6C7486', marginTop: 8, fontWeight: 500 }}>{t.settingsSub}</div>
-        </div>
-        <button onClick={actions.closeSettings} style={{ flex: 'none', padding: '12px 20px', border: 'none', borderRadius: 13, background: 'linear-gradient(180deg,#ffd873,#F4B942)', color: '#20160A', fontFamily: PS, fontSize: 9, letterSpacing: 1, cursor: 'pointer', boxShadow: '0 4px 0 #b8801f' }}>{t.done}</button>
-      </div>
-      <div className="scr" style={{ flex: 1, overflowY: 'auto', padding: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <div style={secLabel}>{t.language}</div>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <button onClick={() => setLang('no')} style={langBtn(s.lang === 'no')}><span style={{ fontSize: 18 }}>🇳🇴</span> Norsk</button>
-          <button onClick={() => setLang('en')} style={langBtn(s.lang === 'en')}><span style={{ fontSize: 18 }}>🇬🇧</span> English</button>
-        </div>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 90, background: 'linear-gradient(180deg,#0d111b,#090c13)', display: 'flex', flexDirection: 'column' }}>
+      {header}
+      {page === 'main' ? (
+        <div className="scr" style={{ flex: 1, overflowY: 'auto', padding: '20px 16px calc(32px + env(safe-area-inset-bottom))' }}>
+          <div style={{ width: '100%', maxWidth: 560, margin: '0 auto' }}>
+            <Section>
+              <MenuRow
+                icon={<AccountIcon />}
+                iconColor="#8fc0ff"
+                title={copy.account}
+                subtitle={accountSubtitle || copy.accountFallback}
+                onClick={onOpenAccount}
+                trailing={<><span style={{ width: 8, height: 8, borderRadius: '50%', background: accountConnected ? '#67d391' : GOLD, boxShadow: `0 0 8px ${accountConnected ? '#67d39188' : '#f4b94288'}` }} /><Chevron /></>}
+              />
+            </Section>
 
-        <div style={{ ...secLabel, marginTop: 22 }}>{t.audioMotion}</div>
-        <Row title={t.sound} sub={t.soundSub}><Toggle on={s.sound} onClick={() => actions.setSetting('sound', !s.sound)} /></Row>
-        <Row title={t.haptics} sub={t.hapticsSub}><Toggle on={s.haptics} onClick={() => actions.setSetting('haptics', !s.haptics)} /></Row>
-        <Row title={t.reducedMotion} sub={t.reducedMotionSub}><Toggle on={s.reducedMotion} onClick={() => actions.setSetting('reducedMotion', !s.reducedMotion)} /></Row>
+            <SectionLabel>{copy.general}</SectionLabel>
+            <Section>
+              <MenuRow icon={<GlobeIcon />} iconColor="#a88cf0" title={copy.language} onClick={() => setPage('language')} trailing={<><span style={valueStyle}>{copy.currentLanguage}</span><Chevron /></>} />
+            </Section>
 
-        <div style={{ ...secLabel, marginTop: 22 }}>{t.data}</div>
-        <button onClick={actions.askReset} style={{ display: 'flex', alignItems: 'center', gap: 14, background: '#1b2130', border: '1px solid rgba(224,86,74,.35)', borderRadius: 15, padding: '15px 16px', cursor: 'pointer', textAlign: 'left' }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: '#E0564A' }}>{t.resetProgress}</div>
-            <div style={{ fontSize: 12, color: '#6C7486', marginTop: 3, fontWeight: 500 }}>{t.resetSub}</div>
+            <SectionLabel>{copy.experience}</SectionLabel>
+            <Section>
+              <MenuRow icon={<SoundIcon />} iconColor="#67d391" title={t.sound} subtitle={t.soundSub} trailing={<Toggle on={s.sound} onClick={() => actions.setSetting('sound', !s.sound)} />} />
+              <Divider />
+              <MenuRow icon={<HapticsIcon />} iconColor="#f4b942" title={t.haptics} subtitle={t.hapticsSub} trailing={<Toggle on={s.haptics} onClick={() => actions.setSetting('haptics', !s.haptics)} />} />
+              <Divider />
+              <MenuRow icon={<MotionIcon />} iconColor="#e68278" title={t.reducedMotion} subtitle={t.reducedMotionSub} trailing={<Toggle on={s.reducedMotion} onClick={() => actions.setSetting('reducedMotion', !s.reducedMotion)} />} />
+            </Section>
+
+            <SectionLabel>{copy.data}</SectionLabel>
+            <Section>
+              <MenuRow icon={<TrashIcon />} iconColor="#e0564a" title={t.resetProgress} subtitle={t.resetSub} titleColor="#f07b70" onClick={actions.askReset} trailing={<Chevron color="#7b4244" />} />
+            </Section>
+            <div style={{ textAlign: 'center', fontSize: 12, color: '#4d5669', fontWeight: 600, marginTop: 28 }}>{copy.about}</div>
           </div>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#E0564A" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
-        </button>
-        <div style={{ textAlign: 'center', fontSize: 12, color: '#3f4759', fontWeight: 600, marginTop: 24 }}>{t.about}</div>
-      </div>
+        </div>
+      ) : (
+        <div className="scr" style={{ flex: 1, overflowY: 'auto', padding: '20px 16px calc(32px + env(safe-area-inset-bottom))' }}>
+          <div style={{ width: '100%', maxWidth: 560, margin: '0 auto' }}>
+            <Section>
+              <LanguageRow flag="🇳🇴" title="Norsk" active={s.lang === 'no'} onClick={() => setLang('no')} />
+              <Divider />
+              <LanguageRow flag="🇬🇧" title="English" active={s.lang === 'en'} onClick={() => setLang('en')} />
+            </Section>
+          </div>
+        </div>
+      )}
 
       {state.ui.confirmReset && (
         <div style={{ position: 'absolute', inset: 0, zIndex: 2, background: 'rgba(6,8,12,.82)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 28, backdropFilter: 'blur(3px)' }}>
@@ -76,17 +133,64 @@ export function SettingsPanel() {
   );
 }
 
-function Row({ title, sub, children }: { title: string; sub: string; children: React.ReactNode }) {
+function Section({ children }: { children: React.ReactNode }) {
+  return <div style={{ overflow: 'hidden', borderRadius: 16, border: '1px solid #252d3d', background: '#151b28', boxShadow: '0 6px 18px rgba(0,0,0,.16)' }}>{children}</div>;
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return <div style={{ margin: '24px 12px 8px', color: '#788297', fontSize: 12, fontWeight: 800, letterSpacing: '.65px', textTransform: 'uppercase' }}>{children}</div>;
+}
+
+function Divider() {
+  return <div style={{ height: 1, marginLeft: 64, background: 'rgba(255,255,255,.065)' }} />;
+}
+
+function MenuRow({ icon, iconColor, title, subtitle, titleColor = '#f6ebdd', trailing, onClick }: {
+  icon: React.ReactNode; iconColor: string; title: string; subtitle?: string; titleColor?: string;
+  trailing?: React.ReactNode; onClick?: () => void;
+}) {
+  const content = (
+    <>
+      <span style={{ width: 34, height: 34, flex: 'none', borderRadius: 10, display: 'grid', placeItems: 'center', color: iconColor, background: `${iconColor}18` }}>{icon}</span>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: 'block', fontSize: 15, fontWeight: 700, color: titleColor, lineHeight: 1.25 }}>{title}</span>
+        {subtitle && <span style={{ display: 'block', fontSize: 12, color: '#818a9d', marginTop: 3, lineHeight: 1.35, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{subtitle}</span>}
+      </span>
+      {trailing && <span style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 8 }}>{trailing}</span>}
+    </>
+  );
+  const style: React.CSSProperties = { width: '100%', minHeight: 62, display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', border: 0, background: 'transparent', textAlign: 'left', color: '#f6ebdd' };
+  return onClick
+    ? <button type="button" onClick={onClick} style={{ ...style, cursor: 'pointer' }}>{content}</button>
+    : <div style={style}>{content}</div>;
+}
+
+function LanguageRow({ flag, title, active, onClick }: { flag: string; title: string; active: boolean; onClick: () => void }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 14, background: '#1b2130', border: '1px solid #2b3346', borderRadius: 15, padding: '15px 16px' }}>
-      <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 15, fontWeight: 700, color: '#F6EBDD' }}>{title}</div>
-        <div style={{ fontSize: 12, color: '#6C7486', marginTop: 3, fontWeight: 500 }}>{sub}</div>
-      </div>
-      {children}
-    </div>
+    <button type="button" onClick={onClick} style={{ width: '100%', minHeight: 58, display: 'flex', alignItems: 'center', gap: 13, padding: '10px 16px', border: 0, background: 'transparent', color: '#f6ebdd', cursor: 'pointer', textAlign: 'left' }}>
+      <span style={{ fontSize: 24 }}>{flag}</span>
+      <span style={{ flex: 1, fontSize: 16, fontWeight: 700 }}>{title}</span>
+      {active && <CheckIcon />}
+    </button>
   );
 }
+
+function IconButton({ label, onClick, children }: { label: string; onClick: () => void; children: React.ReactNode }) {
+  return <button type="button" aria-label={label} onClick={onClick} style={{ width: 42, height: 42, padding: 0, border: '1px solid #293143', borderRadius: '50%', background: '#171d2a', color: '#d9deea', display: 'grid', placeItems: 'center', cursor: 'pointer' }}>{children}</button>;
+}
+
+const valueStyle: React.CSSProperties = { color: '#929bad', fontSize: 13, fontWeight: 600 };
+const iconProps = { width: 20, height: 20, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
+function AccountIcon() { return <svg {...iconProps}><circle cx="12" cy="8" r="3" /><path d="M5.5 20a6.5 6.5 0 0 1 13 0" /><path d="M3 11.5V5l9-3 9 3v6.5" /></svg>; }
+function GlobeIcon() { return <svg {...iconProps}><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18" /></svg>; }
+function SoundIcon() { return <svg {...iconProps}><path d="M11 5 6 9H3v6h3l5 4zM15 9a4 4 0 0 1 0 6M18 6a8 8 0 0 1 0 12" /></svg>; }
+function HapticsIcon() { return <svg {...iconProps}><rect x="7" y="3" width="10" height="18" rx="2" /><path d="M4 8v8M20 8v8M10 17h4" /></svg>; }
+function MotionIcon() { return <svg {...iconProps}><path d="M4 12h3l2-5 4 10 2-5h5" /></svg>; }
+function TrashIcon() { return <svg {...iconProps}><path d="M3 6h18M8 6V4h8v2M19 6l-1 15H6L5 6M10 10v7M14 10v7" /></svg>; }
+function Chevron({ color = '#657086' }: { color?: string }) { return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6" /></svg>; }
+function BackIcon() { return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>; }
+function CloseIcon() { return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round"><path d="m6 6 12 12M18 6 6 18" /></svg>; }
+function CheckIcon() { return <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke={GOLD} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 4 4L19 6" /></svg>; }
 
 export function Splash() {
   const { actions } = useGame();
@@ -211,5 +315,3 @@ export function Toast() {
     </div>
   );
 }
-
-const secLabel: React.CSSProperties = { fontFamily: PS, fontSize: 8, color: '#6C7486', letterSpacing: 1, marginBottom: 4 };
