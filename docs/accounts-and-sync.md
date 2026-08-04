@@ -19,9 +19,9 @@ flows, and broader integration coverage).
    adult account gets one linked fighter automatically when they create or join
    a household. Manually created fighters are reserved for people who play
    through a parent or shared device, and may later be claimed by one user.
-2. **Claimed ≠ locked.** Claiming a fighter lets that person play from their own
-   device. It does *not* have to stop the family tablet from logging their
-   chores. Those are two separate flags (see [Authority](#authority-rules)).
+2. **A claimed fighter belongs to that account.** Once a fighter is connected,
+   only that person's authenticated session may act as it. Parents and shared
+   devices can continue to use unclaimed fighters.
 3. **Per-cycle boss state is derived, never stored.** HP, used chores, and
    "cleared" fall out of an append-only event log. This is what makes concurrent
    writes from two phones safe without conflict resolution.
@@ -111,9 +111,8 @@ application layer, not with a constraint you'll fight forever.
 ### Devices
 
 The kitchen tablet is a first-class principal, not a logged-in parent who forgot
-to sign out. `kind = 'household'` devices may act as any unlocked fighter; that
-is the shared-couch case, and it is the reason strict per-user ownership would
-break the product.
+to sign out. `kind = 'household'` devices may act as unclaimed fighters, while
+claimed fighters require their linked account.
 
 ```sql
 create table devices (
@@ -202,7 +201,7 @@ create table fighters (
   name               text not null,
   color              text not null,
   avatar_hash        text,        -- content hash; bytes live in fighter_avatars
-  -- when true, ONLY the linked user's device may act as this fighter
+  -- legacy compatibility field; claimed fighters are always account-owned
   require_own_device boolean not null default false,
   streak             integer not null default 0,
   coins_cached       integer not null default 0,
@@ -224,6 +223,9 @@ create unique index fighters_one_per_user
 
 create index fighters_household on fighters (household_id) where deleted_at is null;
 ```
+
+`require_own_device` remains in the deployed schema for backward compatibility,
+but authorization no longer consults it: every claimed fighter is account-owned.
 
 `coins_cached` and `career_xp_cached` are exactly that — caches. The ledger and
 the completion log are the truth (see [Derived state](#derived-state)).
@@ -523,33 +525,22 @@ change that fixes cycle rollover, elite rolls, and rare spawns together.
 ## Authority rules
 
 The database stores relationships; the server enforces the rules. Endpoints must
-never trust a submitted `fighterId` — derive the actor from the session, and
-require an explicit act-on-behalf endpoint for the parent case.
+never trust a submitted `fighterId`; they verify its ownership against the
+authenticated principal for every fighter-scoped mutation.
 
 | Fighter state | Who may act as it |
 | --- | --- |
-| `user_id IS NULL` (unclaimed) | any parent/owner, and household devices |
-| claimed, `require_own_device = false` | the linked user, any parent/owner, and household devices — all audited |
-| claimed, `require_own_device = true` | **only** the linked user's session |
+| `user_id IS NULL` (unclaimed) | any authenticated household member, and household devices |
+| `user_id IS NOT NULL` (claimed) | **only** the linked user's session |
 
-Parents always manage the world regardless of claims: create and edit bosses,
+Parents still manage the world regardless of claims: create and edit bosses,
 chores and rewards, configure the household, unlink or suspend an account, and
-see all activity. What they cannot do is silently *be* someone else — every
-act-on-behalf write carries `performed_by_user_id`, `performed_by_device_id`, and
-`acted_on_behalf = true`, and the fighter's own history shows it.
+see all activity. Management authority never grants permission to play, transfer
+coins, or redeem personal rewards as another connected person.
 
-That middle row is the departure from strict ownership, and it is deliberate.
-The party rail (`BattleScreen.tsx:141-144`) lets anyone tap any fighter to switch
-who is attacking, and `activeFighterId` is household state persisted to `meta`
-(`repository.ts:201`) — one tablet on the kitchen counter with kids taking turns
-*is* the product. Strict ownership would mean connecting a child's account
-removes them from the family tablet, which for a child with no phone deletes them
-from the game. Ownership should govern authority, not physical presence; the
-audit trail is what deters a parent claiming a child's coins, and it does so
-without breaking the legitimate case.
-
-`require_own_device` is there for the teenager who wants the strict rule. Default
-it off.
+The party rail keeps every fighter visible in the household's canonical order.
+Fighters linked to another account are disabled; the signed-in person can select
+their own fighter and any unclaimed fighter.
 
 ---
 

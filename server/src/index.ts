@@ -11,6 +11,7 @@ type JsonObject = Record<string, unknown>;
 type AuthContext = { userId: string; sessionId: string };
 type PrincipalContext = { userId: string | null; sessionId?: string; deviceId?: string; kind: 'user' | 'household_device' };
 type HouseholdRole = 'owner' | 'parent' | 'member' | 'child';
+type FighterOwnerRow = { user_id?: unknown };
 
 const scrypt = promisify(scryptCallback);
 const passwordKeyLength = 64;
@@ -87,6 +88,12 @@ function stringValue(value: unknown, field: string): string {
 
 function publicId(row: JsonObject) {
   return requireString(row.id, 'id');
+}
+
+function mayPrincipalActAsFighter(auth: PrincipalContext, fighter: FighterOwnerRow | undefined) {
+  if (!fighter) return false;
+  const fighterUserId = typeof fighter.user_id === 'string' ? fighter.user_id : null;
+  return fighterUserId === null || (auth.kind === 'user' && fighterUserId === auth.userId);
 }
 
 function tokenHash(token: string) {
@@ -360,7 +367,8 @@ export async function buildApp() {
     const domainMessages = [
       'does not belong to household', 'Chore does not belong to boss',
       'does not reference a submitted boss', 'Avatar hash does not match bytes',
-      'Fighter requires their own device', 'Chore is already completed for this cycle',
+      'Fighter belongs to another account',
+      'Chore is already completed for this cycle',
       'Insufficient wallet balance', 'Reward scope does not match fighter',
       'Fighter is already claimed or missing',
       'Cycle key is no longer current', 'Boss is not currently available',
@@ -780,7 +788,7 @@ export async function buildApp() {
         left join users u on u.id = f.user_id
         left join household_members hm on hm.household_id = f.household_id and hm.user_id = f.user_id
         where f.household_id = ${householdId}
-        order by f.sort, f.created_at
+        order by f.sort, f.created_at, f.id
       `,
       sql`
         select fa.fighter_id, fa.mime, encode(fa.bytes, 'base64') as bytes_base64, fa.hash
@@ -831,13 +839,12 @@ export async function buildApp() {
 
     const [fighter] = await sql`
       insert into fighters (
-        household_id, user_id, name, color, avatar_hash, require_own_device,
-        sort, created_by_user_id
+        household_id, user_id, name, color, avatar_hash, sort, created_by_user_id
       )
       values (
         ${householdId}, ${optionalString(body.userId)}::uuid, ${requireString(body.name, 'name')},
         ${requireString(body.color, 'color')}, ${optionalString(body.avatarHash)},
-        ${optionalBoolean(body.requireOwnDevice)}, ${optionalNumber(body.sort)}, ${auth.userId}
+        ${optionalNumber(body.sort)}, ${auth.userId}
       )
       returning *
     `;
@@ -855,7 +862,6 @@ export async function buildApp() {
       set name = coalesce(${optionalString(body.name)}, name),
           color = coalesce(${optionalString(body.color)}, color),
           avatar_hash = coalesce(${optionalString(body.avatarHash)}, avatar_hash),
-          require_own_device = coalesce(${optionalBooleanOrNull(body.requireOwnDevice)}, require_own_device),
           sort = coalesce(${optionalNumberOrNull(body.sort)}, sort),
           version = version + 1
       where id = ${fighterId} and household_id = ${householdId} and deleted_at is null
@@ -941,22 +947,6 @@ export async function buildApp() {
       set pin_hash = excluded.pin_hash, failed_attempts = 0, locked_until = null
     `;
     return { ok: true };
-  });
-
-  app.patch('/api/households/:householdId/fighters/:fighterId/access', async (request) => {
-    const auth = await requireAuth(request);
-    const { householdId, fighterId } = request.params as { householdId: string; fighterId: string };
-    await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
-    const body = requireObject(request.body);
-    const requireOwnDevice = optionalBoolean(body.requireOwnDevice);
-    const [fighter] = await sql`
-      update fighters set require_own_device = ${requireOwnDevice}, version = version + 1
-      where id = ${fighterId} and household_id = ${householdId}
-        and deleted_at is null and (user_id is not null or ${requireOwnDevice} = false)
-      returning *
-    `;
-    if (!fighter) throw new Error('Not found');
-    return { fighter };
   });
 
   app.post('/api/households/:householdId/fighters/:fighterId/suspend', async (request) => {
@@ -1424,6 +1414,7 @@ export async function buildApp() {
         left join users u on u.id = f.user_id
         left join household_members hm on hm.household_id = f.household_id and hm.user_id = f.user_id
         where f.household_id = ${householdId}
+        order by f.sort, f.created_at, f.id
       `,
       sql`
         select fa.fighter_id, fa.mime, encode(fa.bytes, 'base64') as bytes_base64, fa.hash, fa.updated_at
@@ -1744,27 +1735,13 @@ export async function buildApp() {
           `;
           if (!chore || chore.boss_id !== bossId) throw new Error('Chore does not belong to boss');
           const [fighter] = await tx`
-            select id, user_id, require_own_device from fighters
+            select id, user_id from fighters
             where id = ${fighterId} and household_id = ${householdId} and deleted_at is null
           `;
           if (!fighter) throw new Error('fighters row does not belong to household');
 
-          let mayAct = false;
-          let actedOnBehalf = false;
-          if (auth.kind === 'household_device') {
-            mayAct = !fighter.require_own_device;
-            actedOnBehalf = fighter.user_id !== null;
-          } else if (auth.userId) {
-            const ownsFighter = fighter.user_id === auth.userId;
-            const [membership] = await tx`
-              select role from household_members
-              where household_id = ${householdId} and user_id = ${auth.userId} and status = 'active'
-            `;
-            const isParent = membership && (membership.role === 'owner' || membership.role === 'parent');
-            mayAct = ownsFighter || Boolean(isParent && !fighter.require_own_device);
-            actedOnBehalf = !ownsFighter;
-          }
-          if (!mayAct) throw new Error('Fighter requires their own device');
+          if (!mayPrincipalActAsFighter(auth, fighter)) throw new Error('Fighter belongs to another account');
+          const actedOnBehalf = Boolean(auth.userId && fighter.user_id !== auth.userId);
 
           const cycleKey = requireString(payload.cycleKey, 'cycleKey');
           if (cycleKey !== serverCycleKey(boss, timezone)) throw new Error('Cycle key is no longer current');
@@ -1850,20 +1827,11 @@ export async function buildApp() {
           const bossId = requireString(payload.bossId, 'bossId');
           const fighterId = requireString(payload.fighterId, 'fighterId');
           const [actingFighter] = await tx`
-            select user_id, require_own_device from fighters
+            select user_id from fighters
             where id = ${fighterId} and household_id = ${householdId} and deleted_at is null
           `;
           if (!actingFighter) throw new Error('fighters row does not belong to household');
-          const [membership] = auth.userId ? await tx`
-            select role from household_members
-            where household_id = ${householdId} and user_id = ${auth.userId} and status = 'active'
-          ` : [null];
-          const ownsFighter = Boolean(auth.userId && actingFighter.user_id === auth.userId);
-          const isParent = membership && (membership.role === 'owner' || membership.role === 'parent');
-          const mayReset = auth.kind === 'household_device'
-            ? !actingFighter.require_own_device
-            : ownsFighter || Boolean(isParent && !actingFighter.require_own_device);
-          if (!mayReset) throw new Error('Fighter requires their own device');
+          if (!mayPrincipalActAsFighter(auth, actingFighter)) throw new Error('Fighter belongs to another account');
           const cycleKey = requireString(payload.cycleKey, 'cycleKey');
           const resetSeq = optionalNumber(payload.resetSeq);
           const [duplicate] = await tx`
@@ -1920,21 +1888,12 @@ export async function buildApp() {
           const amount = optionalNumber(payload.amount);
           if (amount <= 0) throw new Error('Transfer amount must be positive');
           const [fighter] = await tx`
-            select user_id, require_own_device from fighters
+            select user_id from fighters
             where id = ${fighterId} and household_id = ${householdId} and deleted_at is null
             for update
           `;
           if (!fighter) throw new Error('fighters row does not belong to household');
-          const [membership] = auth.userId ? await tx`
-            select role from household_members
-            where household_id = ${householdId} and user_id = ${auth.userId} and status = 'active'
-          ` : [null];
-          const ownsFighter = Boolean(auth.userId && fighter.user_id === auth.userId);
-          const isParent = membership && (membership.role === 'owner' || membership.role === 'parent');
-          const mayAct = auth.kind === 'household_device'
-            ? !fighter.require_own_device
-            : ownsFighter || Boolean(isParent && !fighter.require_own_device);
-          if (!mayAct) throw new Error('Fighter requires their own device');
+          if (!mayPrincipalActAsFighter(auth, fighter)) throw new Error('Fighter belongs to another account');
           const [balance] = await tx`
             select coalesce(sum(amount), 0)::integer as amount from wallet_transactions
             where household_id = ${householdId} and fighter_id = ${fighterId}
@@ -2015,20 +1974,11 @@ export async function buildApp() {
           }
           if (fighterId) {
             const [fighter] = await tx`
-              select user_id, require_own_device from fighters
+              select user_id from fighters
               where id = ${fighterId} and household_id = ${householdId} and deleted_at is null
               for update
             `;
-            const [membership] = auth.userId ? await tx`
-              select role from household_members
-              where household_id = ${householdId} and user_id = ${auth.userId} and status = 'active'
-            ` : [null];
-            const ownsFighter = Boolean(auth.userId && fighter?.user_id === auth.userId);
-            const isParent = membership && (membership.role === 'owner' || membership.role === 'parent');
-            const mayAct = auth.kind === 'household_device'
-              ? !fighter?.require_own_device
-              : ownsFighter || Boolean(isParent && !fighter?.require_own_device);
-            if (!mayAct) throw new Error('Fighter requires their own device');
+            if (!mayPrincipalActAsFighter(auth, fighter)) throw new Error('Fighter belongs to another account');
           } else {
             if (auth.userId) {
               const [membership] = await tx`

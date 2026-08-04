@@ -310,12 +310,6 @@ export async function acceptHouseholdInvite(token: string, inviteToken: string) 
   }, token);
 }
 
-export async function updateFighterAccess(token: string, householdId: string, fighterId: string, requireOwnDevice: boolean) {
-  return request<{ fighter: Record<string, unknown> }>(`/api/households/${encodeURIComponent(householdId)}/fighters/${encodeURIComponent(fighterId)}/access`, {
-    method: 'PATCH', body: JSON.stringify({ requireOwnDevice }),
-  }, token);
-}
-
 export async function suspendFighterAccess(token: string, householdId: string, fighterId: string, suspended = true) {
   return request<{ ok: boolean }>(`/api/households/${encodeURIComponent(householdId)}/fighters/${encodeURIComponent(fighterId)}/suspend`, {
     method: 'POST', body: JSON.stringify({ suspended }),

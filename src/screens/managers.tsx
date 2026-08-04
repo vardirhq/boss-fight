@@ -15,7 +15,6 @@ import {
   setupChildFighter,
   suspendFighterAccess,
   unlinkFighterAccount,
-  updateFighterAccess,
 } from '../online/api';
 import { serverSyncToGameState } from '../online/gameSync';
 
@@ -277,14 +276,6 @@ function FighterOnlineControls({ fighter }: { fighter: Fighter }) {
       setBusy(false);
     }
   };
-  const toggleAccess = async () => {
-    try {
-      await updateFighterAccess(token, householdId, fighter.id, !fighter.requireOwnDevice);
-      await refresh();
-    } catch {
-      setError(en ? 'Could not change device access.' : 'Kunne ikke endre enhetstilgangen.');
-    }
-  };
   const suspendAccess = async () => {
     const restoring = fighter.accountStatus === 'suspended';
     if (!window.confirm(restoring
@@ -329,11 +320,6 @@ function FighterOnlineControls({ fighter }: { fighter: Fighter }) {
           <button onClick={() => void pairChild()} style={smallAction}>{en ? 'Connect a device' : 'Koble til en enhet'}</button>
           <button onClick={() => void resetPin()} style={smallAction}>{en ? 'Change PIN' : 'Bytt PIN'}</button>
         </>}
-        {fighter.userId && (
-          <button onClick={() => void toggleAccess()} style={{ ...smallAction, color: fighter.requireOwnDevice ? '#F4B942' : '#67D391' }}>
-            {fighter.requireOwnDevice ? (en ? 'Only their device' : 'Bare egen enhet') : (en ? 'Can play here' : 'Kan spille her')}
-          </button>
-        )}
         {fighter.userId && !isOwnFighter && <>
           <button onClick={() => void suspendAccess()} style={{ ...smallAction, color: '#F4B942' }}>{fighter.accountStatus === 'suspended' ? (en ? 'Restore access' : 'Gjenopprett tilgang') : (en ? 'Suspend access' : 'Sperr tilgang')}</button>
           <button onClick={() => void unlinkAccount()} style={{ ...smallAction, color: '#ff8f85' }}>{en ? 'Unlink account' : 'Koble fra konto'}</button>

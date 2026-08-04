@@ -20,6 +20,8 @@ export const SPRITE = {
   laundryElite: '/uploads/laundry-dragon-elite-transparent.webp',
 } as const;
 
+export const DEFAULT_LAUNDRY_BOSS_NAME = 'Vaskeridderen';
+
 /**
  * Bespoke "enraged" art keyed by base sprite. When a boss using one of these
  * sprites rolls elite for the cycle, we swap in the dedicated art instead of the
@@ -49,6 +51,13 @@ export const SPRITE_RENAMES: Record<string, string> = Object.fromEntries(
 /** Map a stored sprite path to its current file (identity if already current). */
 export function remapSprite(path: string): string {
   return SPRITE_RENAMES[path] ?? path;
+}
+
+/** Rename the original misleading default while preserving custom boss names. */
+export function remapBossName(name: string, sprite: string): string {
+  return name === 'Vaskedragen' && remapSprite(sprite) === SPRITE.laundry
+    ? DEFAULT_LAUNDRY_BOSS_NAME
+    : name;
 }
 
 /** Pool of sprites cycled through in the boss manager. */
@@ -91,7 +100,7 @@ interface SeedBoss {
 }
 
 const SEED_BOSSES: SeedBoss[] = [
-  { id: 'laundry', name: 'Vaskedragen', sprite: SPRITE.laundry, trigger: { type: 'daglig', note: 'Vaskedag' },
+  { id: 'laundry', name: DEFAULT_LAUNDRY_BOSS_NAME, sprite: SPRITE.laundry, trigger: { type: 'daglig', note: 'Vaskedag' },
     attacks: [
       { title: 'Start en vask', damage: 12 }, { title: 'Heng opp klær', damage: 18 }, { title: 'Brett bunken', damage: 28 },
       { title: 'Par sokkene', damage: 14 }, { title: 'Legg bort klær', damage: 32 }, { title: 'Fjern gulvsokker', damage: 16 },

@@ -16,6 +16,9 @@ increasing Android version codes for install/update compatibility.
 ### Fixed
 
 - Keep the boss-introduction overlay dismissed during background synchronization.
+- Rename the default laundry boss to match its knight-like artwork, keep fighter
+  ordering stable across synchronization, and prevent accounts from acting as
+  fighters linked to someone else, including before an offline cache refresh.
 
 ## [1.0.0] - 2026-08-04
 

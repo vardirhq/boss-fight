@@ -144,7 +144,7 @@ export function BattleScreen() {
             const pinging = ui.ping?.fighterId === f.id;
             const accessible = mayActAsFighter(online.state, f);
             return (
-              <button key={f.id} disabled={!accessible} title={!accessible ? (f.requireOwnDevice ? 'This fighter requires their own device' : `Only ${f.name} can use this fighter`) : undefined} onClick={() => actions.selectFighter(f.id)} style={{ ...railBtn, opacity: accessible ? 1 : .38, cursor: accessible ? 'pointer' : 'not-allowed' }}>
+              <button key={f.id} disabled={!accessible} title={!accessible ? (lang === 'en' ? `Only ${f.name}'s account can use this fighter` : `Bare kontoen til ${f.name} kan bruke denne spilleren`) : undefined} onClick={() => actions.selectFighter(f.id)} style={{ ...railBtn, opacity: accessible ? 1 : .38, cursor: accessible ? 'pointer' : 'not-allowed' }}>
                 <div style={{ position: 'relative', width: 48, height: 48, borderRadius: 14, background: '#2C3548', border: `2px solid ${f.color}`, display: 'grid', placeItems: 'center', fontFamily: PS, fontSize: 13, color: f.color }}>
                   {sel && <div style={{ position: 'absolute', inset: -3, borderRadius: 15, background: hexA(f.color, .16), boxShadow: `0 0 0 2px ${f.color},0 0 18px ${hexA(f.color, .55)}` }} />}
                   <Avatar fighter={f} radius={12} />

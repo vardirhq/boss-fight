@@ -350,7 +350,6 @@ Request:
   "name": "Lina",
   "color": "#ffcc00",
   "avatarHash": "optional-content-hash",
-  "requireOwnDevice": false,
   "sort": 0
 }
 ```
@@ -372,7 +371,6 @@ Request fields are optional:
   "name": "Lina",
   "color": "#ffcc00",
   "avatarHash": "content-hash",
-  "requireOwnDevice": true,
   "sort": 1
 }
 ```
@@ -408,8 +406,6 @@ These routes require `owner` or `parent` and preserve the fighter's game
 history:
 
 - `POST /api/households/:householdId/fighters/:fighterId/pin` resets a child PIN.
-- `PATCH /api/households/:householdId/fighters/:fighterId/access` sets
-  `requireOwnDevice`.
 - `POST /api/households/:householdId/fighters/:fighterId/suspend` suspends or
   restores the linked member; suspension revokes their sessions and devices.
 - `POST /api/households/:householdId/fighters/:fighterId/unlink` removes the

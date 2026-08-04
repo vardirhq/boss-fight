@@ -65,8 +65,6 @@ export interface Fighter {
   userId?: string;
   userKind?: 'adult' | 'child';
   accountStatus?: 'active' | 'suspended' | 'left' | 'invited';
-  /** When true, parents and shared household devices cannot act for this fighter. */
-  requireOwnDevice?: boolean;
 }
 
 /** A single attack recorded during the current battle cycle. */
