@@ -14,6 +14,7 @@ import { sendHouseholdInviteEmail } from './email.js';
 import { assertCanManageMembership, type GovernanceRole } from './governance.js';
 import { childAuthRateLimit, committedChildPairAuthentication } from './childAuth.js';
 import { publicSyncRows } from './syncProjection.js';
+import { PRIVACY_NOTICE_VERSION, privacyExportRows } from './privacy.js';
 
 type JsonObject = Record<string, unknown>;
 type AuthContext = { userId: string; sessionId: string };
@@ -831,6 +832,77 @@ export async function buildApp() {
     };
   });
 
+  app.get('/api/households/:householdId/export', async (request) => {
+    const auth = await requireAuth(request);
+    const householdId = (request.params as { householdId: string }).householdId;
+    await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
+
+    const [household] = await sql`
+      select * from households where id = ${householdId} and deleted_at is null
+    `;
+    if (!household) throw new Error('Not found');
+
+    const [
+      members, childAuthorizations, devices, fighters, fighterAvatars, invites,
+      pairings, bosses, chores, rewards, choreCompletions, bossResets,
+      bossVictories, walletTransactions, rewardRedemptions,
+    ] = await Promise.all([
+      sql`
+        select hm.*, u.kind, u.display_name, u.email
+        from household_members hm
+        join users u on u.id = hm.user_id
+        where hm.household_id = ${householdId}
+        order by hm.joined_at, hm.id
+      `,
+      sql`select * from child_authorizations where household_id = ${householdId} order by authorized_at, id`,
+      sql`select * from devices where household_id = ${householdId} order by created_at, id`,
+      sql`select * from fighters where household_id = ${householdId} order by sort, created_at, id`,
+      sql`
+        select fa.fighter_id, fa.mime, encode(fa.bytes, 'base64') as bytes_base64,
+               fa.hash, fa.updated_at
+        from fighter_avatars fa
+        join fighters f on f.id = fa.fighter_id
+        where f.household_id = ${householdId}
+        order by fa.fighter_id
+      `,
+      sql`select * from household_invites where household_id = ${householdId} order by created_at, id`,
+      sql`select * from device_pairings where household_id = ${householdId} order by created_at, id`,
+      sql`select * from bosses where household_id = ${householdId} order by sort, created_at, id`,
+      sql`select * from chores where household_id = ${householdId} order by sort, created_at, id`,
+      sql`select * from rewards where household_id = ${householdId} order by scope, sort, created_at, id`,
+      sql`select * from chore_completions where household_id = ${householdId} order by created_at, id`,
+      sql`select * from boss_resets where household_id = ${householdId} order by created_at, id`,
+      sql`select * from boss_victories where household_id = ${householdId} order by created_at, id`,
+      sql`select * from wallet_transactions where household_id = ${householdId} order by created_at, id`,
+      sql`select * from reward_redemptions where household_id = ${householdId} order by created_at, id`,
+    ]);
+
+    return {
+      format: 'boss-kamp-household-export',
+      formatVersion: 1,
+      exportedAt: new Date().toISOString(),
+      privacyNoticeVersion: PRIVACY_NOTICE_VERSION,
+      data: {
+        household: privacyExportRows('household', [household])[0],
+        members: privacyExportRows('members', members),
+        childAuthorizations: privacyExportRows('childAuthorizations', childAuthorizations),
+        devices: privacyExportRows('devices', devices),
+        fighters: privacyExportRows('fighters', fighters),
+        fighterAvatars: privacyExportRows('fighterAvatars', fighterAvatars),
+        invites: privacyExportRows('invites', invites),
+        pairings: privacyExportRows('pairings', pairings),
+        bosses: privacyExportRows('bosses', bosses),
+        chores: privacyExportRows('chores', chores),
+        rewards: privacyExportRows('rewards', rewards),
+        choreCompletions: privacyExportRows('choreCompletions', choreCompletions),
+        bossResets: privacyExportRows('bossResets', bossResets),
+        bossVictories: privacyExportRows('bossVictories', bossVictories),
+        walletTransactions: privacyExportRows('walletTransactions', walletTransactions),
+        rewardRedemptions: privacyExportRows('rewardRedemptions', rewardRedemptions),
+      },
+    };
+  });
+
   app.patch('/api/households/:householdId', async (request) => {
     const auth = await requireAuth(request);
     const householdId = (request.params as { householdId: string }).householdId;
@@ -915,6 +987,9 @@ export async function buildApp() {
     const fighterId = requireString(body.fighterId, 'fighterId');
     const pin = requireString(body.pin, 'pin');
     if (pin.length < 4) throw new Error('PIN must be at least 4 digits');
+    if (body.authorized !== true || body.privacyNoticeVersion !== PRIVACY_NOTICE_VERSION) {
+      throw new Error('Current privacy notice authorization is required');
+    }
 
     const result = await sql.begin(async (tx) => {
       const [existingFighter] = await tx`
@@ -942,6 +1017,13 @@ export async function buildApp() {
       await tx`
         insert into fighter_credentials (fighter_id, pin_hash)
         values (${fighter.id}, ${await hashSecret(pin)})
+      `;
+      await tx`
+        insert into child_authorizations (
+          household_id, child_user_id, authorized_by_user_id, privacy_notice_version
+        ) values (
+          ${householdId}, ${user.id}, ${auth.userId}, ${PRIVACY_NOTICE_VERSION}
+        )
       `;
       return { user, memberId: publicId(member), fighter };
     });

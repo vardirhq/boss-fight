@@ -142,6 +142,7 @@ export interface ServerSyncState {
 }
 
 export type ApiErrorKind = 'network' | 'unauthenticated' | 'forbidden' | 'conflict' | 'validation' | 'server' | 'unknown';
+export const PRIVACY_NOTICE_VERSION = '2026-08-05';
 
 export class ApiError extends Error {
   constructor(
@@ -286,7 +287,9 @@ export async function loginChildWithPairing(code: string, pin: string, deviceNam
 
 export async function setupChildFighter(token: string, householdId: string, fighterId: string, pin: string) {
   return request<{ fighter: Record<string, unknown> }>(`/api/households/${encodeURIComponent(householdId)}/children`, {
-    method: 'POST', body: JSON.stringify({ fighterId, pin }),
+    method: 'POST', body: JSON.stringify({
+      fighterId, pin, authorized: true, privacyNoticeVersion: PRIVACY_NOTICE_VERSION,
+    }),
   }, token);
 }
 
@@ -367,6 +370,19 @@ export async function getHouseholdConfig(token: string, householdId: string) {
     rewards: result.rewards,
     balances: Array.isArray(result.balances) ? result.balances : [],
   } satisfies ServerHouseholdConfig;
+}
+
+export async function getHouseholdExport(token: string, householdId: string) {
+  const result = await request<Record<string, unknown>>(
+    `/api/households/${encodeURIComponent(householdId)}/export`,
+    {},
+    token,
+  );
+  if (result.format !== 'boss-kamp-household-export' || typeof result.exportedAt !== 'string'
+    || !result.data || typeof result.data !== 'object') {
+    throw new ApiError('Invalid API response: household export', 'server');
+  }
+  return result;
 }
 
 export async function pushSyncMutations(token: string | null, householdId: string, mutations: PendingMutation[], householdDeviceToken?: string | null) {

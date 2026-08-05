@@ -7,6 +7,12 @@ increasing Android version codes for install/update compatibility.
 
 ## [Unreleased]
 
+### Added
+
+- Publish a bilingual privacy notice, record the responsible adult and notice
+  version for new child logins, and let owners and parents download a
+  credential-free JSON export of family configuration and activity history.
+
 ## [1.0.1] - 2026-08-05
 
 ### Added
@@ -76,4 +82,3 @@ increasing Android version codes for install/update compatibility.
 - Server-backed household sync with adult accounts, child PIN login, household
   device pairing, synced game configuration, and append-only gameplay events.
 - Offline-first PWA gameplay with local SQLite persistence.
-

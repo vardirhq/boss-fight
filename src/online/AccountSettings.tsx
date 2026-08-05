@@ -3,7 +3,7 @@ import type { Lang } from '../game/types';
 import { useGame } from '../store/GameContext';
 import { useOnline, type OnlineError } from './OnlineContext';
 import { createBootstrapSnapshot, serverConfigToGameState, serverSyncToGameState } from './gameSync';
-import { acceptHouseholdInvite, ApiError, createHouseholdDevicePairing, inviteParent } from './api';
+import { acceptHouseholdInvite, ApiError, createHouseholdDevicePairing, getHouseholdExport, inviteParent } from './api';
 
 const field: React.CSSProperties = {
   width: '100%', boxSizing: 'border-box', background: '#0f1420', border: '1px solid #333c50', borderRadius: 12,
@@ -44,6 +44,7 @@ const COPY = {
     inviteParent: 'Inviter en annen forelder', parentEmail: 'E-post til den andre forelderen', createInvite: 'Send invitasjon',
     parentInviteSent: 'Invitasjonen er sendt til {email}.', inviteSendFailed: 'E-posten kunne ikke sendes. Prøv igjen senere.',
     createSharedCode: 'Koble til en felles enhet', sharedCodeTitle: 'Skriv denne koden på familieenheten', copy: 'Kopier', copied: 'Kopiert',
+    privacyData: 'Personvern og familiedata', privacyDataBody: 'Last ned en JSON-kopi av familieoppsettet, spillerne og aktivitetshistorikken som er lagret på nett.', downloadData: 'Last ned familiedata', downloadingData: 'Laster ned…', exportFailed: 'Familiedataene kunne ikke lastes ned.',
     joinHousehold: 'Bytt eller bli med i en annen familie', logout: 'Logg ut',
     advanced: 'Teknisk informasjon', pending: 'endringer venter', rejected: 'avviste endringer krever oppfølging', revision: 'Konfigurasjonsversjon', lastSync: 'Sist lagret', syncNow: 'Synkroniser nå', role: 'Tilgang',
     fighterNameRequired: 'Gi alle spillerne et navn før familien opprettes.', joinFailed: 'Invitasjonen kunne ikke godtas.',
@@ -72,6 +73,7 @@ const COPY = {
     inviteParent: 'Invite another parent', parentEmail: 'The other parent’s email', createInvite: 'Send invitation',
     parentInviteSent: 'The invitation was sent to {email}.', inviteSendFailed: 'The email could not be sent. Try again later.',
     createSharedCode: 'Connect a shared device', sharedCodeTitle: 'Enter this code on the family device', copy: 'Copy', copied: 'Copied',
+    privacyData: 'Privacy and family data', privacyDataBody: 'Download a JSON copy of the family configuration, fighters, and activity history stored online.', downloadData: 'Download family data', downloadingData: 'Downloading…', exportFailed: 'The family data could not be downloaded.',
     joinHousehold: 'Switch or join another family', logout: 'Sign out',
     advanced: 'Technical information', pending: 'changes waiting', rejected: 'rejected changes need attention', revision: 'Configuration revision', lastSync: 'Last saved', syncNow: 'Sync now', role: 'Access',
     fighterNameRequired: 'Name every fighter before creating the family.', joinFailed: 'The invitation could not be accepted.',
@@ -106,6 +108,7 @@ export function AccountSettings({ lang, setup = false }: { lang: Lang; setup?: b
   const [parentInviteSentTo, setParentInviteSentTo] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [setupError, setSetupError] = useState<string | null>(null);
+  const [exportingData, setExportingData] = useState(false);
   const busy = state.status === 'syncing' || state.status === 'restoring';
   const signedIn = Boolean(state.sessionToken || state.householdDeviceToken);
   const connected = Boolean(state.householdId && state.configurationConnectedAt);
@@ -215,6 +218,26 @@ export function AccountSettings({ lang, setup = false }: { lang: Lang; setup?: b
       if (sync) gameActions.replaceGame(serverSyncToGameState(sync, gameState.game));
     } catch {
       // The queue is retained for the next retry.
+    }
+  }
+
+  async function downloadFamilyData() {
+    if (!state.sessionToken || !state.householdId || !isParent) return;
+    setSetupError(null);
+    setExportingData(true);
+    try {
+      const exported = await getHouseholdExport(state.sessionToken, state.householdId);
+      const blob = new Blob([`${JSON.stringify(exported, null, 2)}\n`], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `boss-kamp-family-data-${new Date().toISOString().slice(0, 10)}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setSetupError(copy.exportFailed);
+    } finally {
+      setExportingData(false);
     }
   }
 
@@ -401,6 +424,14 @@ export function AccountSettings({ lang, setup = false }: { lang: Lang; setup?: b
         </div>
         <button disabled={busy} onClick={() => void synchronize()} style={{ ...secondary, marginTop: 10 }}>{copy.syncNow}</button>
       </details>
+
+      {isParent && <details style={{ ...card, ...details }}>
+        <summary style={summary}>{copy.privacyData}</summary>
+        <p style={{ color: '#8E97A8', fontSize: 12.5, lineHeight: 1.5, margin: '11px 0 0' }}>{copy.privacyDataBody}</p>
+        <button disabled={exportingData} onClick={() => void downloadFamilyData()} style={{ ...secondary, marginTop: 10 }}>
+          {exportingData ? copy.downloadingData : copy.downloadData}
+        </button>
+      </details>}
 
       <button onClick={() => void actions.logout()} style={secondary}>{copy.logout}</button>
     </div>
