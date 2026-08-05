@@ -11,6 +11,8 @@ increasing Android version codes for install/update compatibility.
 
 - Persist synchronized gameplay events per household and send independent
   server-sequence cursors so recurring syncs download only new event history.
+- Assign a fresh synchronization sequence to every reward-redemption status
+  transition so redemption history can also use an incremental cursor safely.
 - Verify ownership of new adult email addresses with emailed, hashed, single-use
   24-hour codes, resend controls, and a bilingual in-app confirmation flow.
 

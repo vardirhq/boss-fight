@@ -848,8 +848,8 @@ since_reward_redemptions=0
 
 Clients persist the greatest `server_seq` received for each event stream and
 send those values on later pulls. Responses contain only rows after the supplied
-cursors. Reward redemptions temporarily continue from zero because their status
-can change without a new sequence; that stream is still merged by row identity.
+cursors. Reward-redemption status transitions receive a fresh sequence, so
+their updated row is delivered incrementally and replaces the cached version.
 
 Response:
 

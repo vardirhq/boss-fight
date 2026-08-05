@@ -33,8 +33,7 @@ export function syncCursors(events: SyncEventCache): SyncCursors {
     boss_resets: maximum('boss_resets'),
     boss_victories: maximum('boss_victories'),
     wallet_transactions: maximum('wallet_transactions'),
-    // Redemption rows can change status without receiving a new sequence yet.
-    reward_redemptions: 0,
+    reward_redemptions: maximum('reward_redemptions'),
   };
 }
 

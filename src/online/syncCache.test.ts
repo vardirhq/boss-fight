@@ -8,10 +8,11 @@ test('incremental events merge by identity and advance independent cursors', () 
   const incoming = emptySyncEventCache();
   incoming.chore_completions = [{ id: 'a', server_seq: 2, damage: 12 }, { id: 'b', server_seq: 5 }];
   incoming.wallet_transactions = [{ id: 'w', server_seq: 9 }];
+  incoming.reward_redemptions = [{ id: 'r', server_seq: 7, status: 'used' }];
   const merged = mergeSyncEvents(current, incoming);
   assert.deepEqual(merged.chore_completions.map((row) => row.id), ['a', 'b']);
   assert.equal(merged.chore_completions[0].damage, 12);
   assert.deepEqual(syncCursors(merged), {
-    chore_completions: 5, boss_resets: 0, boss_victories: 0, wallet_transactions: 9, reward_redemptions: 0,
+    chore_completions: 5, boss_resets: 0, boss_victories: 0, wallet_transactions: 9, reward_redemptions: 7,
   });
 });

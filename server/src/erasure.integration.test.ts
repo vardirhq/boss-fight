@@ -145,6 +145,29 @@ test('PostgreSQL lifecycle erasure preserves only the documented records', {
 
     const second = await register('second@example.com', 'Second Parent');
     const secondHousehold = await bootstrap(second.token, 'Second Family');
+    const [cursorReward] = await database`
+      insert into rewards (household_id, scope, icon, title, descr, cost)
+      values (${secondHousehold}, 'group', 'test', 'Cursor reward', '', 10)
+      returning id
+    `;
+    const [cursorRedemption] = await database`
+      insert into reward_redemptions (household_id, reward_id, scope, title, cost, status)
+      values (${secondHousehold}, ${cursorReward.id}, 'group', 'Cursor reward', 10, 'active')
+      returning id, server_seq
+    `;
+    const [transitionedRedemption] = await database`
+      update reward_redemptions set status = 'used' where id = ${cursorRedemption.id}
+      returning server_seq
+    `;
+    assert.ok(Number(transitionedRedemption.server_seq) > Number(cursorRedemption.server_seq));
+    const incrementalRedemptions = await call(
+      'GET',
+      `/api/sync/pull?household_id=${secondHousehold}&since_reward_redemptions=${cursorRedemption.server_seq}`,
+      second.token,
+    );
+    assert.equal(incrementalRedemptions.status, 200);
+    assert.equal(incrementalRedemptions.body.events.reward_redemptions.length, 1);
+    assert.equal(incrementalRedemptions.body.events.reward_redemptions[0].status, 'used');
     const blocked = await call('DELETE', '/api/me', second.token, {
       password: 'integration-password', confirmedEmail: 'second@example.com',
     });
