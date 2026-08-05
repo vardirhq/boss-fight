@@ -346,6 +346,33 @@ Response:
 
 ## Fighters And Children
 
+### `GET /api/households/:householdId/export`
+
+Downloads a versioned JSON export of the household configuration, members,
+devices, child-authorization records, avatars, invitations, pairings, and complete
+gameplay/economy history. Requires `owner` or `parent`.
+
+The response is projected through explicit allowlists. Password hashes, PIN
+hashes, device/session tokens, pairing-code hashes, and household join-code
+hashes are never included.
+
+```json
+{
+  "format": "boss-kamp-household-export",
+  "formatVersion": 1,
+  "exportedAt": "2026-08-05T12:00:00.000Z",
+  "privacyNoticeVersion": "2026-08-05",
+  "data": {
+    "household": {},
+    "members": [],
+    "childAuthorizations": [],
+    "fighters": [],
+    "choreCompletions": [],
+    "walletTransactions": []
+  }
+}
+```
+
 ### `POST /api/households/:householdId/fighters`
 
 Creates an unclaimed or already-linked fighter. Requires `owner` or `parent`.
@@ -396,14 +423,18 @@ Response:
 
 Claims an existing unclaimed fighter by creating a child user, household
 membership, and PIN credential. It never creates a duplicate fighter. Requires
-`owner` or `parent`.
+`owner` or `parent`. The application requires the adult to acknowledge the
+published privacy notice, and the server records the authorizing adult, child,
+household, notice version, and timestamp.
 
 Request:
 
 ```json
 {
   "fighterId": "existing-fighter-uuid",
-  "pin": "1234"
+  "pin": "1234",
+  "authorized": true,
+  "privacyNoticeVersion": "2026-08-05"
 }
 ```
 

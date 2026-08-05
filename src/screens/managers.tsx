@@ -201,6 +201,7 @@ function FighterOnlineControls({ fighter }: { fighter: Fighter }) {
   const [inviteSentTo, setInviteSentTo] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [childAuthorized, setChildAuthorized] = useState(false);
   const connected = Boolean(online.state.sessionToken && online.state.householdId && online.state.configurationConnectedAt);
   const mayManage = online.state.role === 'owner' || online.state.role === 'parent';
   if (!connected || !mayManage) return null;
@@ -221,13 +222,14 @@ function FighterOnlineControls({ fighter }: { fighter: Fighter }) {
     if (sync) gameActions.replaceGame(serverSyncToGameState(sync, gameState.game));
   };
   const setupChild = async () => {
-    if (pin.length < 4 || busy) return;
+    if (pin.length < 4 || !childAuthorized || busy) return;
     setBusy(true); setError(null);
     try {
       await setupChildFighter(token, householdId, fighter.id, pin);
       const pairing = await createFighterPairing(token, householdId, fighter.id);
       setCode(pairing.code);
       setPin('');
+      setChildAuthorized(false);
       setSetupMode(null);
       await refresh();
     } catch {
@@ -341,8 +343,13 @@ function FighterOnlineControls({ fighter }: { fighter: Fighter }) {
         <div style={setupCard}>
           <div style={setupTitle}>{fighter.userId ? (en ? `Change ${fighter.name}'s PIN` : `Bytt PIN for ${fighter.name}`) : (en ? `Create a login for ${fighter.name}` : `Lag innlogging for ${fighter.name}`)}</div>
           <div style={setupHelp}>{en ? 'Choose a PIN with at least 4 digits. You will get a short code for the child’s device.' : 'Velg en PIN med minst 4 sifre. Etterpå får du en kort kode til barnets enhet.'}</div>
+          {!fighter.userId && <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, color: '#A8B0BF', fontSize: 11, lineHeight: 1.45 }}>
+            <input aria-label={en ? 'Authorize child login' : 'Godkjenn barneinnlogging'} type="checkbox" checked={childAuthorized} onChange={(event) => setChildAuthorized(event.target.checked)} style={{ marginTop: 2 }} />
+            <span>{en ? 'I am the child’s parent or guardian and authorize this child login after reading the ' : 'Jeg er barnets forelder eller foresatt og godkjenner denne barneinnloggingen etter å ha lest '}
+              <a href="/privacy.html" target="_blank" rel="noreferrer" style={{ color: '#8fc0ff' }}>{en ? 'privacy notice' : 'personvernerklæringen'}</a>.</span>
+          </label>}
           <input aria-label="PIN" value={pin} onChange={(event) => setPin(event.target.value.replace(/\D/g, '').slice(0, 8))} inputMode="numeric" type="password" placeholder="PIN" style={onlineInput} />
-          <button disabled={pin.length < 4 || busy} onClick={() => void (fighter.userId ? resetPin() : setupChild())} style={{ ...smallAction, width: '100%', padding: 10, opacity: busy ? .6 : 1 }}>{busy ? '…' : (fighter.userId ? (en ? 'Save PIN' : 'Lagre PIN') : (en ? 'Create login' : 'Lag innlogging'))}</button>
+          <button disabled={pin.length < 4 || (!fighter.userId && !childAuthorized) || busy} onClick={() => void (fighter.userId ? resetPin() : setupChild())} style={{ ...smallAction, width: '100%', padding: 10, opacity: busy ? .6 : 1 }}>{busy ? '…' : (fighter.userId ? (en ? 'Save PIN' : 'Lagre PIN') : (en ? 'Create login' : 'Lag innlogging'))}</button>
         </div>
       )}
       {code && (
