@@ -43,13 +43,13 @@ jobs:
             package-lock.json
             server/package-lock.json
 
-      - name: Install PWA dependencies
+      - name: Install app dependencies
         run: npm ci
 
-      - name: Build PWA
+      - name: Build native web bundle
         run: npm run build
 
-      - name: Test PWA game and sync logic
+      - name: Test game and sync logic
         run: npm test
 
       - name: Check release metadata
@@ -58,7 +58,7 @@ jobs:
       - name: Test release tooling
         run: npm run release:test
 
-      - name: Audit PWA dependencies
+      - name: Audit app dependencies
         run: npm audit --audit-level=critical
 
       - name: Install server dependencies

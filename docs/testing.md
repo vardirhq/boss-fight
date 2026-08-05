@@ -34,7 +34,7 @@ BF-006 remains in progress until the suite also includes:
 
 - PostgreSQL integration tests for transactions, concurrency, and authorization;
 - SQLite WASM persistence and fallback tests in a browser environment;
-- installed-PWA offline, cache-update, and recovery journeys; and
+- native Android offline, process-restart, upgrade, and recovery journeys; and
 - end-to-end critical user journeys with accessibility assertions.
 
 Keep this document and the remediation tracker in

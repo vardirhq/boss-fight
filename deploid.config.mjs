@@ -5,9 +5,6 @@ export default {
     framework: 'vite',
     buildCommand: 'npm run build',
     webDir: 'dist',
-    pwa: {
-      serviceWorker: true,
-    },
   },
   android: {
     packaging: 'capacitor',

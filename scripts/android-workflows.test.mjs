@@ -59,3 +59,14 @@ test('debug APK installs beside release with a distinct identity and label', asy
   assert.match(debug, /application-label:'Boss Kamp Dev'/);
   assert.doesNotMatch(release, /applicationIdSuffix|bosskamp\.dev|Boss Kamp Dev/);
 });
+
+test('native-only builds do not generate or register browser PWA artifacts', async () => {
+  const packageJson = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+  const viteConfig = await readFile(new URL('../vite.config.ts', import.meta.url), 'utf8');
+  const entrypoint = await readFile(new URL('../src/main.tsx', import.meta.url), 'utf8');
+  const deploid = await readFile(new URL('../deploid.config.mjs', import.meta.url), 'utf8');
+  assert.equal(packageJson.devDependencies['vite-plugin-pwa'], undefined);
+  assert.doesNotMatch(viteConfig, /VitePWA|workbox|manifest/i);
+  assert.doesNotMatch(entrypoint, /registerSW|serviceWorker/);
+  assert.doesNotMatch(deploid, /serviceWorker|\bpwa\b/i);
+});

@@ -1044,7 +1044,7 @@ Client storage contract:
   `localStorage`.
 - Existing Android installations migrate legacy browser-stored tokens into the
   secure store on first launch after upgrade, then scrub the browser record.
-- The browser/PWA keeps credentials in origin-scoped web storage because native
+- The browser development fallback keeps credentials in origin-scoped web storage because native
   platform storage is unavailable there; the application CSP limits executable
   and connect origins.
 - Store gameplay/config locally in SQLite/Room.

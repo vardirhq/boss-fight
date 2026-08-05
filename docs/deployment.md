@@ -52,8 +52,8 @@ values belong in `.env.production`, not in GitHub Actions or the repository.
 
 Quality checks:
 
-- install PWA dependencies with `npm ci`
-- build the PWA with `npm run build`
+- install app dependencies with `npm ci`
+- build the native web bundle with `npm run build`
 - run root dependency audit at `critical` threshold
 - install server dependencies with `npm ci`
 - build the server with `npm run build`

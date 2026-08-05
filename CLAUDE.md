@@ -4,10 +4,10 @@ Guidance for AI assistants working in this repository.
 
 ## What this is
 
-**Boss Kamp** — an offline-first PWA arcade-RPG that turns household chores into
+**Boss Kamp** — an offline-first native Android arcade-RPG that turns household chores into
 co-op boss battles for a family. Every chore is an "attack"; finishing chores
 deals damage; recurring life mess is modelled as bosses on schedules. Bilingual
-(Norwegian default, English), installable, and fully functional offline with all
+(Norwegian default, English), and fully functional offline with all
 state stored locally in a real SQLite database running in the browser via
 WebAssembly.
 
@@ -21,7 +21,7 @@ below).
 - **React 18 + TypeScript** (strict mode, `noUnusedLocals`/`noUnusedParameters`)
 - **`@sqlite.org/sqlite-wasm`** — genuine SQLite in the browser (OPFS, in-memory fallback)
 - **Capacitor 8 + secure storage** — Android packaging and Keystore-backed online credentials
-- **`vite-plugin-pwa`** (Workbox) — web manifest + service worker
+- **Capacitor 8** — native Android application shell and packaging
 - No CSS framework, no component library, or state library. Focused tests use
   Node's built-in test runner.
   UI is plain React with **inline styles**; global keyframes live in `src/styles.css`.
@@ -30,9 +30,9 @@ below).
 
 ```bash
 npm install
-npm run dev       # Vite dev server (service worker DISABLED in dev)
+npm run dev       # Vite development server for the embedded web bundle
 npm run build     # tsc -b (type-check via project refs) + vite build
-npm run preview   # serve the production build — the only way to exercise the PWA/SW
+npm run preview   # serve the production web bundle for local inspection
 npm run lint      # tsc --noEmit (type-check only — there is no ESLint/Prettier config)
 npm test          # focused client game-rule, sync, and credential tests
 ```
@@ -42,9 +42,8 @@ run `npm test` and `npm run build` (or at minimum `npm run lint`) to confirm the
 strict compiler is happy — unused locals/params are hard errors. Server tests run
 with `npm test` from `server/`.
 
-The PWA service worker only registers in the production build. Behaviour that
-depends on caching or install must be verified with `build` + `preview`, not
-`dev`.
+The shipped product is the native Android package. The Vite preview is a
+development aid, not an installable browser product.
 
 ## Architecture
 
@@ -78,7 +77,7 @@ src/
     common.tsx        useT() strings hook, BossSprite, Avatar, shared color constants
 public/
   sprites/, uploads/  Boss art (WebP w/ alpha); runtime-cached, kept out of the precache
-  icons/              PWA icons
+  icons/              app and browser-preview icons
 ```
 
 ### Data flow (one direction)
@@ -123,7 +122,7 @@ in try/catch (private-mode safe).
 Online bearer and household-device credentials are different: packaged native
 apps persist them through `src/online/credentialStorage.ts` using Android
 Keystore-backed secure storage. Never put native tokens back into `localStorage`.
-The browser/PWA fallback remains web storage because native APIs are unavailable.
+The browser-development fallback remains web storage because native APIs are unavailable.
 
 `repository.ts` owns the row↔object mapping. On first boot it seeds and stamps
 `SCHEMA_VERSION`. On later boots, if the stored version is behind, it runs
@@ -215,7 +214,7 @@ The browser/PWA fallback remains web storage because native APIs are unavailable
 
 ## Gotchas
 
-- **`dev` has no service worker.** PWA/offline/caching only work in `build`+`preview`.
+- **Native lifecycle behavior belongs in Android tests.** Browser preview is not a supported distribution target.
 - **`node_modules` is not checked in** and a fresh clone needs `npm install`
   before any command works.
 - Boss art in `public/uploads` and `public/sprites` is deliberately **excluded
