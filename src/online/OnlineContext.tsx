@@ -23,6 +23,10 @@ import {
   type SyncMutationType,
 } from './api';
 import { applyMutationResults, sendableMutations } from './syncQueue';
+import {
+  clearNativeCredentials, credentialsForPublicStorage, credentialsToRestore,
+  loadNativeCredentials, saveNativeCredentials, usesNativeCredentialStorage,
+} from './credentialStorage';
 import type { Fighter } from '../game/types';
 
 const STORAGE_KEY = 'boss-kamp-online-state-v2';
@@ -109,6 +113,14 @@ function clearPersistedState() {
   localStorage.removeItem('boss-kamp-online-session-v1');
 }
 
+function persistCredentials(state: OnlineState) {
+  if (!usesNativeCredentialStorage()) return;
+  void saveNativeCredentials({
+    sessionToken: state.sessionToken,
+    householdDeviceToken: state.householdDeviceToken,
+  }).catch((error) => console.warn('Could not persist native credentials', error));
+}
+
 function loadPendingMutations(): PendingMutation[] {
   try {
     const parsed = JSON.parse(localStorage.getItem(MUTATIONS_KEY) ?? '[]') as unknown;
@@ -182,12 +194,13 @@ function loadPersistedState(): OnlineState {
     }
     const value = JSON.parse(raw) as Partial<PersistedOnlineState>;
     const householdDevice = value.mode === 'household-device';
+    const nativeCredentials = usesNativeCredentialStorage();
     const expiresAt = typeof value.sessionExpiresAt === 'string' ? Date.parse(value.sessionExpiresAt) : Number.NaN;
     if (
       value.version !== 2
       || (householdDevice
-        ? typeof value.householdDeviceToken !== 'string' || typeof value.deviceId !== 'string' || typeof value.householdId !== 'string'
-        : typeof value.sessionToken !== 'string' || typeof value.userId !== 'string' || !isOnlineUser(value.account)
+        ? (!nativeCredentials && typeof value.householdDeviceToken !== 'string') || typeof value.deviceId !== 'string' || typeof value.householdId !== 'string'
+        : (!nativeCredentials && typeof value.sessionToken !== 'string') || typeof value.userId !== 'string' || !isOnlineUser(value.account)
           || !Number.isFinite(expiresAt) || expiresAt <= Date.now())
     ) {
       clearPersistedState();
@@ -224,13 +237,18 @@ function persistState(state: OnlineState) {
   const validHouseholdDevice = Boolean(state.mode === 'household-device' && state.householdDeviceToken && state.deviceId && state.householdId);
   if (state.mode === 'local' || (!validUser && !validHouseholdDevice)) {
     clearPersistedState();
+    persistCredentials(localState);
     return;
   }
+  const publicCredentials = credentialsForPublicStorage({
+    sessionToken: state.sessionToken,
+    householdDeviceToken: state.householdDeviceToken,
+  }, usesNativeCredentialStorage());
   const persisted: PersistedOnlineState = {
     version: 2,
     mode: state.mode,
-    sessionToken: state.sessionToken,
-    householdDeviceToken: state.householdDeviceToken,
+    sessionToken: publicCredentials.sessionToken,
+    householdDeviceToken: publicCredentials.householdDeviceToken,
     sessionExpiresAt: state.sessionExpiresAt,
     userId: state.userId,
     deviceId: state.deviceId,
@@ -247,6 +265,7 @@ function persistState(state: OnlineState) {
   };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(persisted));
   localStorage.removeItem('boss-kamp-online-session-v1');
+  persistCredentials(state);
 }
 
 function errorCode(error: unknown, operation: 'auth' | 'restore' | 'other'): OnlineError {
@@ -277,9 +296,50 @@ const OnlineContext = createContext<OnlineContextValue | null>(null);
 
 export function OnlineProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<OnlineState>(loadPersistedState);
+  const [credentialsReady, setCredentialsReady] = useState(!usesNativeCredentialStorage());
   const [pendingMutations, setPendingMutations] = useState<PendingMutation[]>(loadPendingMutations);
   const syncPromiseRef = useRef<Promise<ServerSyncState | null> | null>(null);
   const syncRerunRef = useRef(false);
+  const restorationStartedRef = useRef(false);
+
+  useEffect(() => {
+    if (!usesNativeCredentialStorage()) return;
+    let active = true;
+    void (async () => {
+      try {
+        const secure = await loadNativeCredentials();
+        if (!active) return;
+        const credentials = credentialsToRestore(secure, {
+          sessionToken: state.sessionToken,
+          householdDeviceToken: state.householdDeviceToken,
+        });
+        if (!credentials.sessionToken && !credentials.householdDeviceToken) {
+          clearPersistedState();
+          setState(localState);
+          return;
+        }
+        if (!secure && (credentials.sessionToken || credentials.householdDeviceToken)) {
+          await saveNativeCredentials(credentials);
+        }
+        if (!active) return;
+        setState((current) => {
+          const next = { ...current, ...credentials };
+          persistState(next);
+          return next;
+        });
+      } catch (error) {
+        console.warn('Could not restore native credentials', error);
+        await clearNativeCredentials().catch(() => undefined);
+        clearPersistedState();
+        setState({ ...localState, status: 'error', error: 'unknown' });
+      } finally {
+        if (active) setCredentialsReady(true);
+      }
+    })();
+    return () => { active = false; };
+    // Native credential hydration runs exactly once before session restoration.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     setState((current) => ({
@@ -328,6 +388,7 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       if (error instanceof ApiError && error.kind === 'unauthenticated') {
         clearPersistedState();
+        void clearNativeCredentials().catch(() => undefined);
         setState({ ...localState, error: 'session-ended' });
         return;
       }
@@ -340,10 +401,10 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
   }, [state.householdDeviceToken, state.householdId, state.mode, state.sessionToken]);
 
   useEffect(() => {
+    if (!credentialsReady || restorationStartedRef.current) return;
+    restorationStartedRef.current = true;
     if (state.status === 'restoring') void refreshIdentity();
-    // Session restoration only runs on provider mount. Network events below handle retries.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [credentialsReady, refreshIdentity, state.status]);
 
   useEffect(() => {
     const reconnect = () => {
@@ -486,6 +547,7 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
         // Local logout must work while offline; the remote session expires or
         // can be revoked from another authenticated device later.
       } finally {
+        await clearNativeCredentials().catch(() => undefined);
         replaceState(localState);
       }
     },
