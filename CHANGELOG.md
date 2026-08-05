@@ -56,6 +56,9 @@ increasing Android version codes for install/update compatibility.
 - Surface persistent bilingual warnings when durable game storage is unavailable,
   corrupted, or full; allow failed saves to be retried and the current SQLite
   database to be downloaded for recovery.
+- Add keyboard-native interactive cards, named controls and form fields, visible
+  focus indicators, reduced-motion support, focus-managed dialogs, accessible
+  disabled-state explanations, and live announcements for critical game feedback.
 
 ## [1.0.0] - 2026-08-04
 

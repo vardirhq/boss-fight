@@ -35,6 +35,14 @@ a { color: #f4b942; text-decoration: none; }
 a:hover { color: #ffcf6b; }
 button { font-family: inherit; }
 input { font-family: inherit; }
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 3px solid #8fc0ff;
+  outline-offset: 3px;
+}
 
 .scr::-webkit-scrollbar { width: 0; }
 .scr {
@@ -96,3 +104,12 @@ input { font-family: inherit; }
 @keyframes twinkle { 0%, 100% { opacity: .15; transform: rotate(45deg) scale(.6); } 50% { opacity: 1; transform: rotate(45deg) scale(1.15); } }
 @keyframes rareGlow { 0%, 100% { filter: drop-shadow(0 0 10px rgba(244,185,66,.55)) drop-shadow(0 12px 18px rgba(0,0,0,.5)); } 50% { filter: drop-shadow(0 0 22px rgba(255,215,120,.9)) drop-shadow(0 12px 18px rgba(0,0,0,.5)); } }
 @keyframes emberPulse { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}

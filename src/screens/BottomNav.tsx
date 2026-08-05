@@ -28,7 +28,7 @@ export function BottomNav() {
 
 function NavBtn({ active, label, onClick, children }: { tab: Tab; active: boolean; label: string; onClick: () => void; children: React.ReactNode }) {
   return (
-    <button onClick={onClick} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, padding: '4px 8px', color: active ? GOLD : DIM }}>
+    <button aria-current={active ? 'page' : undefined} aria-label={label} onClick={onClick} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, padding: '4px 8px', color: active ? GOLD : DIM }}>
       {children}
       <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: .3 }}>{label}</span>
     </button>
@@ -37,7 +37,7 @@ function NavBtn({ active, label, onClick, children }: { tab: Tab; active: boolea
 
 function BattleNavBtn({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
   return (
-    <button onClick={onClick} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '0 8px', color: active ? GOLD : DIM }}>
+    <button aria-current={active ? 'page' : undefined} aria-label={label} onClick={onClick} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '0 8px', color: active ? GOLD : DIM }}>
       <div style={{ width: 52, height: 52, borderRadius: 16, background: active ? 'linear-gradient(180deg,#ffd873,#F4B942)' : '#1b2130', border: `1px solid ${active ? GOLD : '#333c50'}`, display: 'grid', placeItems: 'center', marginTop: -16, boxShadow: '0 8px 18px rgba(0,0,0,.4)', color: active ? '#20160A' : DIM }}>
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 3.5 20 3l-.5 5.5-9 9-4.5.5.5-4.5z" /><path d="m6.5 13.5 4 4" /><path d="M3 21l3.5-3.5" /></svg>
       </div>

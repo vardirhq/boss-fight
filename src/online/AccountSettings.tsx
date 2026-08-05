@@ -236,26 +236,26 @@ export function AccountSettings({ lang, setup = false }: { lang: Lang; setup?: b
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
             {(formMode === 'register' || formMode === 'login') && <>
-              {formMode === 'register' && <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder={copy.name} style={field} />}
-              <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" autoComplete="email" placeholder={copy.email} style={field} />
-              <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete={formMode === 'register' ? 'new-password' : 'current-password'} placeholder={copy.password} style={field} />
+              {formMode === 'register' && <input aria-label={copy.name} value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder={copy.name} style={field} />}
+              <input aria-label={copy.email} value={email} onChange={(event) => setEmail(event.target.value)} type="email" autoComplete="email" placeholder={copy.email} style={field} />
+              <input aria-label={copy.password} value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete={formMode === 'register' ? 'new-password' : 'current-password'} placeholder={copy.password} style={field} />
             </>}
 
             {formMode === 'invite' && <>
-              <input value={inviteToken} onChange={(event) => setInviteToken(event.target.value)} autoCapitalize="characters" placeholder={copy.inviteToken} style={{ ...field, textTransform: 'uppercase', fontWeight: 800, letterSpacing: 1 }} />
+              <input aria-label={copy.inviteToken} value={inviteToken} onChange={(event) => setInviteToken(event.target.value)} autoCapitalize="characters" placeholder={copy.inviteToken} style={{ ...field, textTransform: 'uppercase', fontWeight: 800, letterSpacing: 1 }} />
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                 <ModeButton active={inviteAuthMode === 'register'} onClick={() => setInviteAuthMode('register')}>{copy.register}</ModeButton>
                 <ModeButton active={inviteAuthMode === 'login'} onClick={() => setInviteAuthMode('login')}>{copy.login}</ModeButton>
               </div>
-              {inviteAuthMode === 'register' && <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder={copy.name} style={field} />}
-              <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" autoComplete="email" placeholder={copy.email} style={field} />
-              <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete={inviteAuthMode === 'register' ? 'new-password' : 'current-password'} placeholder={copy.password} style={field} />
+              {inviteAuthMode === 'register' && <input aria-label={copy.name} value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder={copy.name} style={field} />}
+              <input aria-label={copy.email} value={email} onChange={(event) => setEmail(event.target.value)} type="email" autoComplete="email" placeholder={copy.email} style={field} />
+              <input aria-label={copy.password} value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete={inviteAuthMode === 'register' ? 'new-password' : 'current-password'} placeholder={copy.password} style={field} />
             </>}
 
             {(formMode === 'child' || formMode === 'shared') && <>
-              <input value={pairingCode} onChange={(event) => setPairingCode(event.target.value)} autoCapitalize="characters" placeholder={copy.pairingCode} style={{ ...field, textTransform: 'uppercase', fontWeight: 800, letterSpacing: 1 }} />
-              {formMode === 'child' && <input value={pin} onChange={(event) => setPin(event.target.value.replace(/\D/g, ''))} inputMode="numeric" type="password" placeholder={copy.pin} style={field} />}
-              <input value={deviceName} onChange={(event) => setDeviceName(event.target.value)} placeholder={copy.deviceName} style={field} />
+              <input aria-label={copy.pairingCode} value={pairingCode} onChange={(event) => setPairingCode(event.target.value)} autoCapitalize="characters" placeholder={copy.pairingCode} style={{ ...field, textTransform: 'uppercase', fontWeight: 800, letterSpacing: 1 }} />
+              {formMode === 'child' && <input aria-label={copy.pin} value={pin} onChange={(event) => setPin(event.target.value.replace(/\D/g, ''))} inputMode="numeric" type="password" placeholder={copy.pin} style={field} />}
+              <input aria-label={copy.deviceName} value={deviceName} onChange={(event) => setDeviceName(event.target.value)} placeholder={copy.deviceName} style={field} />
             </>}
 
             {state.error && <Notice color="#ff8f85">{copy.errors[state.error as OnlineError]}</Notice>}
@@ -297,7 +297,7 @@ export function AccountSettings({ lang, setup = false }: { lang: Lang; setup?: b
 
           {familyMode === 'create' && <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
             <button onClick={() => setFamilyMode('pick')} style={backButton}>‹ {copy.back}</button>
-            <input value={householdName} onChange={(event) => setHouseholdName(event.target.value)} placeholder={copy.householdName} style={field} autoFocus />
+            <input aria-label={copy.householdName} value={householdName} onChange={(event) => setHouseholdName(event.target.value)} placeholder={copy.householdName} style={field} autoFocus />
             <div style={{ padding: 13, borderRadius: 12, background: 'rgba(244,185,66,.08)', border: '1px solid rgba(244,185,66,.28)' }}>
               <div style={{ color: '#F4B942', fontSize: 11, fontWeight: 850, textTransform: 'uppercase', letterSpacing: .6 }}>{copy.yourFighter}</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10 }}>
@@ -312,7 +312,7 @@ export function AccountSettings({ lang, setup = false }: { lang: Lang; setup?: b
                 {otherFighters.map((fighter) => (
                   <div key={fighter.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ width: 28, height: 28, flex: 'none', borderRadius: 9, background: fighter.color }} />
-                    <input value={fighter.name} onChange={(event) => gameActions.editFighter(fighter.id, { name: event.target.value })} placeholder={copy.playerName} style={{ ...field, padding: '10px 11px', fontSize: 13 }} />
+                    <input aria-label={copy.playerName} value={fighter.name} onChange={(event) => gameActions.editFighter(fighter.id, { name: event.target.value })} placeholder={copy.playerName} style={{ ...field, padding: '10px 11px', fontSize: 13 }} />
                     <button onClick={() => gameActions.deleteFighter(fighter.id)} aria-label="Remove" style={{ width: 36, height: 36, flex: 'none', borderRadius: 9, border: '1px solid rgba(224,86,74,.4)', background: '#241518', color: '#ff8f85', fontSize: 19, cursor: 'pointer' }}>×</button>
                   </div>
                 ))}
@@ -326,7 +326,7 @@ export function AccountSettings({ lang, setup = false }: { lang: Lang; setup?: b
 
           {familyMode === 'join' && <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
             <button onClick={() => setFamilyMode('pick')} style={backButton}>‹ {copy.back}</button>
-            <input value={inviteToken} onChange={(event) => setInviteToken(event.target.value)} placeholder={copy.inviteToken} autoCapitalize="characters" style={{ ...field, textTransform: 'uppercase', fontWeight: 800, letterSpacing: 1 }} autoFocus />
+            <input aria-label={copy.inviteToken} value={inviteToken} onChange={(event) => setInviteToken(event.target.value)} placeholder={copy.inviteToken} autoCapitalize="characters" style={{ ...field, textTransform: 'uppercase', fontWeight: 800, letterSpacing: 1 }} autoFocus />
             {setupError && <Notice color="#ff8f85">{setupError}</Notice>}
             <button disabled={!inviteToken.trim() || busy} onClick={() => void acceptInvite()} style={primary}>{busy ? copy.joining : copy.acceptInvite}</button>
           </div>}
@@ -353,7 +353,7 @@ export function AccountSettings({ lang, setup = false }: { lang: Lang; setup?: b
             <div style={{ color: '#F6EBDD', fontSize: 18, fontWeight: 850, marginTop: 3 }}>{state.householdName || copy.family}</div>
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9, marginTop: 14, padding: 11, borderRadius: 11, background: `${status.color}10`, color: status.color }}>
+        <div role="status" aria-live="polite" aria-atomic="true" style={{ display: 'flex', alignItems: 'flex-start', gap: 9, marginTop: 14, padding: 11, borderRadius: 11, background: `${status.color}10`, color: status.color }}>
           <span style={{ fontWeight: 900 }}>{status.icon}</span><span style={{ fontSize: 12.5, lineHeight: 1.4, fontWeight: 700 }}>{status.text}</span>
         </div>
         {needsRetry && <button disabled={busy} onClick={() => void synchronize()} style={{ ...primary, marginTop: 11 }}>{copy.retry}</button>}
@@ -373,7 +373,7 @@ export function AccountSettings({ lang, setup = false }: { lang: Lang; setup?: b
           {isParent && <details style={details}>
             <summary style={{ ...summary, fontSize: 13 }}>{copy.inviteParent}</summary>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
-              <input value={parentEmail} onChange={(event) => setParentEmail(event.target.value)} type="email" placeholder={copy.parentEmail} style={field} />
+              <input aria-label={copy.parentEmail} value={parentEmail} onChange={(event) => setParentEmail(event.target.value)} type="email" placeholder={copy.parentEmail} style={field} />
               <button disabled={!parentEmail.trim() || busy} onClick={() => void createParentInvitation()} style={primary}>{copy.createInvite}</button>
               {parentInviteSentTo && <Notice color="#67D391">{copy.parentInviteSent.replace('{email}', parentInviteSentTo)}</Notice>}
             </div>
@@ -383,7 +383,7 @@ export function AccountSettings({ lang, setup = false }: { lang: Lang; setup?: b
           <details style={details}>
             <summary style={{ ...summary, fontSize: 13 }}>{copy.joinHousehold}</summary>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
-              <input value={inviteToken} onChange={(event) => setInviteToken(event.target.value)} placeholder={copy.inviteToken} style={field} />
+              <input aria-label={copy.inviteToken} value={inviteToken} onChange={(event) => setInviteToken(event.target.value)} placeholder={copy.inviteToken} style={field} />
               <button disabled={!inviteToken.trim() || busy} onClick={() => void acceptInvite()} style={primary}>{copy.acceptInvite}</button>
             </div>
           </details>
@@ -436,5 +436,5 @@ function CodeCard({ title, code, button, onCopy }: { title: string; code: string
 }
 
 function Notice({ children, color }: { children: React.ReactNode; color: string }) {
-  return <div style={{ padding: '10px 12px', borderRadius: 10, background: `${color}12`, border: `1px solid ${color}55`, color, fontSize: 12, lineHeight: 1.45 }}>{children}</div>;
+  return <div role="alert" style={{ padding: '10px 12px', borderRadius: 10, background: `${color}12`, border: `1px solid ${color}55`, color, fontSize: 12, lineHeight: 1.45 }}>{children}</div>;
 }

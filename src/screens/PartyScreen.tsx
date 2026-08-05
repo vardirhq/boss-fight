@@ -30,7 +30,7 @@ export function PartyScreen() {
           <div style={{ fontFamily: PS, fontSize: 15, color: GOLD, lineHeight: 1.4 }}>{t.team}</div>
           <div style={{ fontSize: 13, color: '#6C7486', marginTop: 8, fontWeight: 500 }}>{online.state.householdName || t.householdFallback} · {t.teamSub.replace('{n}', String(g.fighters.length))}</div>
         </div>
-        {mayManageHousehold(online.state) && <button onClick={actions.openPartyManager} title={t.partyMgrTitle} style={{ flex: 'none', width: 40, height: 40, borderRadius: 13, background: '#1b2130', border: '1px solid #333c50', color: '#A8B0BF', cursor: 'pointer', display: 'grid', placeItems: 'center' }}><EditIcon size={16} /></button>}
+        {mayManageHousehold(online.state) && <button aria-label={t.partyMgrTitle} onClick={actions.openPartyManager} style={{ flex: 'none', width: 40, height: 40, borderRadius: 13, background: '#1b2130', border: '1px solid #333c50', color: '#A8B0BF', cursor: 'pointer', display: 'grid', placeItems: 'center' }}><EditIcon size={16} /></button>}
       </div>
 
       {g.fighters.length === 0 ? (

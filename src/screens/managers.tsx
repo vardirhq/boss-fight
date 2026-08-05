@@ -5,6 +5,7 @@ import { maxHpOf, bossFilter } from '../game/logic';
 import { FIGHTER_COLORS } from '../game/seed';
 import { DAY_SHORT } from '../game/i18n';
 import type { TriggerType } from '../game/types';
+import { DialogSurface } from '../ui/a11y';
 import type { Fighter } from '../game/types';
 import { useOnline } from '../online/OnlineContext';
 import {
@@ -47,7 +48,7 @@ export function BossManager() {
   const shortDays = DAY_SHORT[g.settings.lang];
 
   return (
-    <div style={overlay}>
+    <DialogSurface label={t.bossMgrTitle} onClose={actions.closeBossManager} style={overlay}>
       <div style={modalHeader}>
         <div style={{ flex: 1 }}>
           <div style={{ fontFamily: PS, fontSize: 13, color: GOLD }}>{t.bossMgrTitle}</div>
@@ -61,11 +62,11 @@ export function BossManager() {
           return (
             <div key={b.id} style={{ background: '#1b2130', border: '1px solid #2b3346', borderRadius: 16, padding: 14 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <button onClick={() => actions.cycleSprite(b.id)} title="Bytt bilde" style={{ flex: 'none', width: 52, height: 52, borderRadius: 13, background: '#0f1420', border: '1px solid #333c50', overflow: 'hidden', cursor: 'pointer', padding: 3, opacity: b.dormant ? .55 : 1 }}>
+                <button onClick={() => actions.cycleSprite(b.id)} aria-label={`${t.bossMgrTitle}: ${b.name}`} style={{ flex: 'none', width: 52, height: 52, borderRadius: 13, background: '#0f1420', border: '1px solid #333c50', overflow: 'hidden', cursor: 'pointer', padding: 3, opacity: b.dormant ? .55 : 1 }}>
                   <img src={b.sprite} alt={b.name} style={{ width: '100%', height: '100%', objectFit: 'contain', ...(bossFilter(b) ? { filter: bossFilter(b) } : {}) }} />
                 </button>
-                <input value={b.name} onChange={(e) => actions.editBoss(b.id, { name: e.target.value })} placeholder={t.bossNamePh} style={textInput} />
-                <button onClick={() => actions.deleteBoss(b.id)} style={delBtn}>×</button>
+                <input aria-label={t.bossNamePh} value={b.name} onChange={(e) => actions.editBoss(b.id, { name: e.target.value })} placeholder={t.bossNamePh} style={textInput} />
+                <button aria-label={`${t.removeWord} ${b.name}`} onClick={() => actions.deleteBoss(b.id)} style={delBtn}>×</button>
               </div>
               <div style={{ fontSize: 10, color: '#6C7486', fontWeight: 600, letterSpacing: .5, margin: '14px 0 8px' }}>{t.appearsWhen}</div>
               <div style={{ display: 'flex', gap: 6 }}>
@@ -85,10 +86,10 @@ export function BossManager() {
               {tr.type === 'månedlig' && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, background: '#0f1420', border: '1px solid #333c50', borderRadius: 10, padding: '9px 12px', width: 'max-content' }}>
                   <span style={{ fontSize: 11, color: '#6C7486', fontWeight: 600 }}>{t.dayOfMonth}</span>
-                  <input value={tr.date ?? 1} inputMode="numeric" onChange={(e) => actions.setTrigger(b.id, { date: Math.min(28, Math.max(1, parseInt(e.target.value.replace(/[^0-9]/g, ''), 10) || 1)) })} style={{ width: 34, background: 'none', border: 'none', color: '#8fc0ff', fontFamily: PS, fontSize: 11, outline: 'none', textAlign: 'center' }} />
+                  <input aria-label={t.dayOfMonth} value={tr.date ?? 1} inputMode="numeric" onChange={(e) => actions.setTrigger(b.id, { date: Math.min(28, Math.max(1, parseInt(e.target.value.replace(/[^0-9]/g, ''), 10) || 1)) })} style={{ width: 34, background: 'none', border: 'none', color: '#8fc0ff', fontFamily: PS, fontSize: 11, outline: 'none', textAlign: 'center' }} />
                 </div>
               )}
-              <input value={tr.note ?? ''} onChange={(e) => actions.setTrigger(b.id, { note: e.target.value })} placeholder={t.notePh} style={{ marginTop: 10, width: '100%', background: '#0f1420', border: '1px solid #333c50', borderRadius: 10, padding: '10px 12px', color: '#A8B0BF', fontSize: 13, outline: 'none' }} />
+              <input aria-label={t.notePh} value={tr.note ?? ''} onChange={(e) => actions.setTrigger(b.id, { note: e.target.value })} placeholder={t.notePh} style={{ marginTop: 10, width: '100%', background: '#0f1420', border: '1px solid #333c50', borderRadius: 10, padding: '10px 12px', color: '#A8B0BF', fontSize: 13, outline: 'none' }} />
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12 }}>
                 <span style={{ fontSize: 11, fontWeight: 700, color: b.dormant ? '#8b93a5' : '#67D391' }}>
                   {b.dormant ? t.mgrAsleep : t.mgrActive}
@@ -103,7 +104,7 @@ export function BossManager() {
         })}
         <button onClick={actions.addBoss} style={dashedAdd}>{t.addBoss}</button>
       </div>
-    </div>
+    </DialogSurface>
   );
 }
 
@@ -117,7 +118,7 @@ export function ChoreEditor() {
   const totalHp = maxHpOf(boss.chores);
 
   return (
-    <div style={{ ...overlay, zIndex: 85 }}>
+    <DialogSurface label={t.editChoresTitle} onClose={actions.finishEditChores} style={{ ...overlay, zIndex: 85 }}>
       <div style={{ flex: 'none', padding: 'calc(20px + env(safe-area-inset-top)) 18px 14px', borderBottom: '1px solid #222a3c' }}>
         <div style={{ fontFamily: PS, fontSize: 13, color: GOLD }}>{t.editChoresTitle}</div>
         <div style={{ fontSize: 12, color: '#6C7486', marginTop: 8, fontWeight: 500 }}>{t.editChoresSub.replace('{boss}', boss.name)}</div>
@@ -126,13 +127,13 @@ export function ChoreEditor() {
         {boss.chores.map((c, i) => (
           <div key={c.id} style={{ background: '#1b2130', border: '1px solid #2b3346', borderRadius: 16, padding: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <input value={c.title} onChange={(e) => actions.editChore(i, { title: e.target.value })} placeholder={t.chorePlaceholder} style={{ ...textInput, fontSize: 14, fontWeight: 600 }} />
-              <button onClick={() => actions.deleteChore(i)} style={delBtn}>×</button>
+              <input aria-label={t.chorePlaceholder} value={c.title} onChange={(e) => actions.editChore(i, { title: e.target.value })} placeholder={t.chorePlaceholder} style={{ ...textInput, fontSize: 14, fontWeight: 600 }} />
+              <button aria-label={`${t.removeWord} ${c.title}`} onClick={() => actions.deleteChore(i)} style={delBtn}>×</button>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#0f1420', border: '1px solid #333c50', borderRadius: 10, padding: '9px 12px' }}>
                 <span style={{ fontSize: 11, color: '#6C7486', fontWeight: 600 }}>{t.dmgWord}</span>
-                <input value={c.damage} inputMode="numeric" onChange={(e) => actions.editChore(i, { damage: parseInt(e.target.value.replace(/[^0-9]/g, ''), 10) || 0 })} style={{ width: 42, background: 'none', border: 'none', color: '#ff8f85', fontFamily: PS, fontSize: 11, outline: 'none', textAlign: 'center' }} />
+                <input aria-label={t.dmgWord} value={c.damage} inputMode="numeric" onChange={(e) => actions.editChore(i, { damage: parseInt(e.target.value.replace(/[^0-9]/g, ''), 10) || 0 })} style={{ width: 42, background: 'none', border: 'none', color: '#ff8f85', fontFamily: PS, fontSize: 11, outline: 'none', textAlign: 'center' }} />
               </div>
               <button onClick={() => actions.editChore(i, { repeatable: !c.repeatable })} style={{ flex: 1, background: c.repeatable ? 'rgba(91,155,232,.16)' : '#232c3e', border: `1px solid ${c.repeatable ? 'rgba(91,155,232,.5)' : '#333c50'}`, borderRadius: 10, padding: 11, color: c.repeatable ? '#5B9BE8' : '#8b93a5', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{c.repeatable ? t.repMulti : t.repOnce}</button>
             </div>
@@ -147,7 +148,7 @@ export function ChoreEditor() {
         </div>
         <button onClick={actions.finishEditChores} style={{ ...doneBtn, padding: '15px 30px', fontSize: 10, boxShadow: '0 5px 0 #b8801f' }}>{t.done}</button>
       </div>
-    </div>
+    </DialogSurface>
   );
 }
 
@@ -166,8 +167,8 @@ export function FighterRows() {
             <div style={{ position: 'relative', flex: 'none', width: 46, height: 46, borderRadius: 13, background: '#2C3548', border: `2px solid ${f.color}`, display: 'grid', placeItems: 'center', fontFamily: PS, fontSize: 14, color: f.color, overflow: 'hidden' }}>
               <Avatar fighter={f} />{!f.avatar && <span>{initialOf(f.name)}</span>}
             </div>
-            <input value={f.name} readOnly={f.userId === online.state.userId} onChange={(e) => actions.editFighter(f.id, { name: e.target.value })} placeholder={t.namePh} style={{ ...textInput, opacity: f.userId === online.state.userId ? .72 : 1 }} />
-            {!f.userId && <button onClick={() => actions.deleteFighter(f.id)} style={delBtn}>×</button>}
+            <input aria-label={t.namePh} value={f.name} readOnly={f.userId === online.state.userId} onChange={(e) => actions.editFighter(f.id, { name: e.target.value })} placeholder={t.namePh} style={{ ...textInput, opacity: f.userId === online.state.userId ? .72 : 1 }} />
+            {!f.userId && <button aria-label={`${t.removeWord} ${f.name}`} onClick={() => actions.deleteFighter(f.id)} style={delBtn}>×</button>}
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
             <label style={{ flex: 1, textAlign: 'center', background: '#232c3e', border: '1px solid #333c50', borderRadius: 10, padding: 10, color: '#F6EBDD', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
@@ -179,7 +180,7 @@ export function FighterRows() {
           <div style={{ fontSize: 10, color: '#6C7486', fontWeight: 600, letterSpacing: .5, margin: '14px 0 8px' }}>{t.colorWord}</div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {FIGHTER_COLORS.map((c) => (
-              <button key={c} onClick={() => actions.editFighter(f.id, { color: c })} style={{ width: 28, height: 28, borderRadius: 9, background: c, cursor: 'pointer', border: `2px solid ${f.color === c ? '#F6EBDD' : 'transparent'}` }} />
+              <button key={c} aria-label={`${t.colorWord} ${c}`} aria-pressed={f.color === c} onClick={() => actions.editFighter(f.id, { color: c })} style={{ width: 28, height: 28, borderRadius: 9, background: c, cursor: 'pointer', border: `2px solid ${f.color === c ? '#F6EBDD' : 'transparent'}` }} />
             ))}
           </div>
           <FighterOnlineControls fighter={f} />
@@ -331,16 +332,16 @@ function FighterOnlineControls({ fighter }: { fighter: Fighter }) {
         <div style={setupCard}>
           <div style={setupTitle}>{en ? `Connect ${fighter.name} to an adult` : `Koble ${fighter.name} til en voksen`}</div>
           <div style={setupHelp}>{en ? 'They sign in with their own account and keep this fighter.' : 'De logger inn med sin egen konto og beholder denne spilleren.'}</div>
-          <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" placeholder={en ? 'Email address' : 'E-postadresse'} style={onlineInput} />
+          <input aria-label={en ? 'Email address' : 'E-postadresse'} value={email} onChange={(event) => setEmail(event.target.value)} type="email" placeholder={en ? 'Email address' : 'E-postadresse'} style={onlineInput} />
           <button disabled={!email.trim() || busy} onClick={() => void inviteAdult()} style={{ ...smallAction, width: '100%', padding: 10, opacity: busy ? .6 : 1 }}>{busy ? '…' : (en ? 'Send invitation' : 'Send invitasjon')}</button>
-          {inviteSentTo && <div style={{ color: '#67D391', fontSize: 11, lineHeight: 1.45 }}>{en ? `Invitation sent to ${inviteSentTo}.` : `Invitasjonen er sendt til ${inviteSentTo}.`}</div>}
+          {inviteSentTo && <div role="status" style={{ color: '#67D391', fontSize: 11, lineHeight: 1.45 }}>{en ? `Invitation sent to ${inviteSentTo}.` : `Invitasjonen er sendt til ${inviteSentTo}.`}</div>}
         </div>
       )}
       {setupMode === 'child' && (
         <div style={setupCard}>
           <div style={setupTitle}>{fighter.userId ? (en ? `Change ${fighter.name}'s PIN` : `Bytt PIN for ${fighter.name}`) : (en ? `Create a login for ${fighter.name}` : `Lag innlogging for ${fighter.name}`)}</div>
           <div style={setupHelp}>{en ? 'Choose a PIN with at least 4 digits. You will get a short code for the child’s device.' : 'Velg en PIN med minst 4 sifre. Etterpå får du en kort kode til barnets enhet.'}</div>
-          <input value={pin} onChange={(event) => setPin(event.target.value.replace(/\D/g, '').slice(0, 8))} inputMode="numeric" type="password" placeholder="PIN" style={onlineInput} />
+          <input aria-label="PIN" value={pin} onChange={(event) => setPin(event.target.value.replace(/\D/g, '').slice(0, 8))} inputMode="numeric" type="password" placeholder="PIN" style={onlineInput} />
           <button disabled={pin.length < 4 || busy} onClick={() => void (fighter.userId ? resetPin() : setupChild())} style={{ ...smallAction, width: '100%', padding: 10, opacity: busy ? .6 : 1 }}>{busy ? '…' : (fighter.userId ? (en ? 'Save PIN' : 'Lagre PIN') : (en ? 'Create login' : 'Lag innlogging'))}</button>
         </div>
       )}
@@ -352,7 +353,7 @@ function FighterOnlineControls({ fighter }: { fighter: Fighter }) {
           <button onClick={() => void navigator.clipboard?.writeText(code)} style={{ ...smallAction, width: '100%' }}>{en ? 'Copy code' : 'Kopier kode'}</button>
         </div>
       )}
-      {error && <div style={{ marginTop: 9, color: '#ff8f85', fontSize: 11, lineHeight: 1.4 }}>{error}</div>}
+      {error && <div role="alert" style={{ marginTop: 9, color: '#ff8f85', fontSize: 11, lineHeight: 1.4 }}>{error}</div>}
     </div>
   );
 }
@@ -370,7 +371,7 @@ export function PartyManager() {
   const { actions } = useGame();
   const t = useT();
   return (
-    <div style={overlay}>
+    <DialogSurface label={t.partyMgrTitle} onClose={actions.closePartyManager} style={overlay}>
       <div style={modalHeader}>
         <div style={{ flex: 1 }}>
           <div style={{ fontFamily: PS, fontSize: 13, color: GOLD }}>{t.partyMgrTitle}</div>
@@ -381,6 +382,6 @@ export function PartyManager() {
       <div className="scr" style={{ flex: 1, overflowY: 'auto', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 14 }}>
         <FighterRows />
       </div>
-    </div>
+    </DialogSurface>
   );
 }
