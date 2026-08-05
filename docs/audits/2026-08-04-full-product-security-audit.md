@@ -116,7 +116,7 @@ landed but the recommendation is not yet satisfied in full.
 | BF-004 | Remediated | Role hierarchy, last-owner protection, explicit claimed-fighter governance, and household-scoped session revocation implemented in PR #39. |
 | BF-005 | Open | Privacy notice, consent/authorization records, export, erasure, and retention remain. |
 | BF-006 | In progress | Sync queue, reward-integrity, and household-governance tests now run in CI; broad game, database, authorization, offline, and UI coverage remains. |
-| BF-007 | Open | A formal versioned production migration and rollback workflow remains. |
+| BF-007 | Remediated | Locked, checksum-verified, versioned migrations now gate deployment after a pre-deploy backup; bootstrap, authoring, and rollback procedures are documented in PR #40. |
 | BF-008 | Open | Native credential storage hardening remains. |
 | BF-009 | Open | Incremental mutable-state and avatar synchronization remains. |
 | BF-010 | Remediated | Client synchronization uses a single-flight coordinator with a pending rerun; [PR #36](https://github.com/vardirhq/boss-fight/pull/36). |

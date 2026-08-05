@@ -319,7 +319,6 @@ function decorateBosses(rows: JsonObject[], householdId: string, timezone: strin
 }
 
 export async function buildApp() {
-  await sql`alter table households add column if not exists configuration_revision bigint not null default 0`;
   const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' }, trustProxy: true });
 
   await app.register(cors, {
