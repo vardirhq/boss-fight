@@ -1,4 +1,12 @@
-export const PRIVACY_NOTICE_VERSION = '2026-08-05';
+export const PRIVACY_NOTICE_VERSION = '2026-08-05.2';
+export const SUPPORTED_PRIVACY_NOTICE_VERSIONS = ['2026-08-05', PRIVACY_NOTICE_VERSION] as const;
+
+export function acceptedPrivacyNoticeVersion(value: unknown) {
+  if (typeof value !== 'string' || !SUPPORTED_PRIVACY_NOTICE_VERSIONS.includes(value as never)) {
+    throw new Error('Current privacy notice authorization is required');
+  }
+  return value;
+}
 
 export const householdExportFields = {
   household: ['id', 'name', 'timezone', 'victories_baseline', 'created_at', 'updated_at'],

@@ -14,7 +14,8 @@ import { sendHouseholdInviteEmail } from './email.js';
 import { assertCanManageMembership, type GovernanceRole } from './governance.js';
 import { childAuthRateLimit, committedChildPairAuthentication } from './childAuth.js';
 import { publicSyncRows } from './syncProjection.js';
-import { assertChildErasureTarget, PRIVACY_NOTICE_VERSION, privacyExportRows } from './privacy.js';
+import { acceptedPrivacyNoticeVersion, assertChildErasureTarget, PRIVACY_NOTICE_VERSION, privacyExportRows } from './privacy.js';
+import { runOperationalRetention } from './retention.js';
 
 type JsonObject = Record<string, unknown>;
 type AuthContext = { userId: string; sessionId: string };
@@ -987,9 +988,10 @@ export async function buildApp() {
     const fighterId = requireString(body.fighterId, 'fighterId');
     const pin = requireString(body.pin, 'pin');
     if (pin.length < 4) throw new Error('PIN must be at least 4 digits');
-    if (body.authorized !== true || body.privacyNoticeVersion !== PRIVACY_NOTICE_VERSION) {
+    if (body.authorized !== true) {
       throw new Error('Current privacy notice authorization is required');
     }
+    const privacyNoticeVersion = acceptedPrivacyNoticeVersion(body.privacyNoticeVersion);
 
     const result = await sql.begin(async (tx) => {
       const [existingFighter] = await tx`
@@ -1022,7 +1024,7 @@ export async function buildApp() {
         insert into child_authorizations (
           household_id, child_user_id, authorized_by_user_id, privacy_notice_version
         ) values (
-          ${householdId}, ${user.id}, ${auth.userId}, ${PRIVACY_NOTICE_VERSION}
+          ${householdId}, ${user.id}, ${auth.userId}, ${privacyNoticeVersion}
         )
       `;
       return { user, memberId: publicId(member), fighter };
@@ -2323,4 +2325,12 @@ export async function buildApp() {
 }
 
 const app = await buildApp();
+const initialRetention = await runOperationalRetention();
+app.log.info({ removed: initialRetention }, 'operational retention cleanup completed');
 await app.listen({ port: Number(process.env.PORT ?? 3002), host: '0.0.0.0' });
+const retentionTimer = setInterval(() => {
+  void runOperationalRetention()
+    .then((removed) => app.log.info({ removed }, 'operational retention cleanup completed'))
+    .catch((error) => app.log.error({ error }, 'operational retention cleanup failed'));
+}, 24 * 60 * 60 * 1000);
+retentionTimer.unref();

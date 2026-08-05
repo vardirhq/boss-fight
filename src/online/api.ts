@@ -142,7 +142,7 @@ export interface ServerSyncState {
 }
 
 export type ApiErrorKind = 'network' | 'unauthenticated' | 'forbidden' | 'conflict' | 'validation' | 'server' | 'unknown';
-export const PRIVACY_NOTICE_VERSION = '2026-08-05';
+export const PRIVACY_NOTICE_VERSION = '2026-08-05.2';
 
 export class ApiError extends Error {
   constructor(

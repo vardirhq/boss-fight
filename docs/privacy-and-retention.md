@@ -1,9 +1,14 @@
 # Privacy And Data Lifecycle
 
 The public, bilingual notice is published at `/privacy.html`. Its current version
-is `2026-08-05`, matching `PRIVACY_NOTICE_VERSION` in `server/src/privacy.ts`.
+is `2026-08-05.2`, matching `PRIVACY_NOTICE_VERSION` in `server/src/privacy.ts`.
 Changing the substance of the notice requires a new version and must not rewrite
 existing child-authorization records.
+
+The API temporarily accepts the immediately preceding `2026-08-05` version so
+installed APKs continue to create authorized child logins while the new client is
+rolling out. Each authorization stores the exact client-submitted version; new
+clients submit `2026-08-05.2`.
 
 ## Implemented Controls
 
@@ -24,9 +29,19 @@ existing child-authorization records.
 
 Synchronized configuration and gameplay history are currently retained while the
 household uses the service, or until a manual deletion request is completed.
-Expired invitations, pairings, sessions, and revoked devices are not yet removed
-by an automated retention job. Database backups follow the operational backup
-procedures, but a tested backup-expiry and erasure runbook remains outstanding.
+The API runs retention cleanup at startup and every 24 hours:
+
+- expired or accepted invitations: 30 days;
+- expired or claimed device pairings: 7 days;
+- expired or revoked sessions: 30 days;
+- revoked devices: 30 days, after detaching retained activity references;
+- avatars belonging to deleted fighters: 30 days.
+
+These windows can be shortened or extended with the documented server environment
+variables. Active devices, active configuration, gameplay/economy history, and
+avatars for active fighters are not age-deleted. Database backups follow the
+operational backup procedures, but a tested backup-expiry and erasure runbook
+remains outstanding.
 
 ## Remaining Work
 
@@ -34,7 +49,7 @@ procedures, but a tested backup-expiry and erasure runbook remains outstanding.
   hosting disclosures.
 - Add self-service adult-account and household erasure, plus real-database tests
   that verify child erasure across primary storage.
-- Implement and enforce retention windows for invitations, pairings, sessions,
-  devices, avatars, activity events, and backups.
+- Define and enforce lifecycle rules for active configuration, activity events,
+  adult/household erasure, and backups.
 - Document processor agreements, storage locations, deletion SLAs, and restoration
   behavior after an erasure request.

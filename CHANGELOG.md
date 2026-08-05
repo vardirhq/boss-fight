@@ -9,6 +9,9 @@ increasing Android version codes for install/update compatibility.
 
 ### Added
 
+- Enforce documented cleanup windows for expired invitations, pairings and
+  sessions, revoked devices, and avatars belonging to deleted fighters, with
+  startup gating and daily retries.
 - Allow owners and parents to permanently erase a child identity, credentials,
   devices, avatar, and authorization record while retaining only de-identified
   gameplay and wallet history.
