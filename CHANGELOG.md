@@ -50,6 +50,9 @@ increasing Android version codes for install/update compatibility.
   previously running image automatically when deployment readiness fails.
 - Exclude npm and its unused global dependency tree from the production API
   image, invoking migrations and the server directly with Node.
+- Keep English mode English across rewards, vouchers, transfers, shared reward
+  attribution, generated boss and chore names, fighter and household fallbacks,
+  level titles, and weekday labels, including synchronized redemption history.
 
 ## [1.0.0] - 2026-08-04
 

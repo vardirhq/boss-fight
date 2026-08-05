@@ -78,4 +78,6 @@ test('boss status, bilingual schedule copy, levels, and weekday labels cover bou
   assert.deepEqual(levelInfo(119), { level: 1, title: 'Væpner', into: 119, per: 120, pct: (119 / 120) * 100 });
   assert.deepEqual(levelInfo(120), { level: 2, title: 'Væpner', into: 0, per: 120, pct: 0 });
   assert.equal(todayShort(new Date(2026, 7, 5, 12)), 'ons');
+  assert.equal(levelInfo(240, 'en').title, 'Knight');
+  assert.equal(todayShort(new Date(2026, 7, 5, 12), 'en'), 'wed');
 });

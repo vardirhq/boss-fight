@@ -1,4 +1,4 @@
-import type { Boss, Chore, RewardDef, Trigger } from './types';
+import type { Boss, Chore, Lang, RewardDef, Trigger } from './types';
 
 /** Sprite paths as served from /public. */
 export const SPRITE = {
@@ -265,3 +265,32 @@ export const REWARDS_GROUP: RewardDef[] = [
   { id: 'g_pizza', icon: '🍕', title: 'Pizzakveld', desc: 'Alle ønsker seg en topping', cost: 80 },
   { id: 'g_trip', icon: '🚗', title: 'Helgeutflukt', desc: 'Familien drar på tur', cost: 130 },
 ];
+
+const REWARDS_EN: { personal: RewardDef[]; group: RewardDef[] } = {
+  personal: [
+    { id: 'p_snack', icon: '🍫', title: 'Candy at the store', desc: 'Choose one item', cost: 10 },
+    { id: 'p_dessert', icon: '🍨', title: 'Dessert after dinner', desc: 'Your pick from the freezer', cost: 12 },
+    { id: 'p_screen', icon: '📱', title: '30 min extra screen time', desc: 'Use it anytime this week', cost: 16 },
+    { id: 'p_dish', icon: '🧽', title: 'Skip the dishes', desc: 'One evening without dish duty', cost: 18 },
+    { id: 'p_bed', icon: '🌙', title: 'Later bedtime', desc: 'Stay up 30 min longer', cost: 22 },
+  ],
+  group: [
+    { id: 'g_game', icon: '🎲', title: 'Game night', desc: 'Board games and snacks for everyone', cost: 50 },
+    { id: 'g_movie', icon: '🎬', title: 'Family movie night', desc: 'Watch the family’s choice', cost: 60 },
+    { id: 'g_ice', icon: '🍦', title: 'Ice cream outing', desc: 'The whole family goes for ice cream', cost: 70 },
+    { id: 'g_pizza', icon: '🍕', title: 'Pizza night', desc: 'Everyone chooses a topping', cost: 80 },
+    { id: 'g_trip', icon: '🚗', title: 'Weekend outing', desc: 'The family heads out together', cost: 130 },
+  ],
+};
+
+export function rewardsFor(lang: Lang) {
+  return lang === 'en'
+    ? REWARDS_EN
+    : { personal: REWARDS_PERSONAL, group: REWARDS_GROUP };
+}
+
+export function localizedRewardTitle(id: unknown, fallback: string, lang: Lang) {
+  if (typeof id !== 'string') return fallback;
+  const rewards = rewardsFor(lang);
+  return [...rewards.personal, ...rewards.group].find((reward) => reward.id === id)?.title ?? fallback;
+}

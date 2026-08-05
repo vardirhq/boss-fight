@@ -1,5 +1,6 @@
 import { maxHpOf } from '../game/logic';
-import { REWARDS_GROUP, REWARDS_PERSONAL, remapBossName } from '../game/seed';
+import { localizedRewardTitle, remapBossName, rewardsFor } from '../game/seed';
+import { STRINGS } from '../game/i18n';
 import type { Boss, Chore, Fighter, GameState, TriggerType } from '../game/types';
 import type { BootstrapSnapshot, ServerHouseholdConfig, ServerSyncState } from './api';
 
@@ -37,6 +38,7 @@ async function avatarPayload(dataUrl: string) {
 }
 
 export async function createBootstrapSnapshot(game: GameState): Promise<BootstrapSnapshot> {
+  const rewards = rewardsFor(game.settings.lang);
   const fighters = await Promise.all(game.fighters.map(async (fighter, sort) => ({
     clientId: fighter.id,
     name: fighter.name.trim(),
@@ -76,8 +78,8 @@ export async function createBootstrapSnapshot(game: GameState): Promise<Bootstra
       sort,
     }))),
     rewards: [
-      ...REWARDS_PERSONAL.map((reward, sort) => ({ clientId: reward.id, scope: 'personal' as const, icon: reward.icon, title: reward.title, description: reward.desc, cost: reward.cost, sort })),
-      ...REWARDS_GROUP.map((reward, sort) => ({ clientId: reward.id, scope: 'group' as const, icon: reward.icon, title: reward.title, description: reward.desc, cost: reward.cost, sort })),
+      ...rewards.personal.map((reward, sort) => ({ clientId: reward.id, scope: 'personal' as const, icon: reward.icon, title: reward.title, description: reward.desc, cost: reward.cost, sort })),
+      ...rewards.group.map((reward, sort) => ({ clientId: reward.id, scope: 'group' as const, icon: reward.icon, title: reward.title, description: reward.desc, cost: reward.cost, sort })),
     ],
   };
 }
@@ -249,12 +251,13 @@ export function serverSyncToGameState(sync: ServerSyncState, current: GameState)
     log,
     redemptions: sync.events.reward_redemptions.map((row) => ({
       vid: stringValue(row.id),
+      rewardId: row.reward_id == null ? undefined : stringValue(row.reward_id),
       icon: stringValue(row.icon),
-      title: stringValue(row.title),
+      title: localizedRewardTitle(row.reward_id, stringValue(row.title), current.settings.lang),
       cost: numberValue(row.cost),
       at: stringValue(row.created_at).slice(0, 10),
       who: row.fighter_id == null
-        ? 'Felles'
+        ? STRINGS[current.settings.lang].sharedWho
         : base.fighters.find((fighter) => fighter.id === stringValue(row.fighter_id))?.name ?? '',
       used: row.status === 'used',
     })),

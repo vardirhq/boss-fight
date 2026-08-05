@@ -18,7 +18,7 @@ export const syncPublicFields = {
   boss_resets: ['id', 'boss_id', 'cycle_key', 'reset_seq', 'server_seq'],
   boss_victories: ['id', 'boss_id', 'cycle_key', 'reset_seq', 'elite', 'rare', 'server_seq'],
   wallet_transactions: ['id', 'fighter_id', 'amount', 'server_seq'],
-  reward_redemptions: ['id', 'fighter_id', 'icon', 'title', 'cost', 'status', 'created_at', 'server_seq'],
+  reward_redemptions: ['id', 'reward_id', 'fighter_id', 'icon', 'title', 'cost', 'status', 'created_at', 'server_seq'],
 } as const;
 
 export type SyncProjection = keyof typeof syncPublicFields;

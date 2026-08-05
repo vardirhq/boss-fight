@@ -1516,7 +1516,7 @@ export async function buildApp() {
         order by server_seq
       `,
       sql`
-        select id, fighter_id, icon, title, cost, status, created_at, server_seq from reward_redemptions
+        select id, reward_id, fighter_id, icon, title, cost, status, created_at, server_seq from reward_redemptions
         where household_id = ${householdId} and server_seq > ${since.reward_redemptions}
         order by server_seq
       `
