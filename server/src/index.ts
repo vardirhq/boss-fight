@@ -1920,7 +1920,12 @@ export async function buildApp() {
         from fighter_avatars fa
         join fighters f on f.id = fa.fighter_id
         where f.household_id = ${householdId}
-          and coalesce(${knownAvatarHashesJson}::jsonb ->> fa.fighter_id::text, '') <> fa.hash
+          and not exists (
+            select 1
+            from jsonb_each_text(${knownAvatarHashesJson}::jsonb) as known(fighter_id, hash)
+            where known.fighter_id = fa.fighter_id::text
+              and known.hash = fa.hash
+          )
       `,
       sql`
         select id, name, sprite, frames, rare, hue, trigger_type, trigger_day,
