@@ -17,7 +17,7 @@ const PS = "'Press Start 2P'";
 const LEGACY_NEW_FIGHTER_NAME = 'Ny kjemper';
 
 export function App() {
-  const { state, actions } = useGame();
+  const { state, actions, persistence } = useGame();
   const online = useOnline();
   const loadedServerConfiguration = useRef<string | null>(null);
   const onlineRef = useRef(online);
@@ -95,6 +95,19 @@ export function App() {
 
   return (
     <div className="app-shell" style={{ width: '100%', height: '100%', minHeight: 0, position: 'relative', background: 'linear-gradient(180deg,#12161f 0%,#0c0f16 60%,#090b10 100%)', display: 'flex', flexDirection: 'column', color: '#F6EBDD', overflow: 'hidden' }}>
+      {persistence.issue && ui.phase === 'app' && (
+        <div role="alert" aria-live="assertive" style={{ flex: 'none', padding: '10px 12px', paddingTop: 'calc(10px + env(safe-area-inset-top))', background: persistence.issue === 'opfs-unavailable' ? '#30250f' : '#3a1719', borderBottom: `1px solid ${persistence.issue === 'opfs-unavailable' ? '#785c20' : '#873f44'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, flexWrap: 'wrap', zIndex: 89 }}>
+          <span style={{ maxWidth: 620, fontSize: 12, lineHeight: 1.45, fontWeight: 650, color: '#f6ebdd' }}>
+            {persistence.issue === 'restore-failed' ? t.persistenceRestoreFailed
+              : persistence.issue === 'write-failed' ? t.persistenceWriteFailed
+                : t.persistenceFallback}
+          </span>
+          <span style={{ display: 'flex', gap: 8 }}>
+            {persistence.issue === 'write-failed' && <button type="button" onClick={actions.retrySave} style={warningButton}>{t.retrySave}</button>}
+            <button type="button" onClick={actions.downloadBackup} style={warningButton}>{t.downloadBackup}</button>
+          </span>
+        </div>
+      )}
       <div className={`scr app-content${ui.tab === 'battle' ? ' battle-scroll' : ''}`} style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', position: 'relative' }}>
         {ui.tab === 'battle' && <BattleScreen />}
         {ui.tab === 'home' && <HomeScreen />}
@@ -160,3 +173,8 @@ export function App() {
     </div>
   );
 }
+
+const warningButton: React.CSSProperties = {
+  border: '1px solid rgba(255,255,255,.3)', borderRadius: 8, background: 'rgba(255,255,255,.1)',
+  color: '#fff', padding: '7px 9px', fontSize: 11, fontWeight: 800, cursor: 'pointer',
+};

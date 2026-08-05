@@ -15,6 +15,8 @@ test('English product-generated labels contain no Norwegian fallback text', () =
     ...copy.levelTitles, copy.newBoss, copy.newChore, copy.sharedWho,
     copy.redeemedFlash, copy.sharedRewardFlash, copy.transferFlash,
     copy.transferAll, copy.householdFallback, copy.fighterFallback,
+    copy.persistenceFallback, copy.persistenceRestoreFailed, copy.persistenceWriteFailed,
+    copy.downloadBackup, copy.retrySave,
   ].join(' ');
   assert.doesNotMatch(generated, /[æøåÆØÅ]|\b(felles|gjøremål|løste|familien|mynter|ridder|kriger)\b/i);
 });

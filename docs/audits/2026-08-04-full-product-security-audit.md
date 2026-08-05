@@ -127,7 +127,7 @@ landed but the recommendation is not yet satisfied in full.
 | BF-015 | Remediated | CI builds and scans a commit-versioned API image, deployment promotes its immutable digest without rebuilding, and the tested deploy helper retains and automatically restores the previous image when readiness fails. |
 | BF-016 | Open | Accessibility remediation remains. |
 | BF-017 | Remediated | Language-key parity and English regression tests cover generated labels; reward definitions, voucher and transfer copy, shared attribution, fallback names, level titles, and weekdays now follow the active language across local and synchronized state. |
-| BF-018 | Open | Persistent user-visible save-failure handling remains. |
+| BF-018 | Remediated | Database writes return explicit results; fallback, corrupt-restore, and failed-write states remain visibly announced with retry and SQLite backup actions, with quota and corruption regression tests. |
 | BF-019 | Open | Backend route/service decomposition remains. |
 | BF-020 | Open | Centralized strict request/response schemas remain. |
 | BF-021 | Open | Client and operational observability remain. |
@@ -539,6 +539,14 @@ persistence failures.
 **Recommendation:** Return explicit save status, display a persistent warning when
 durability is unavailable, offer export/recovery, and test quota and corrupted-export
 behavior.
+
+**Remediation:** Completed. The SQLite boundary now returns explicit save results
+and publishes persistence status changes to the application. A persistent bilingual
+alert distinguishes unavailable OPFS, corrupt fallback restoration, and failed
+writes, while offering retry and a downloadable copy of the current SQLite database.
+Failed fallback restoration starts with a clean in-memory handle instead of silently
+trusting corrupt data. Regression tests cover quota exceptions, corrupt exports, and
+the empty fallback case.
 
 ### BF-019 — Backend responsibilities are concentrated in one route file
 
