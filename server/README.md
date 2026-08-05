@@ -34,6 +34,11 @@ DATABASE_URL=postgresql://boss_kamp_app:<password>@127.0.0.1:5432/boss_kamp
 CORS_ORIGIN=*
 LOG_LEVEL=info
 SESSION_DAYS=90
+RETENTION_INVITES_DAYS=30
+RETENTION_PAIRINGS_DAYS=7
+RETENTION_SESSIONS_DAYS=30
+RETENTION_REVOKED_DEVICES_DAYS=30
+RETENTION_DELETED_AVATARS_DAYS=30
 CHILD_AUTH_RATE_LIMIT_MAX=20
 CHILD_AUTH_RATE_LIMIT_WINDOW=10 minutes
 SMTP_HOST=<smtp-host>
@@ -53,6 +58,12 @@ starts after eight invalid PIN attempts and lasts ten minutes.
 SMTP is required for adult and parent invitations. The API only reports an
 invitation as created after the mail server accepts the message. For local
 development, Mailpit or another SMTP catcher can be used.
+
+Operational retention runs at API startup and every 24 hours. Defaults remove
+expired/accepted invitation metadata after 30 days, pairing metadata after 7
+days, expired/revoked sessions after 30 days, revoked devices after 30 days, and
+avatars for fighters deleted for 30 days. Startup fails if the initial cleanup
+cannot complete; scheduled failures are logged and retried on the next interval.
 
 ## Deploy
 
