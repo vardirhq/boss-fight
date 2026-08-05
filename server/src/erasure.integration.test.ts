@@ -187,6 +187,37 @@ test('PostgreSQL lifecycle erasure preserves only the documented records', {
     assert.equal(retainedAuthorization.authorized_by_user_id, null);
     assert.equal(retainedAuthorization.privacy_notice_version, '2026-08-05.4');
 
+    const recovery = await register('recovery@example.com', 'Recovery Parent');
+    const recoverySecondLogin = await call('POST', '/api/auth/login', undefined, {
+      email: 'recovery@example.com', password: 'integration-password',
+    });
+    assert.equal(recoverySecondLogin.status, 200);
+    const unknownRecovery = await call('POST', '/api/auth/password-reset/request', undefined, {
+      email: 'unknown@example.com',
+    });
+    assert.equal(unknownRecovery.status, 200);
+    assert.equal(unknownRecovery.body.accepted, true);
+    const resetToken = 'integration-reset-token';
+    await database`
+      insert into password_reset_tokens (user_id, token_hash, expires_at)
+      values (${recovery.userId}, ${createHash('sha256').update(resetToken).digest('hex')}, now() + interval '30 minutes')
+    `;
+    const reset = await call('POST', '/api/auth/password-reset/confirm', undefined, {
+      token: resetToken, password: 'new-integration-password',
+    });
+    assert.equal(reset.status, 200);
+    assert.equal((await call('GET', '/api/me', recovery.token)).status, 401);
+    assert.equal((await call('GET', '/api/me', String(recoverySecondLogin.body.session.token))).status, 401);
+    assert.equal((await call('POST', '/api/auth/login', undefined, {
+      email: 'recovery@example.com', password: 'integration-password',
+    })).status, 401);
+    assert.equal((await call('POST', '/api/auth/login', undefined, {
+      email: 'recovery@example.com', password: 'new-integration-password',
+    })).status, 200);
+    assert.equal((await call('POST', '/api/auth/password-reset/confirm', undefined, {
+      token: resetToken, password: 'another-integration-password',
+    })).status, 400);
+
     await app.close();
     app = null;
     await appSql.end({ timeout: 1 });

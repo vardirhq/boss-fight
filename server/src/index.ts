@@ -12,7 +12,7 @@ import {
   assertRedemptionFunds, assertRedemptionManagerRole, initialRedemption,
   redemptionTransition, requestedRedemptionStatus,
 } from './redemption.js';
-import { sendHouseholdInviteEmail } from './email.js';
+import { sendHouseholdInviteEmail, sendPasswordResetEmail } from './email.js';
 import { assertCanManageMembership, type GovernanceRole } from './governance.js';
 import { childAuthRateLimit, committedChildPairAuthentication } from './childAuth.js';
 import { publicSyncRows } from './syncProjection.js';
@@ -377,7 +377,7 @@ export async function buildApp() {
       'is required', 'must be an array', 'must be a string', 'Expected JSON object', 'Expected numeric value',
       'Password must be at least', 'PIN must be at least', 'Invalid pairing role', 'Invalid invite role',
       'Unsupported redemption status', 'email must be valid', 'Household name confirmation does not match',
-      'Account email confirmation does not match'
+      'Account email confirmation does not match', 'Invalid or expired password reset token'
     ];
     if (validationMessages.some((part) => message.includes(part))) {
       reply.code(400).send({ error: message, code: 'invalid_request' });
@@ -445,6 +445,62 @@ export async function buildApp() {
 
     const session = await createSession(publicId(user));
     return { user: { id: user.id, email: user.email, displayName: user.display_name }, session };
+  });
+
+  app.post('/api/auth/password-reset/request', {
+    config: { rateLimit: { max: 5, timeWindow: '1 hour' } },
+  }, async (request) => {
+    const body = requireObject(request.body);
+    const email = normalizedEmail(body.email);
+    const [user] = await sql`
+      select id, email, display_name from users
+      where lower(email) = ${email} and kind = 'adult' and deleted_at is null
+    `;
+    if (!user) return { accepted: true };
+
+    const resetToken = randomBytes(32).toString('base64url');
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
+    const [record] = await sql`
+      insert into password_reset_tokens (user_id, token_hash, expires_at)
+      values (${user.id}, ${tokenHash(resetToken)}, ${expiresAt})
+      returning id
+    `;
+    try {
+      await sendPasswordResetEmail({
+        to: requireString(user.email, 'email'),
+        displayName: requireString(user.display_name, 'display_name'),
+        resetToken,
+        expiresAt,
+      });
+    } catch (error) {
+      await sql`delete from password_reset_tokens where id = ${record.id}`;
+      request.log.error({ err: error }, 'Password reset email could not be delivered');
+    }
+    return { accepted: true };
+  });
+
+  app.post('/api/auth/password-reset/confirm', {
+    config: { rateLimit: { max: 10, timeWindow: '1 hour' } },
+  }, async (request) => {
+    const body = requireObject(request.body);
+    const resetToken = requireString(body.token, 'token');
+    const passwordHash = await hashPassword(requireString(body.password, 'password'));
+    return sql.begin(async (tx) => {
+      const [record] = await tx`
+        select prt.id, prt.user_id
+        from password_reset_tokens prt
+        join users u on u.id = prt.user_id
+        where prt.token_hash = ${tokenHash(resetToken)}
+          and prt.used_at is null and prt.expires_at > now()
+          and u.kind = 'adult' and u.deleted_at is null
+        for update of prt, u
+      `;
+      if (!record) throw new Error('Invalid or expired password reset token');
+      await tx`update users set password_hash = ${passwordHash}, version = version + 1 where id = ${record.user_id}`;
+      await tx`update password_reset_tokens set used_at = now() where id = ${record.id}`;
+      await tx`update sessions set revoked_at = now() where user_id = ${record.user_id} and revoked_at is null`;
+      return { ok: true };
+    });
   });
 
   app.post('/api/auth/child-login', { config: { rateLimit: childAuthRateLimit } }, async (request) => {

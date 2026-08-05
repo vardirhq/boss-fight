@@ -79,3 +79,43 @@ export async function sendHouseholdInviteEmail(input: {
     throw new MailDeliveryError();
   }
 }
+
+export async function sendPasswordResetEmail(input: {
+  to: string;
+  displayName: string;
+  resetToken: string;
+  expiresAt: Date;
+}) {
+  const from = process.env.SMTP_FROM ?? 'Boss Kamp <chris@vardir.no>';
+  const replyTo = process.env.SMTP_REPLY_TO ?? 'chris@vardir.no';
+  const displayName = escapeHtml(input.displayName);
+  const resetToken = escapeHtml(input.resetToken);
+  const expires = input.expiresAt.toLocaleTimeString('nb-NO', {
+    timeZone: 'Europe/Oslo', hour: '2-digit', minute: '2-digit',
+  });
+
+  try {
+    await transporter().sendMail({
+      from,
+      replyTo,
+      to: input.to,
+      subject: 'Tilbakestill passordet ditt i Boss Kamp',
+      text: [
+        `Hei ${input.displayName},`, '',
+        'Bruk denne engangskoden for å velge et nytt passord i Boss Kamp:', '',
+        input.resetToken, '',
+        `Koden gjelder til ${expires}. Hvis du ikke ba om dette, kan du ignorere e-posten.`,
+      ].join('\n'),
+      html: `
+        <div style="font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:560px;margin:0 auto;padding:28px;color:#182033">
+          <div style="font-size:13px;font-weight:800;letter-spacing:.12em;color:#b27b12">BOSS KAMP</div>
+          <h1 style="font-size:25px;line-height:1.25;margin:18px 0 10px">Velg et nytt passord</h1>
+          <p style="font-size:16px;line-height:1.6;color:#4a5365">Hei ${displayName}. Lim inn denne engangskoden i Boss Kamp:</p>
+          <div style="margin:24px 0;padding:20px;border-radius:14px;background:#f3f5f8;text-align:center;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:18px;font-weight:800;overflow-wrap:anywhere">${resetToken}</div>
+          <p style="font-size:13px;line-height:1.5;color:#7a8394">Koden gjelder til ${expires}. Hvis du ikke ba om dette, kan du ignorere e-posten.</p>
+        </div>`,
+    });
+  } catch {
+    throw new MailDeliveryError();
+  }
+}

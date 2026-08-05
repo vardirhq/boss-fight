@@ -3,7 +3,7 @@ import type { Lang } from '../game/types';
 import { useGame } from '../store/GameContext';
 import { useOnline, type OnlineError } from './OnlineContext';
 import { createBootstrapSnapshot, serverConfigToGameState, serverSyncToGameState } from './gameSync';
-import { acceptHouseholdInvite, ApiError, createHouseholdDevicePairing, eraseAdultAccount, eraseHousehold, getAccountSessions, getHouseholdExport, inviteParent, revokeAccountSession, type AccountSession } from './api';
+import { acceptHouseholdInvite, ApiError, confirmPasswordReset, createHouseholdDevicePairing, eraseAdultAccount, eraseHousehold, getAccountSessions, getHouseholdExport, inviteParent, requestPasswordReset, revokeAccountSession, type AccountSession } from './api';
 
 const field: React.CSSProperties = {
   width: '100%', boxSizing: 'border-box', background: '#0f1420', border: '1px solid #333c50', borderRadius: 12,
@@ -29,6 +29,7 @@ const COPY = {
     welcome: 'Hele familien. Samme spill.', welcomeBody: 'Opprett en konto for å ta med spillerne, fremgangen og belønningene til familiens enheter.',
     accountStep: '1 av 2 · Din konto', familyStep: '2 av 2 · Familien',
     register: 'Opprett konto', login: 'Logg inn', name: 'Navn', email: 'E-post', password: 'Passord, minst 10 tegn',
+    forgotPassword: 'Glemt passord?', recoveryBody: 'Vi sender en engangskode hvis e-postadressen tilhører en konto.', sendRecovery: 'Send engangskode', recoverySent: 'Hvis kontoen finnes, er en kode sendt. Sjekk også søppelpost.', resetToken: 'Engangskode fra e-posten', newPassword: 'Nytt passord, minst 10 tegn', resetPassword: 'Lagre nytt passord', resetComplete: 'Passordet er endret. Du kan logge inn nå.', resetFailed: 'Koden er ugyldig eller utløpt.',
     childLogin: 'Jeg har en barnekode', sharedLogin: 'Dette er en familieenhet', sharedDevice: 'Familieenhet', otherLogin: 'Har du fått en kode?',
     familyInvite: 'Jeg har en familieinvitasjon', createAndJoin: 'Opprett konto og bli med', loginAndJoin: 'Logg inn og bli med',
     pairingCode: 'Kode', pin: 'PIN', deviceName: 'Navn på enheten', connecting: 'Kobler til…',
@@ -61,6 +62,7 @@ const COPY = {
     welcome: 'The whole family. One game.', welcomeBody: 'Create an account to bring fighters, progress, and rewards to your family’s devices.',
     accountStep: '1 of 2 · Your account', familyStep: '2 of 2 · The family',
     register: 'Create account', login: 'Sign in', name: 'Name', email: 'Email', password: 'Password, at least 10 characters',
+    forgotPassword: 'Forgot password?', recoveryBody: 'We will send a one-time code if the email address belongs to an account.', sendRecovery: 'Send one-time code', recoverySent: 'If the account exists, a code has been sent. Check your spam folder too.', resetToken: 'One-time code from the email', newPassword: 'New password, at least 10 characters', resetPassword: 'Save new password', resetComplete: 'Your password has been changed. You can sign in now.', resetFailed: 'The code is invalid or has expired.',
     childLogin: 'I have a child code', sharedLogin: 'This is a family device', sharedDevice: 'Family device', otherLogin: 'Have you received a code?',
     familyInvite: 'I have a family invitation', createAndJoin: 'Create account and join', loginAndJoin: 'Sign in and join',
     pairingCode: 'Code', pin: 'PIN', deviceName: 'Device name', connecting: 'Connecting…',
@@ -104,6 +106,12 @@ export function AccountSettings({ lang, setup = false }: { lang: Lang; setup?: b
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [resetToken, setResetToken] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [recoveryRequested, setRecoveryRequested] = useState(false);
+  const [recoveryComplete, setRecoveryComplete] = useState(false);
+  const [recoveryError, setRecoveryError] = useState<string | null>(null);
+  const [recovering, setRecovering] = useState(false);
   const [pairingCode, setPairingCode] = useState('');
   const [pin, setPin] = useState('');
   const [deviceName, setDeviceName] = useState('');
@@ -181,6 +189,38 @@ export function AccountSettings({ lang, setup = false }: { lang: Lang; setup?: b
     } catch {
       if (formMode === 'invite') setAcceptInviteAfterAuth(false);
       // The centralized state exposes a localized, non-sensitive error.
+    }
+  }
+
+  async function sendPasswordRecovery() {
+    if (!email.trim() || recovering) return;
+    setRecovering(true);
+    setRecoveryError(null);
+    try {
+      await requestPasswordReset(email.trim());
+      setRecoveryRequested(true);
+    } catch {
+      setRecoveryError(copy.errors.network);
+    } finally {
+      setRecovering(false);
+    }
+  }
+
+  async function finishPasswordRecovery() {
+    if (!resetToken.trim() || newPassword.length < 10 || recovering) return;
+    setRecovering(true);
+    setRecoveryError(null);
+    try {
+      await confirmPasswordReset(resetToken.trim(), newPassword);
+      setRecoveryComplete(true);
+      setRecoveryRequested(false);
+      setResetToken('');
+      setNewPassword('');
+      setFormMode('login');
+    } catch {
+      setRecoveryError(copy.resetFailed);
+    } finally {
+      setRecovering(false);
     }
   }
 
@@ -418,6 +458,23 @@ export function AccountSettings({ lang, setup = false }: { lang: Lang; setup?: b
               <button onClick={() => setFormMode('invite')} style={secondary}>{copy.familyInvite}</button>
               <button onClick={() => setFormMode('child')} style={secondary}>{copy.childLogin}</button>
               <button onClick={() => setFormMode('shared')} style={secondary}>{copy.sharedLogin}</button>
+            </div>
+          </details>
+
+          <details style={{ ...details, marginTop: 14 }}>
+            <summary style={summary}>{copy.forgotPassword}</summary>
+            <p style={{ color: '#8E97A8', fontSize: 12, lineHeight: 1.5, margin: '10px 0' }}>{copy.recoveryBody}</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <input aria-label={copy.email} value={email} onChange={(event) => setEmail(event.target.value)} type="email" autoComplete="email" placeholder={copy.email} style={field} />
+              <button disabled={recovering || !email.trim()} onClick={() => void sendPasswordRecovery()} style={secondary}>{copy.sendRecovery}</button>
+              {recoveryRequested && <>
+                <Notice color="#67D391">{copy.recoverySent}</Notice>
+                <input aria-label={copy.resetToken} value={resetToken} onChange={(event) => setResetToken(event.target.value)} autoComplete="one-time-code" placeholder={copy.resetToken} style={field} />
+                <input aria-label={copy.newPassword} value={newPassword} onChange={(event) => setNewPassword(event.target.value)} type="password" autoComplete="new-password" placeholder={copy.newPassword} style={field} />
+                <button disabled={recovering || !resetToken.trim() || newPassword.length < 10} onClick={() => void finishPasswordRecovery()} style={primary}>{copy.resetPassword}</button>
+              </>}
+              {recoveryComplete && <Notice color="#67D391">{copy.resetComplete}</Notice>}
+              {recoveryError && <Notice color="#ff8f85">{recoveryError}</Notice>}
             </div>
           </details>
         </section>

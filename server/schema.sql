@@ -35,6 +35,18 @@ create trigger users_touch_updated_at
 before update on users
 for each row execute function touch_updated_at();
 
+create table password_reset_tokens (
+  id         uuid primary key default gen_random_uuid(),
+  user_id    uuid not null references users(id) on delete cascade,
+  token_hash text not null unique,
+  expires_at timestamptz not null,
+  used_at    timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create index password_reset_tokens_user
+  on password_reset_tokens (user_id, created_at desc);
+
 create table households (
   id                   uuid primary key default gen_random_uuid(),
   name                 text not null,
