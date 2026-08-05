@@ -27,6 +27,8 @@ increasing Android version codes for install/update compatibility.
 
 ### Fixed
 
+- Restore compact boss-battle section spacing after the accessibility live region
+  shifted child-position-based layout selectors.
 - Keep the boss-introduction overlay dismissed during background synchronization.
 - Rename the default laundry boss to match its knight-like artwork, keep fighter
   ordering stable across synchronization, and prevent accounts from acting as

@@ -44,7 +44,7 @@ export function BattleScreen() {
   const sparkles = useMemo(() => makeSparkles(boss.rare), [boss.rare]);
 
   return (
-    <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column', maxWidth: 560, margin: '0 auto', width: '100%' }}>
+    <div className="battle-layout" style={{ minHeight: '100%', display: 'flex', flexDirection: 'column', maxWidth: 560, margin: '0 auto', width: '100%' }}>
       <VisuallyHidden><span role="status" aria-live="polite" aria-atomic="true">{ui.dmgNums[ui.dmgNums.length - 1]?.label ?? ''}</span></VisuallyHidden>
       {/* header */}
       <div style={{ flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 18px 10px' }}>
@@ -56,7 +56,7 @@ export function BattleScreen() {
       </div>
 
       {/* stage */}
-      <div ref={actions.setStageRef} style={{ position: 'relative', margin: '2px 16px 0', flex: 1, minHeight: 340, borderRadius: 24, overflow: 'hidden', background: 'radial-gradient(120% 90% at 50% 15%,#26314a 0%,#141a28 55%,#0c0f18 100%)', border: '1px solid #2b3346' }}>
+      <div className="battle-stage" ref={actions.setStageRef} style={{ position: 'relative', margin: '2px 16px 0', flex: 1, minHeight: 340, borderRadius: 24, overflow: 'hidden', background: 'radial-gradient(120% 90% at 50% 15%,#26314a 0%,#141a28 55%,#0c0f18 100%)', border: '1px solid #2b3346' }}>
         <div style={{ position: 'absolute', inset: 0, backgroundImage: 'linear-gradient(rgba(91,155,232,.10) 1px,transparent 1px),linear-gradient(90deg,rgba(91,155,232,.10) 1px,transparent 1px)', backgroundSize: '34px 34px', backgroundPosition: 'center', maskImage: 'linear-gradient(180deg,transparent 40%,#000 100%)', WebkitMaskImage: 'linear-gradient(180deg,transparent 40%,#000 100%)' }} />
         <div style={{ position: 'absolute', top: '56%', left: '50%', width: 320, height: 320, borderRadius: '50%', background: 'radial-gradient(circle,rgba(244,185,66,.22) 0%,transparent 68%)', animation: 'glowPulse 3.4s ease-in-out infinite' }} />
 
@@ -125,7 +125,7 @@ export function BattleScreen() {
 
         {ui.won && <VictoryOverlay mvp={mvpName} coins={ui.lastRewardTotal} elite={elite} />}
         {ui.intro && (
-          <button type="button" aria-label={t.tapStart} onClick={actions.startFight} style={{ position: 'absolute', inset: 0, zIndex: 35, width: '100%', border: 0, color: 'inherit', background: 'rgba(7,9,13,.72)', backdropFilter: 'blur(3px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 20 }}>
+          <button className="battle-stage-intro" type="button" aria-label={t.tapStart} onClick={actions.startFight} style={{ position: 'absolute', inset: 0, zIndex: 35, width: '100%', border: 0, color: 'inherit', background: 'rgba(7,9,13,.72)', backdropFilter: 'blur(3px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 20 }}>
             <div style={{ fontFamily: PS, fontSize: 9, color: '#E0564A', letterSpacing: 2, animation: 'victoryPop .4s ease-out both' }}>{t.introAppears}</div>
             <div style={{ fontFamily: PS, fontSize: 20, color: '#F6EBDD', textShadow: '0 3px 0 rgba(0,0,0,.6),0 0 20px rgba(244,185,66,.4)', marginTop: 18, textAlign: 'center', lineHeight: 1.5, textTransform: 'uppercase', animation: 'introSlam .7s cubic-bezier(.2,.9,.2,1) both' }}>{boss.name}</div>
             <div style={{ marginTop: 22, fontSize: 12, color: '#A8B0BF', letterSpacing: 1, animation: 'floatBadge 1.4s ease-in-out infinite' }}>{t.tapStart}</div>
@@ -134,7 +134,7 @@ export function BattleScreen() {
       </div>
 
       {/* party rail */}
-      <div style={{ flex: 'none', padding: '14px 18px 6px' }}>
+      <div className="battle-party-rail" style={{ flex: 'none', padding: '14px 18px 6px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
           <span style={{ fontFamily: PS, fontSize: 8, color: '#6C7486', letterSpacing: 1 }}>{t.railTeam}</span>
           <span style={{ fontSize: 10, color: '#5a637a', fontWeight: 500 }}>{t.tapPick}</span>
@@ -168,7 +168,7 @@ export function BattleScreen() {
       </div>
 
       {/* attacks */}
-      <div style={{ flex: 'none', padding: '8px 16px 18px' }}>
+      <div className="battle-attacks" style={{ flex: 'none', padding: '8px 16px 18px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
           <span style={{ fontFamily: PS, fontSize: 8, color: '#6C7486', letterSpacing: 1 }}>{t.chooseAttack}</span>
           <div style={{ flex: 1, height: 1, background: 'linear-gradient(90deg,#2b3346,transparent)' }} />
