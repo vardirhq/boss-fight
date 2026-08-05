@@ -9,6 +9,8 @@ increasing Android version codes for install/update compatibility.
 
 ### Added
 
+- Stop retransmitting unchanged avatar bytes by exchanging per-fighter content
+  hashes and retaining only locally cached payloads that match the server hash.
 - Persist synchronized gameplay events per household and send independent
   server-sequence cursors so recurring syncs download only new event history.
 - Assign a fresh synchronization sequence to every reward-redemption status

@@ -844,12 +844,17 @@ since_boss_resets=0
 since_boss_victories=0
 since_wallet_transactions=0
 since_reward_redemptions=0
+known_avatar_hashes={"fighter-uuid":"sha256-hex"}
 ```
 
 Clients persist the greatest `server_seq` received for each event stream and
 send those values on later pulls. Responses contain only rows after the supplied
 cursors. Reward-redemption status transitions receive a fresh sequence, so
 their updated row is delivered incrementally and replaces the cached version.
+Clients also send the hashes of locally cached fighter avatars. Fighter rows
+include `avatar_hash`; matching avatar bytes are omitted from the response, and
+clients retain cached bytes only when that hash still matches. A changed hash
+returns the replacement payload, while a missing hash removes the cached avatar.
 
 Response:
 

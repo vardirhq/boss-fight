@@ -103,10 +103,23 @@ test('PostgreSQL lifecycle erasure preserves only the documented records', {
     });
     assert.equal(child.status, 200);
     const childUserId = String(child.body.user.id);
+    const avatarHash = createHash('sha256').update(Buffer.from('avatar')).digest('hex');
     await database`
       insert into fighter_avatars (fighter_id, mime, bytes, hash)
-      values (${fighterId}, 'image/png', ${Buffer.from('avatar')}, 'avatar-hash')
+      values (${fighterId}, 'image/png', ${Buffer.from('avatar')}, ${avatarHash})
     `;
+    await database`update fighters set avatar_hash = ${avatarHash} where id = ${fighterId}`;
+    const fullAvatarPull = await call('GET', `/api/sync/pull?household_id=${firstHousehold}`, first.token);
+    assert.equal(fullAvatarPull.status, 200);
+    assert.equal(fullAvatarPull.body.mutable.fighter_avatars.length, 1);
+    assert.equal(fullAvatarPull.body.mutable.fighter_avatars[0].hash, avatarHash);
+    const avatarQuery = new URLSearchParams({
+      household_id: firstHousehold,
+      known_avatar_hashes: JSON.stringify({ [fighterId]: avatarHash }),
+    });
+    const cachedAvatarPull = await call('GET', `/api/sync/pull?${avatarQuery}`, first.token);
+    assert.equal(cachedAvatarPull.status, 200);
+    assert.equal(cachedAvatarPull.body.mutable.fighter_avatars.length, 0);
     const [childDevice] = await database`
       insert into devices (household_id, user_id, kind, name, platform, token_hash)
       values (${firstHousehold}, ${childUserId}, 'personal', 'Child tablet', 'android', 'device-hash')
