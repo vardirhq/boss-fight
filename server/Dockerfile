@@ -11,5 +11,8 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci --omit=dev
 COPY --from=builder /app/dist ./dist
+COPY schema.sql ./schema.sql
+COPY migrations ./migrations
+COPY scripts/migrate.mjs scripts/migration-lib.mjs ./scripts/
 EXPOSE 3002
-CMD ["node", "dist/index.js"]
+CMD ["sh", "-c", "npm run migrate && npm start"]

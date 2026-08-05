@@ -83,7 +83,14 @@ jobs:
              git fetch origin main
              git reset --hard origin/main
              cd server
-             docker compose up -d --build
+             docker compose build
+             set -a
+             . ./.env.production
+             set +a
+             install -d -m 700 /opt/boss-fight/backups
+             pg_dump --format=custom --file="/opt/boss-fight/backups/pre-deploy-$(date -u +%Y%m%dT%H%M%SZ).dump" "$DATABASE_URL"
+             docker compose run --rm boss-kamp-api npm run migrate
+             docker compose up -d --no-build
              for attempt in $(seq 1 30); do
                if curl -fsS http://127.0.0.1:3002/health; then
                  exit 0

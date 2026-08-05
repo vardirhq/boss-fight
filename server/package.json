@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "test": "node --import tsx --test src/*.test.ts",
+    "test": "node --import tsx --test src/*.test.ts scripts/*.test.mjs",
+    "migrate": "node scripts/migrate.mjs",
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts"
   },

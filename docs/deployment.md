@@ -46,6 +46,7 @@ Quality checks:
 - run root dependency audit at `critical` threshold
 - install server dependencies with `npm ci`
 - build the server with `npm run build`
+- run migration ordering and checksum tests with the server test suite
 - run server dependency audit at `high` threshold
 
 Deploy runs only after checks pass, and only for `main` pushes or manual
@@ -75,7 +76,9 @@ The user owns `/opt/boss-fight` and belongs to the `docker` group so it can run:
 
 ```bash
 cd /opt/boss-fight/server
-docker compose up -d --build
+docker compose build
+docker compose run --rm boss-kamp-api npm run migrate
+docker compose up -d --no-build
 ```
 
 ## Manual Deploy
@@ -88,14 +91,42 @@ sudo -u bosskamp-deploy bash -lc '
   git fetch origin main
   git reset --hard origin/main
   cd server
-  docker compose up -d --build
+  docker compose build
+  set -a
+  . ./.env.production
+  set +a
+  install -d -m 700 /opt/boss-fight/backups
+  pg_dump --format=custom --file="/opt/boss-fight/backups/pre-deploy-$(date -u +%Y%m%dT%H%M%SZ).dump" "$DATABASE_URL"
+  docker compose run --rm boss-kamp-api npm run migrate
+  docker compose up -d --no-build
   curl -fsS http://127.0.0.1:3002/health
 '
 ```
 
+The host must provide PostgreSQL client tools compatible with the production
+server. Automated deployment uses the same order: build, backup, migrate, replace,
+health-check. Migration failure leaves the existing application container running.
+
+## Database Migrations
+
+`server/schema.sql` bootstraps a new empty database. Every later schema change is
+an immutable, ordered SQL file in `server/migrations/` named
+`NNNN_description.sql`. The migration runner:
+
+- serializes deploys with a PostgreSQL advisory transaction lock;
+- applies all pending migrations atomically;
+- records each filename and SHA-256 checksum in `schema_migrations`;
+- refuses to continue if an applied migration file was edited;
+- safely adopts an existing pre-migration database as the baseline.
+
+Before opening a migration PR, test both a fresh bootstrap and an upgrade from a
+recent production backup in a disposable database. Prefer additive and backward-
+compatible changes so the previous application image remains usable during rollback.
+
 ## Rollback
 
-To roll back to a known commit:
+Application rollback is safe without a database restore only when every migration
+since the target commit is backward-compatible. To roll back to a known commit:
 
 ```bash
 sudo -u bosskamp-deploy bash -lc '
@@ -106,6 +137,13 @@ sudo -u bosskamp-deploy bash -lc '
   docker compose up -d --build
 '
 ```
+
+For an incompatible or destructive migration, stop writes, preserve the failed
+database for investigation, restore the matching pre-deploy dump with `pg_restore`
+under the database operator account, then deploy the earlier commit. Restoration is
+intentionally not automated: selecting and overwriting a production database
+requires an explicit operator decision. Record periodic restore drills and verify
+row counts plus `/health` and authenticated sync after each drill.
 
 ## Android Release Flow
 

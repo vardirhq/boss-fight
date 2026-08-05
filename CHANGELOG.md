@@ -16,6 +16,8 @@ increasing Android version codes for install/update compatibility.
   queue recovery, configuration conflicts, and reward-redemption rules.
 - An audit remediation tracker linking each finding to its current status and
   merged implementation evidence.
+- Versioned, checksum-verified database migrations with deployment gating and
+  documented backup and rollback procedures.
 
 ### Fixed
 

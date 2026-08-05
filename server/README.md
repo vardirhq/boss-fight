@@ -20,6 +20,7 @@ https://boss-kamp.vardir.no
 ```bash
 npm install
 npm run build
+npm run migrate
 npm start
 ```
 
@@ -55,7 +56,9 @@ The production checkout lives at `/opt/boss-fight`.
 Manual deploy on the server:
 
 ```bash
-docker compose up -d --build
+docker compose build
+docker compose run --rm boss-kamp-api npm run migrate
+docker compose up -d --no-build
 ```
 
 The Caddy route is configured outside this repo in `/srv/friskr/Caddyfile`.
@@ -93,4 +96,8 @@ payloads, response examples, and Android integration notes.
 
 ## Schema
 
-`schema.sql` contains the current database schema snapshot. The next production-hardening step is replacing this one-shot schema file with versioned migrations.
+`schema.sql` is the bootstrap snapshot for an empty database. Ordered production
+changes live in `migrations/` and are applied by `npm run migrate` under a
+PostgreSQL advisory lock. Applied filenames and SHA-256 checksums are recorded in
+`schema_migrations`; never edit a migration after it has been applied. Add a new
+four-digit sequence instead.
