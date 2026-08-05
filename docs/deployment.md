@@ -57,6 +57,11 @@ reference. Deploy runs only after checks and the image scan pass, and only for
 `main` pushes or manual `workflow_dispatch` runs. Pull requests never publish or
 deploy.
 
+The final runtime image contains production application dependencies but not the
+npm CLI or npm's global dependency tree. Migrations and the API entrypoint invoke
+their Node scripts directly. npm remains available only in the discarded build
+stage where dependencies are installed and TypeScript is compiled.
+
 ## Required GitHub Secrets
 
 The production deploy job needs:

@@ -33,7 +33,7 @@ pg_dump --format=custom \
   "$DATABASE_URL"
 
 # A migration failure occurs before replacement, leaving the old container live.
-docker compose run --rm "$service" npm run migrate
+docker compose run --rm "$service" node scripts/migrate.mjs
 
 wait_for_health() {
   for _attempt in $(seq 1 "$health_attempts"); do

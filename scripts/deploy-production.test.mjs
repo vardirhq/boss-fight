@@ -104,3 +104,13 @@ test('CI promotes a scanned digest and never rebuilds on the production host', a
   assert.match(compose, /BOSS_KAMP_API_IMAGE:\?/);
   assert.doesNotMatch(compose, /^\s*build:/m);
 });
+
+test('the production image excludes npm and invokes runtime entrypoints with Node', async () => {
+  const dockerfile = await readFile(new URL('../server/Dockerfile', import.meta.url), 'utf8');
+  const deploy = await readFile(deployScript, 'utf8');
+  assert.match(dockerfile, /rm -rf \/usr\/local\/lib\/node_modules\/npm/);
+  assert.match(dockerfile, /node scripts\/migrate\.mjs && node dist\/index\.js/);
+  assert.doesNotMatch(dockerfile, /CMD .*npm/);
+  assert.match(deploy, /docker compose run --rm "\$service" node scripts\/migrate\.mjs/);
+  assert.doesNotMatch(deploy, /docker compose run .*npm run migrate/);
+});
