@@ -44,6 +44,8 @@ increasing Android version codes for install/update compatibility.
   rate limits to child login and pairing.
 - Restrict synchronization responses to explicit public field projections and
   omit unused household-membership, device, and reward-configuration data.
+- Make Android builds reproducible by locking Deploid, standardizing Node,
+  pinning workflow actions to commit SHAs, and building releases from their tags.
 
 ## [1.0.0] - 2026-08-04
 
