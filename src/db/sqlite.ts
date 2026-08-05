@@ -1,4 +1,5 @@
 import sqlite3InitModule from '@sqlite.org/sqlite-wasm';
+import { readStoredExport, removeStoredExport, writeStoredExport } from './fallbackStorage';
 
 /**
  * Minimal, strongly-typed wrapper around sqlite-wasm.
@@ -23,6 +24,13 @@ export type Bindable = string | number | null | boolean;
 const DB_FILE = '/boss-kamp.sqlite3';
 const FALLBACK_KEY = 'boss-kamp.sqlite.export.v1';
 
+export type PersistenceStatus = {
+  mode: 'opfs' | 'fallback';
+  issue: 'opfs-unavailable' | 'restore-failed' | 'write-failed' | null;
+};
+
+export type SaveResult = { ok: true } | { ok: false; error: unknown };
+
 function toBase64(bytes: Uint8Array): string {
   let bin = '';
   const chunk = 0x8000;
@@ -40,12 +48,18 @@ function fromBase64(b64: string): Uint8Array {
 }
 
 export class Db {
+  private status: PersistenceStatus;
+  private readonly statusListeners = new Set<(status: PersistenceStatus) => void>();
+
   private constructor(
     private readonly sqlite3: Sqlite3,
     private readonly db: OoDb,
     /** True when backed by OPFS (persistent without an explicit flush). */
     readonly persistent: boolean,
-  ) {}
+    status: PersistenceStatus,
+  ) {
+    this.status = status;
+  }
 
   static async open(): Promise<Db> {
     const sqlite3 = await sqlite3InitModule();
@@ -55,31 +69,59 @@ export class Db {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const pool = await (sqlite3 as any).installOpfsSAHPoolVfs({ name: 'boss-kamp-pool' });
       const db = new pool.OpfsSAHPoolDb(DB_FILE);
-      return new Db(sqlite3, db, true);
+      return new Db(sqlite3, db, true, { mode: 'opfs', issue: null });
     } catch (err) {
       console.warn('[db] OPFS unavailable, using in-memory + localStorage fallback', err);
     }
 
     // Fallback: in-memory, seeded from a prior export if present.
-    const db = new sqlite3.oo1.DB(':memory:', 'c');
-    const stored = safeLocalStorageGet(FALLBACK_KEY);
-    if (stored) {
+    let db = new sqlite3.oo1.DB(':memory:', 'c');
+    let status: PersistenceStatus = { mode: 'fallback', issue: 'opfs-unavailable' };
+    const restored = readStoredExport(localStorage, FALLBACK_KEY, fromBase64);
+    if (restored.ok && restored.value) {
       try {
-        const bytes = fromBase64(stored);
+        const bytes = restored.value;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const capi = (sqlite3 as any).capi;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const wasm = (sqlite3 as any).wasm;
         const p = wasm.allocFromTypedArray(bytes);
-        capi.sqlite3_deserialize(
+        const result = capi.sqlite3_deserialize(
           db.pointer, 'main', p, bytes.length, bytes.length,
           capi.SQLITE_DESERIALIZE_FREEONCLOSE | capi.SQLITE_DESERIALIZE_RESIZEABLE,
         );
+        if (result !== 0) throw new Error(`SQLite fallback restore failed (${result})`);
       } catch (err) {
         console.warn('[db] failed to restore fallback export', err);
+        db.close();
+        db = new sqlite3.oo1.DB(':memory:', 'c');
+        status = { mode: 'fallback', issue: 'restore-failed' };
       }
+    } else if (!restored.ok) {
+      console.warn('[db] failed to read fallback export', restored.error);
+      status = { mode: 'fallback', issue: 'restore-failed' };
     }
-    return new Db(sqlite3, db, false);
+    return new Db(sqlite3, db, false, status);
+  }
+
+  persistenceStatus(): PersistenceStatus {
+    return this.status;
+  }
+
+  subscribePersistence(listener: (status: PersistenceStatus) => void): () => void {
+    this.statusListeners.add(listener);
+    return () => this.statusListeners.delete(listener);
+  }
+
+  private updateStatus(status: PersistenceStatus): void {
+    this.status = status;
+    for (const listener of this.statusListeners) listener(status);
+  }
+
+  reportWriteFailure(error: unknown): SaveResult {
+    console.warn('[db] write failed', error);
+    this.updateStatus({ mode: this.persistent ? 'opfs' : 'fallback', issue: 'write-failed' });
+    return { ok: false, error };
   }
 
   /** Run a statement with no result set. */
@@ -118,16 +160,33 @@ export class Db {
   }
 
   /** Persist to durable storage. No-op for OPFS; export for the fallback. */
-  flush(): void {
-    if (this.persistent) return;
+  flush(): SaveResult {
+    if (this.persistent) return { ok: true };
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const capi = (this.sqlite3 as any).capi;
       const bytes: Uint8Array = capi.sqlite3_js_db_export(this.db.pointer);
-      safeLocalStorageSet(FALLBACK_KEY, toBase64(bytes));
+      const stored = writeStoredExport(localStorage, FALLBACK_KEY, toBase64(bytes));
+      if (!stored.ok) {
+        this.updateStatus({ mode: 'fallback', issue: 'write-failed' });
+        console.warn('[db] localStorage write failed', stored.error);
+        return stored;
+      }
+      if (this.status.issue === 'write-failed') {
+        this.updateStatus({ mode: 'fallback', issue: 'opfs-unavailable' });
+      }
+      return { ok: true };
     } catch (err) {
       console.warn('[db] flush failed', err);
+      this.updateStatus({ mode: 'fallback', issue: 'write-failed' });
+      return { ok: false, error: err };
     }
+  }
+
+  /** Export the current database for user-controlled backup and recovery. */
+  exportBytes(): Uint8Array {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (this.sqlite3 as any).capi.sqlite3_js_db_export(this.db.pointer);
   }
 
   /** Wipe every table and the fallback export. */
@@ -135,32 +194,16 @@ export class Db {
     this.transaction(() => {
       for (const t of tables) this.db.exec(`DELETE FROM ${t}`);
     });
-    if (!this.persistent) safeLocalStorageRemove(FALLBACK_KEY);
+    if (!this.persistent) {
+      const removed = removeStoredExport(localStorage, FALLBACK_KEY);
+      if (!removed.ok) {
+        this.updateStatus({ mode: 'fallback', issue: 'write-failed' });
+        throw removed.error;
+      }
+    }
   }
 }
 
 function normalize(params: Bindable[]): (string | number | null)[] {
   return params.map((p) => (typeof p === 'boolean' ? (p ? 1 : 0) : p));
-}
-
-function safeLocalStorageGet(key: string): string | null {
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-function safeLocalStorageSet(key: string, value: string): void {
-  try {
-    localStorage.setItem(key, value);
-  } catch (err) {
-    console.warn('[db] localStorage write failed', err);
-  }
-}
-function safeLocalStorageRemove(key: string): void {
-  try {
-    localStorage.removeItem(key);
-  } catch {
-    /* ignore */
-  }
 }

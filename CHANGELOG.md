@@ -53,6 +53,9 @@ increasing Android version codes for install/update compatibility.
 - Keep English mode English across rewards, vouchers, transfers, shared reward
   attribution, generated boss and chore names, fighter and household fallbacks,
   level titles, and weekday labels, including synchronized redemption history.
+- Surface persistent bilingual warnings when durable game storage is unavailable,
+  corrupted, or full; allow failed saves to be retried and the current SQLite
+  database to be downloaded for recovery.
 
 ## [1.0.0] - 2026-08-04
 

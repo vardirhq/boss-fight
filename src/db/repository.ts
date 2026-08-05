@@ -1,4 +1,4 @@
-import type { Db } from './sqlite';
+import type { Db, SaveResult } from './sqlite';
 import { ALL_TABLES, SCHEMA_VERSION, ensureSchema, readSchemaVersion, writeSchemaVersion } from './schema';
 import { seedBosses, extraSeedBosses, remapBossName, remapSprite } from '../game/seed';
 import type {
@@ -147,8 +147,9 @@ export function loadState(db: Db): GameState {
 }
 
 /** Persist the whole game state (simple full rewrite — the dataset is tiny). */
-export function saveState(db: Db, state: GameState): void {
-  db.transaction(() => {
+export function saveState(db: Db, state: GameState): SaveResult {
+  try {
+    db.transaction(() => {
     db.run('DELETE FROM bosses');
     db.run('DELETE FROM chores');
     db.run('DELETE FROM used_chores');
@@ -219,8 +220,11 @@ export function saveState(db: Db, state: GameState): void {
     for (const [k, v] of metaPairs) {
       db.run('INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', [k, v]);
     }
-  });
-  db.flush();
+    });
+  } catch (error) {
+    return db.reportWriteFailure(error);
+  }
+  return db.flush();
 }
 
 /** Apply data migrations for an existing (already-seeded) database. */

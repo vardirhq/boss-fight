@@ -2,7 +2,7 @@ import {
   createContext, useContext, useEffect, useMemo, useRef, useState,
   type ReactNode,
 } from 'react';
-import { Db } from '../db/sqlite';
+import { Db, type PersistenceStatus } from '../db/sqlite';
 import { resetState, saveState } from '../db/repository';
 import { maxHpOf, cycleKey, statusOf, todayShort, isElite, isAwake, ELITE_COIN_MULT } from '../game/logic';
 import { FIGHTER_COLORS, SPRITE_POOL, sumDamage } from '../game/seed';
@@ -133,6 +133,8 @@ export interface GameActions {
   redeemGroup(r: RewardDef): void;
   transfer(amount: number | 'all'): void;
   useVoucher(vid: string): void;
+  retrySave(): void;
+  downloadBackup(): void;
   setStageRef(el: HTMLElement | null): void;
   setSpriteRef(el: HTMLElement | null): void;
   setFlashRef(el: HTMLElement | null): void;
@@ -142,6 +144,7 @@ interface GameContextValue {
   state: AppState;
   actions: GameActions;
   confetti: ConfettiPiece[];
+  persistence: PersistenceStatus;
 }
 
 const GameContext = createContext<GameContextValue | null>(null);
@@ -155,6 +158,7 @@ export function useGame(): GameContextValue {
 export function GameProvider({ db, initial, children }: { db: Db; initial: GameState; children: ReactNode }) {
   const online = useOnline();
   const [state, setState] = useState<AppState>(() => ({ game: initial, ui: initialUi() }));
+  const [persistence, setPersistence] = useState<PersistenceStatus>(() => db.persistenceStatus());
 
   // Refs to always read the latest state inside timers/closures.
   const stateRef = useRef(state);
@@ -174,15 +178,14 @@ export function GameProvider({ db, initial, children }: { db: Db; initial: GameS
 
   audio.setEnabled(state.game.settings.sound);
 
+  useEffect(() => db.subscribePersistence(setPersistence), [db]);
+
   // Debounced persistence whenever the durable game slice changes.
   useEffect(() => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
-      try {
-        saveState(db, stateRef.current.game);
-      } catch (err) {
-        console.warn('[store] save failed', err);
-      }
+      const result = saveState(db, stateRef.current.game);
+      if (!result.ok) console.warn('[store] save failed', result.error);
     }, 250);
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -795,6 +798,26 @@ export function GameProvider({ db, initial, children }: { db: Db; initial: GameS
         buzz('win', s.game.settings.haptics);
         flash('Brukt' + (entry ? ': ' + entry.title : ''));
       },
+      retrySave: () => {
+        const result = saveState(db, stateRef.current.game);
+        if (!result.ok) console.warn('[store] retry save failed', result.error);
+      },
+      downloadBackup: () => {
+        try {
+          const bytes = db.exportBytes();
+          const backup = new Uint8Array(bytes.byteLength);
+          backup.set(bytes);
+          const blob = new Blob([backup.buffer], { type: 'application/vnd.sqlite3' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = `boss-kamp-backup-${new Date().toISOString().slice(0, 10)}.sqlite3`;
+          link.click();
+          URL.revokeObjectURL(url);
+        } catch (error) {
+          db.reportWriteFailure(error);
+        }
+      },
 
       setStageRef: (el) => { stageEl.current = el; },
       setSpriteRef: (el) => { spriteEl.current = el; },
@@ -803,7 +826,7 @@ export function GameProvider({ db, initial, children }: { db: Db; initial: GameS
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [db]);
 
-  const value: GameContextValue = { state, actions, confetti: state.ui.won ? confetti.current : [] };
+  const value: GameContextValue = { state, actions, confetti: state.ui.won ? confetti.current : [], persistence };
   return <GameContext.Provider value={value}>{children}</GameContext.Provider>;
 }
 
