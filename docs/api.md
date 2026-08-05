@@ -16,6 +16,9 @@ Adult and child users authenticate with bearer sessions:
 Authorization: Bearer <session.token>
 ```
 
+Sessions have both an absolute expiry and an inactivity expiry. The production
+defaults are 90 days total and 30 days since the last authenticated request.
+
 Household devices authenticate on sync routes with:
 
 ```http

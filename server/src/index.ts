@@ -19,6 +19,7 @@ import { publicSyncRows } from './syncProjection.js';
 import { acceptedPrivacyNoticeVersion, assertAdultErasureConfirmation, assertChildErasureTarget, assertHouseholdErasureConfirmation, PRIVACY_NOTICE_VERSION, privacyExportRows } from './privacy.js';
 import { runOperationalRetention } from './retention.js';
 import { apiSecurityHeaders, configuredCorsOrigins, normalizedEmail, trustProxyEnabled } from './apiSecurity.js';
+import { sessionExpiry, sessionIdleCutoff, sessionPolicy } from './sessionPolicy.js';
 
 type JsonObject = Record<string, unknown>;
 type AuthContext = { userId: string; sessionId: string };
@@ -132,11 +133,6 @@ function entityId(householdId: string, entity: string, clientId: string) {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-function sessionExpiry() {
-  const days = Number(process.env.SESSION_DAYS ?? 90);
-  return new Date(Date.now() + days * 24 * 60 * 60 * 1000);
-}
-
 async function hashSecret(secret: string) {
   const salt = randomBytes(16).toString('hex');
   const derived = (await scrypt(secret, salt, passwordKeyLength)) as Buffer;
@@ -176,7 +172,7 @@ function deviceToken(request: FastifyRequest) {
 
 async function createSession(userId: string, deviceId?: string | null) {
   const token = randomBytes(32).toString('base64url');
-  const expiresAt = sessionExpiry();
+  const expiresAt = sessionExpiry(new Date(), sessionPolicy());
   const [session] = await sql`
     insert into sessions (user_id, device_id, token_hash, expires_at, last_used_at)
     values (${userId}, ${deviceId ?? null}, ${tokenHash(token)}, ${expiresAt}, now())
@@ -195,6 +191,7 @@ async function requireAuth(request: FastifyRequest): Promise<AuthContext> {
     where token_hash = ${tokenHash(token)}
       and revoked_at is null
       and expires_at > now()
+      and coalesce(last_used_at, created_at) > ${sessionIdleCutoff(new Date(), sessionPolicy())}
     returning id, user_id
   `;
 
@@ -578,6 +575,7 @@ export async function buildApp() {
       where s.user_id = ${auth.userId}
         and s.revoked_at is null
         and s.expires_at > now()
+        and coalesce(s.last_used_at, s.created_at) > ${sessionIdleCutoff(new Date(), sessionPolicy())}
       order by (s.id = ${auth.sessionId}::uuid) desc, s.last_used_at desc nulls last, s.created_at desc
     `;
     return { sessions: sessions.map((session) => ({
