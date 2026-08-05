@@ -9,6 +9,8 @@ increasing Android version codes for install/update compatibility.
 
 ### Added
 
+- Bound bearer sessions by both a 90-day absolute lifetime and a 30-day idle
+  lifetime, with validated deployment overrides and inactive-session filtering.
 - Let signed-in adults review active sessions, their recent use and expiry, and
   remotely revoke individual sign-ins—including the current device.
 - Harden the API perimeter with validated adult email addresses, explicit CORS

@@ -49,6 +49,7 @@ CORS_ORIGIN=https://boss-kamp.vardir.no,http://localhost,https://localhost,capac
 TRUST_PROXY=true
 LOG_LEVEL=info
 SESSION_DAYS=90
+SESSION_IDLE_DAYS=30
 RETENTION_INVITES_DAYS=30
 RETENTION_PAIRINGS_DAYS=7
 RETENTION_SESSIONS_DAYS=30
@@ -75,6 +76,11 @@ limiting cannot be spoofed.
 The child authentication limit applies per client IP independently to direct
 child login and pairing-code login. Database-backed credential lockout still
 starts after eight invalid PIN attempts and lasts ten minutes.
+
+Bearer sessions expire after 90 days at most and after 30 days without an
+authenticated request by default. `SESSION_IDLE_DAYS` must not exceed
+`SESSION_DAYS`; invalid values stop the API instead of silently weakening the
+policy.
 
 SMTP is required for adult and parent invitations. The API only reports an
 invitation as created after the mail server accepts the message. For local

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { createHash } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
 import type { FastifyInstance } from 'fastify';
 import postgres from 'postgres';
@@ -80,6 +81,16 @@ test('PostgreSQL lifecycle erasure preserves only the documented records', {
     assert.equal(revokedSession.status, 200);
     assert.equal(revokedSession.body.current, false);
     assert.equal((await call('GET', '/api/me', additionalToken)).status, 401);
+    const idleLogin = await call('POST', '/api/auth/login', undefined, {
+      email: 'first@example.com', password: 'integration-password',
+    });
+    const idleToken = String(idleLogin.body.session.token);
+    const idleTokenHash = createHash('sha256').update(idleToken).digest('hex');
+    await database`
+      update sessions set last_used_at = now() - interval '31 days'
+      where token_hash = ${idleTokenHash}
+    `;
+    assert.equal((await call('GET', '/api/me', idleToken)).status, 401);
 
     const firstHousehold = await bootstrap(first.token, 'First Family');
     const fighter = await call('POST', `/api/households/${firstHousehold}/fighters`, first.token, {
