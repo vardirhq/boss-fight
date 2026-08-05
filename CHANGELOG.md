@@ -9,6 +9,8 @@ increasing Android version codes for install/update compatibility.
 
 ### Added
 
+- Let signed-in adults review active sessions, their recent use and expiry, and
+  remotely revoke individual sign-ins—including the current device.
 - Harden the API perimeter with validated adult email addresses, explicit CORS
   origins, opt-in proxy trust, defensive response headers, non-root containers,
   and health responses that disclose no database metadata.

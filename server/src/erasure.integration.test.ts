@@ -65,6 +65,22 @@ test('PostgreSQL lifecycle erasure preserves only the documented records', {
     };
 
     const first = await register('first@example.com', 'First Parent');
+    const additionalLogin = await call('POST', '/api/auth/login', undefined, {
+      email: 'first@example.com', password: 'integration-password',
+    });
+    assert.equal(additionalLogin.status, 200);
+    const additionalToken = String(additionalLogin.body.session.token);
+    const activeSessions = await call('GET', '/api/me/sessions', first.token);
+    assert.equal(activeSessions.status, 200);
+    assert.equal(activeSessions.body.sessions.length, 2);
+    const otherSession = activeSessions.body.sessions.find((session: Record<string, unknown>) => session.current === false);
+    assert.ok(otherSession);
+    assert.equal('token_hash' in otherSession, false);
+    const revokedSession = await call('DELETE', `/api/me/sessions/${otherSession.id}`, first.token);
+    assert.equal(revokedSession.status, 200);
+    assert.equal(revokedSession.body.current, false);
+    assert.equal((await call('GET', '/api/me', additionalToken)).status, 401);
+
     const firstHousehold = await bootstrap(first.token, 'First Family');
     const fighter = await call('POST', `/api/households/${firstHousehold}/fighters`, first.token, {
       name: 'Child Name', color: '#F4B942', sort: 1,

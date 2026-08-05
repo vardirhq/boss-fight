@@ -3,7 +3,7 @@ import type { Lang } from '../game/types';
 import { useGame } from '../store/GameContext';
 import { useOnline, type OnlineError } from './OnlineContext';
 import { createBootstrapSnapshot, serverConfigToGameState, serverSyncToGameState } from './gameSync';
-import { acceptHouseholdInvite, ApiError, createHouseholdDevicePairing, eraseAdultAccount, eraseHousehold, getHouseholdExport, inviteParent } from './api';
+import { acceptHouseholdInvite, ApiError, createHouseholdDevicePairing, eraseAdultAccount, eraseHousehold, getAccountSessions, getHouseholdExport, inviteParent, revokeAccountSession, type AccountSession } from './api';
 
 const field: React.CSSProperties = {
   width: '100%', boxSizing: 'border-box', background: '#0f1420', border: '1px solid #333c50', borderRadius: 12,
@@ -47,6 +47,7 @@ const COPY = {
     privacyData: 'Personvern og familiedata', privacyDataBody: 'Last ned en JSON-kopi av familieoppsettet, spillerne og aktivitetshistorikken som er lagret på nett.', downloadData: 'Last ned familiedata', downloadingData: 'Laster ned…', exportFailed: 'Familiedataene kunne ikke lastes ned.',
     eraseFamily: 'Slett familien permanent', eraseFamilyBody: 'Sletter alle spillere, barnekontoer, enheter, oppsett, aktivitet, mynter og belønninger fra serveren. Voksenkontoene beholdes. Dette kan ikke angres.', confirmFamilyName: 'Skriv familienavnet nøyaktig', currentPassword: 'Ditt nåværende passord', eraseFamilyButton: 'Slett alle familiedata', erasingFamily: 'Sletter…', eraseFamilyFailed: 'Familien kunne ikke slettes. Kontroller navnet og passordet.',
     eraseAccount: 'Slett voksenkontoen permanent', eraseAccountBody: 'Sletter e-post, navn, innlogging, enheter, medlemskap og spilleridentitet. Du må først slette familien eller gi eierrollen til en annen eier. Dette kan ikke angres.', confirmEmail: 'Skriv e-postadressen nøyaktig', eraseAccountButton: 'Slett voksenkontoen', erasingAccount: 'Sletter konto…', eraseAccountFailed: 'Kontoen kunne ikke slettes. Kontroller e-post og passord, og sørg for at alle familier har en annen eier.',
+    sessions: 'Innloggede enheter', sessionsBody: 'Se aktive innlogginger og avslutt dem du ikke kjenner igjen.', currentSession: 'Denne enheten', sessionFallback: 'Nettleser eller ukjent enhet', lastUsed: 'Sist brukt', sessionExpires: 'Utløper', revokeSession: 'Logg ut enheten', loadingSessions: 'Henter innlogginger…', sessionsFailed: 'Innloggingene kunne ikke hentes.',
     joinHousehold: 'Bytt eller bli med i en annen familie', logout: 'Logg ut',
     advanced: 'Teknisk informasjon', pending: 'endringer venter', rejected: 'avviste endringer krever oppfølging', revision: 'Konfigurasjonsversjon', lastSync: 'Sist lagret', syncNow: 'Synkroniser nå', role: 'Tilgang',
     fighterNameRequired: 'Gi alle spillerne et navn før familien opprettes.', joinFailed: 'Invitasjonen kunne ikke godtas.',
@@ -78,6 +79,7 @@ const COPY = {
     privacyData: 'Privacy and family data', privacyDataBody: 'Download a JSON copy of the family configuration, fighters, and activity history stored online.', downloadData: 'Download family data', downloadingData: 'Downloading…', exportFailed: 'The family data could not be downloaded.',
     eraseFamily: 'Permanently erase family', eraseFamilyBody: 'Deletes every fighter, child account, device, configuration item, activity, coin, and reward from the server. Adult accounts remain. This cannot be undone.', confirmFamilyName: 'Enter the exact family name', currentPassword: 'Your current password', eraseFamilyButton: 'Erase all family data', erasingFamily: 'Erasing…', eraseFamilyFailed: 'The family could not be erased. Check the name and password.',
     eraseAccount: 'Permanently erase adult account', eraseAccountBody: 'Deletes your email, name, login, devices, memberships, and fighter identity. You must first erase the family or transfer ownership to another owner. This cannot be undone.', confirmEmail: 'Enter the exact email address', eraseAccountButton: 'Erase adult account', erasingAccount: 'Erasing account…', eraseAccountFailed: 'The account could not be erased. Check the email and password, and ensure every family has another owner.',
+    sessions: 'Signed-in devices', sessionsBody: 'Review active sign-ins and end any you do not recognize.', currentSession: 'This device', sessionFallback: 'Browser or unknown device', lastUsed: 'Last used', sessionExpires: 'Expires', revokeSession: 'Sign out device', loadingSessions: 'Loading sign-ins…', sessionsFailed: 'Sign-ins could not be loaded.',
     joinHousehold: 'Switch or join another family', logout: 'Sign out',
     advanced: 'Technical information', pending: 'changes waiting', rejected: 'rejected changes need attention', revision: 'Configuration revision', lastSync: 'Last saved', syncNow: 'Sync now', role: 'Access',
     fighterNameRequired: 'Name every fighter before creating the family.', joinFailed: 'The invitation could not be accepted.',
@@ -120,6 +122,9 @@ export function AccountSettings({ lang, setup = false }: { lang: Lang; setup?: b
   const [eraseAccountPassword, setEraseAccountPassword] = useState('');
   const [erasingAccount, setErasingAccount] = useState(false);
   const [eraseAccountError, setEraseAccountError] = useState<string | null>(null);
+  const [accountSessions, setAccountSessions] = useState<AccountSession[] | null>(null);
+  const [sessionsError, setSessionsError] = useState<string | null>(null);
+  const [revokingSessionId, setRevokingSessionId] = useState<string | null>(null);
   const busy = state.status === 'syncing' || state.status === 'restoring';
   const signedIn = Boolean(state.sessionToken || state.householdDeviceToken);
   const connected = Boolean(state.householdId && state.configurationConnectedAt);
@@ -146,6 +151,19 @@ export function AccountSettings({ lang, setup = false }: { lang: Lang; setup?: b
         setSetupError(copy.joinFailed);
       });
   }, [acceptInviteAfterAuth, actions, copy.joinFailed, inviteToken, state.sessionToken]);
+
+  useEffect(() => {
+    if (state.mode !== 'adult-account' || !state.sessionToken) {
+      setAccountSessions(null);
+      return;
+    }
+    let cancelled = false;
+    setSessionsError(null);
+    void getAccountSessions(state.sessionToken)
+      .then((sessions) => { if (!cancelled) setAccountSessions(sessions); })
+      .catch(() => { if (!cancelled) setSessionsError(copy.sessionsFailed); });
+    return () => { cancelled = true; };
+  }, [copy.sessionsFailed, state.mode, state.sessionToken]);
 
   async function authenticate() {
     setSetupError(null);
@@ -286,6 +304,51 @@ export function AccountSettings({ lang, setup = false }: { lang: Lang; setup?: b
     }
   }
 
+  async function revokeSession(session: AccountSession) {
+    if (!state.sessionToken || revokingSessionId) return;
+    setSessionsError(null);
+    setRevokingSessionId(session.id);
+    try {
+      const result = await revokeAccountSession(state.sessionToken, session.id);
+      if (result.current) {
+        await actions.logout();
+        gameActions.doReset();
+      } else {
+        setAccountSessions((current) => current?.filter((item) => item.id !== session.id) ?? null);
+      }
+    } catch {
+      setSessionsError(copy.sessionsFailed);
+    } finally {
+      setRevokingSessionId(null);
+    }
+  }
+
+  const sessionManagement = state.mode === 'adult-account' ? (
+    <details style={{ ...card, ...details }}>
+      <summary style={summary}>{copy.sessions}</summary>
+      <p style={{ color: '#8E97A8', fontSize: 12.5, lineHeight: 1.5, margin: '11px 0' }}>{copy.sessionsBody}</p>
+      {!accountSessions && !sessionsError && <div role="status" style={{ color: '#8E97A8', fontSize: 12 }}>{copy.loadingSessions}</div>}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+        {accountSessions?.map((session) => (
+          <div key={session.id} style={{ padding: 12, borderRadius: 12, background: '#121827', border: '1px solid #333c50' }}>
+            <div style={{ color: '#D4D9E2', fontSize: 13, fontWeight: 800 }}>
+              {session.deviceName || session.platform || copy.sessionFallback}
+              {session.current && <span style={{ color: '#67D391', marginLeft: 7, fontSize: 11 }}>· {copy.currentSession}</span>}
+            </div>
+            <div style={{ color: '#7D8698', fontSize: 11.5, lineHeight: 1.55, marginTop: 4 }}>
+              {copy.lastUsed}: {new Date(session.lastUsedAt || session.createdAt).toLocaleString(lang === 'en' ? 'en-GB' : 'nb-NO')}<br />
+              {copy.sessionExpires}: {new Date(session.expiresAt).toLocaleDateString(lang === 'en' ? 'en-GB' : 'nb-NO')}
+            </div>
+            <button disabled={revokingSessionId !== null} onClick={() => void revokeSession(session)} style={{ ...secondary, marginTop: 8, padding: '9px 11px', color: session.current ? '#ff8f85' : '#C5CBD6' }}>
+              {copy.revokeSession}
+            </button>
+          </div>
+        ))}
+      </div>
+      {sessionsError && <Notice color="#ff8f85">{sessionsError}</Notice>}
+    </details>
+  ) : null;
+
   const accountErasure = state.mode === 'adult-account' && state.account?.email ? (
     <details style={{ ...card, ...details }}>
       <summary style={{ ...summary, color: '#ff8f85' }}>{copy.eraseAccount}</summary>
@@ -415,6 +478,7 @@ export function AccountSettings({ lang, setup = false }: { lang: Lang; setup?: b
           </div>}
         </section>
 
+        {sessionManagement}
         {accountErasure}
         <button onClick={() => void actions.logout()} style={secondary}>{copy.logout}</button>
       </div>
@@ -505,6 +569,7 @@ export function AccountSettings({ lang, setup = false }: { lang: Lang; setup?: b
         </details>}
       </details>}
 
+      {sessionManagement}
       {accountErasure}
 
       <button onClick={() => void actions.logout()} style={secondary}>{copy.logout}</button>

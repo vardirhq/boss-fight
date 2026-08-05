@@ -567,6 +567,42 @@ export async function buildApp() {
     return { ok: true };
   });
 
+  app.get('/api/me/sessions', async (request) => {
+    const auth = await requireAuth(request);
+    const sessions = await sql`
+      select s.id, s.created_at, s.last_used_at, s.expires_at,
+        s.id = ${auth.sessionId}::uuid as current,
+        d.name as device_name, d.platform
+      from sessions s
+      left join devices d on d.id = s.device_id
+      where s.user_id = ${auth.userId}
+        and s.revoked_at is null
+        and s.expires_at > now()
+      order by (s.id = ${auth.sessionId}::uuid) desc, s.last_used_at desc nulls last, s.created_at desc
+    `;
+    return { sessions: sessions.map((session) => ({
+      id: session.id,
+      current: session.current,
+      deviceName: session.device_name,
+      platform: session.platform,
+      createdAt: session.created_at,
+      lastUsedAt: session.last_used_at,
+      expiresAt: session.expires_at,
+    })) };
+  });
+
+  app.delete('/api/me/sessions/:sessionId', async (request) => {
+    const auth = await requireAuth(request);
+    const sessionId = requireString((request.params as JsonObject).sessionId, 'sessionId');
+    const [session] = await sql`
+      update sessions set revoked_at = now()
+      where id = ${sessionId} and user_id = ${auth.userId} and revoked_at is null
+      returning id
+    `;
+    if (!session) throw new Error('Not found');
+    return { ok: true, current: sessionId === auth.sessionId };
+  });
+
   app.get('/api/me', async (request) => {
     const auth = await requireAuth(request);
     const [user] = await sql`

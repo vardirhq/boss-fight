@@ -25,6 +25,16 @@ export interface AuthSession {
   deviceId: string | null;
 }
 
+export interface AccountSession {
+  id: string;
+  current: boolean;
+  deviceName: string | null;
+  platform: string | null;
+  createdAt: string;
+  lastUsedAt: string | null;
+  expiresAt: string;
+}
+
 export interface BootstrapSnapshot {
   /** The fighter generated from the authenticated household owner's account. */
   ownerFighterClientId?: string;
@@ -473,4 +483,24 @@ export async function getMe(token: string) {
 
 export async function logoutOnline(token: string) {
   await request('/api/auth/logout', { method: 'POST', body: '{}' }, token);
+}
+
+export async function getAccountSessions(token: string): Promise<AccountSession[]> {
+  const result = await request<{ sessions?: Array<Record<string, unknown>> }>('/api/me/sessions', {}, token);
+  if (!Array.isArray(result.sessions)) throw new ApiError('Invalid API response: sessions', 'server');
+  return result.sessions.map((session) => ({
+    id: requiredString(session.id, 'session.id'),
+    current: session.current === true,
+    deviceName: nullableString(session.deviceName),
+    platform: nullableString(session.platform),
+    createdAt: requiredString(session.createdAt, 'session.createdAt'),
+    lastUsedAt: nullableString(session.lastUsedAt),
+    expiresAt: requiredString(session.expiresAt, 'session.expiresAt'),
+  }));
+}
+
+export async function revokeAccountSession(token: string, sessionId: string) {
+  return request<{ ok: boolean; current: boolean }>(`/api/me/sessions/${encodeURIComponent(sessionId)}`, {
+    method: 'DELETE',
+  }, token);
 }
