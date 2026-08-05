@@ -1,0 +1,174 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { readFile, readdir } from 'node:fs/promises';
+import type { FastifyInstance } from 'fastify';
+import postgres from 'postgres';
+
+const adminUrl = process.env.TEST_DATABASE_URL;
+
+test('PostgreSQL lifecycle erasure preserves only the documented records', {
+  skip: !adminUrl,
+  timeout: 30_000,
+}, async () => {
+  const databaseName = `boss_kamp_integration_${process.pid}_${Date.now()}`;
+  const admin = postgres(adminUrl!, { max: 1 });
+  const databaseUrl = new URL(adminUrl!);
+  databaseUrl.pathname = `/${databaseName}`;
+  let database: ReturnType<typeof postgres> | null = null;
+  let appSql: (typeof import('./db.js'))['sql'] | null = null;
+  let app: FastifyInstance | null = null;
+
+  try {
+    await admin.unsafe(`create database ${databaseName}`);
+    database = postgres(databaseUrl.toString(), { max: 1 });
+    const schema = await readFile(new URL('../schema.sql', import.meta.url), 'utf8');
+    await database.unsafe(schema);
+    const migrationsUrl = new URL('../migrations/', import.meta.url);
+    const migrationNames = (await readdir(migrationsUrl))
+      .filter((name) => /^\d{4}_[a-z0-9_]+\.sql$/.test(name))
+      .sort();
+    for (const name of migrationNames) {
+      await database.unsafe(await readFile(new URL(name, migrationsUrl), 'utf8'));
+    }
+
+    process.env.DATABASE_URL = databaseUrl.toString();
+    process.env.LOG_LEVEL = 'silent';
+    const server = await import('./index.js');
+    const dbModule = await import('./db.js');
+    appSql = dbModule.sql;
+    app = await server.buildApp();
+
+    const call = async (
+      method: 'GET' | 'POST' | 'DELETE',
+      url: string,
+      token?: string,
+      payload?: Record<string, unknown>,
+    ) => {
+      const response = await app!.inject({
+        method, url,
+        headers: token ? { authorization: `Bearer ${token}` } : undefined,
+        payload,
+      });
+      return { status: response.statusCode, body: response.json() as Record<string, any> };
+    };
+    const register = async (email: string, name: string) => {
+      const result = await call('POST', '/api/auth/register', undefined, {
+        email, displayName: name, password: 'integration-password',
+      });
+      assert.equal(result.status, 200);
+      return { token: String(result.body.session.token), userId: String(result.body.user.id) };
+    };
+    const bootstrap = async (token: string, name: string) => {
+      const result = await call('POST', '/api/bootstrap', token, { householdName: name, timezone: 'Europe/Oslo' });
+      assert.equal(result.status, 200);
+      return String(result.body.householdId);
+    };
+
+    const first = await register('first@example.com', 'First Parent');
+    const firstHousehold = await bootstrap(first.token, 'First Family');
+    const fighter = await call('POST', `/api/households/${firstHousehold}/fighters`, first.token, {
+      name: 'Child Name', color: '#F4B942', sort: 1,
+    });
+    assert.equal(fighter.status, 200);
+    const fighterId = String(fighter.body.fighter.id);
+    const child = await call('POST', `/api/households/${firstHousehold}/children`, first.token, {
+      fighterId, pin: '1234', authorized: true, privacyNoticeVersion: '2026-08-05.4',
+    });
+    assert.equal(child.status, 200);
+    const childUserId = String(child.body.user.id);
+    await database`
+      insert into fighter_avatars (fighter_id, mime, bytes, hash)
+      values (${fighterId}, 'image/png', ${Buffer.from('avatar')}, 'avatar-hash')
+    `;
+    const [childDevice] = await database`
+      insert into devices (household_id, user_id, kind, name, platform, token_hash)
+      values (${firstHousehold}, ${childUserId}, 'personal', 'Child tablet', 'android', 'device-hash')
+      returning id
+    `;
+    await database`
+      insert into sessions (user_id, device_id, token_hash, expires_at)
+      values (${childUserId}, ${childDevice.id}, 'child-session-hash', now() + interval '1 day')
+    `;
+
+    const erasedChild = await call('DELETE', `/api/households/${firstHousehold}/children/${fighterId}`, first.token);
+    assert.equal(erasedChild.status, 200);
+    assert.equal((await database`select count(*)::int as count from users where id = ${childUserId}`)[0].count, 0);
+    assert.equal((await database`select count(*)::int as count from fighter_credentials where fighter_id = ${fighterId}`)[0].count, 0);
+    assert.equal((await database`select count(*)::int as count from fighter_avatars where fighter_id = ${fighterId}`)[0].count, 0);
+    const [erasedFighter] = await database`select name, user_id, deleted_at from fighters where id = ${fighterId}`;
+    assert.equal(erasedFighter.name, 'Erased fighter');
+    assert.equal(erasedFighter.user_id, null);
+    assert.ok(erasedFighter.deleted_at);
+
+    const householdChildFighter = await call('POST', `/api/households/${firstHousehold}/fighters`, first.token, {
+      name: 'Second Child', color: '#E0564A', sort: 2,
+    });
+    const householdChild = await call('POST', `/api/households/${firstHousehold}/children`, first.token, {
+      fighterId: householdChildFighter.body.fighter.id, pin: '5678', authorized: true,
+      privacyNoticeVersion: '2026-08-05.4',
+    });
+    const householdChildUserId = String(householdChild.body.user.id);
+    const erasedHousehold = await call('DELETE', `/api/households/${firstHousehold}`, first.token, {
+      password: 'integration-password', confirmedName: 'First Family',
+    });
+    assert.equal(erasedHousehold.status, 200);
+    assert.equal((await database`select count(*)::int as count from households where id = ${firstHousehold}`)[0].count, 0);
+    assert.equal((await database`select count(*)::int as count from users where id = ${householdChildUserId}`)[0].count, 0);
+    assert.equal((await database`select count(*)::int as count from users where id = ${first.userId}`)[0].count, 1);
+
+    const second = await register('second@example.com', 'Second Parent');
+    const secondHousehold = await bootstrap(second.token, 'Second Family');
+    const blocked = await call('DELETE', '/api/me', second.token, {
+      password: 'integration-password', confirmedEmail: 'second@example.com',
+    });
+    assert.equal(blocked.status, 422);
+
+    const replacement = await register('replacement@example.com', 'Replacement Owner');
+    await database`
+      insert into household_members (household_id, user_id, role, status, invited_by_user_id)
+      values (${secondHousehold}, ${replacement.userId}, 'owner', 'active', ${second.userId})
+    `;
+    const adultFighter = await database`
+      insert into fighters (household_id, user_id, name, color, created_by_user_id)
+      values (${secondHousehold}, ${second.userId}, 'Second Parent', '#67D391', ${second.userId})
+      returning id
+    `;
+    await database`
+      insert into fighter_avatars (fighter_id, mime, bytes, hash)
+      values (${adultFighter[0].id}, 'image/png', ${Buffer.from('adult-avatar')}, 'adult-avatar-hash')
+    `;
+    const authorizationFighter = await call('POST', `/api/households/${secondHousehold}/fighters`, second.token, {
+      name: 'Authorized Child', color: '#5B9BE8', sort: 3,
+    });
+    const authorizationChild = await call('POST', `/api/households/${secondHousehold}/children`, second.token, {
+      fighterId: authorizationFighter.body.fighter.id, pin: '9012', authorized: true,
+      privacyNoticeVersion: '2026-08-05.4',
+    });
+    assert.equal(authorizationChild.status, 200);
+
+    const erasedAdult = await call('DELETE', '/api/me', second.token, {
+      password: 'integration-password', confirmedEmail: 'SECOND@example.com',
+    });
+    assert.equal(erasedAdult.status, 200);
+    assert.equal((await database`select count(*)::int as count from users where id = ${second.userId}`)[0].count, 0);
+    const [retainedHousehold] = await database`select created_by_user_id from households where id = ${secondHousehold}`;
+    assert.equal(String(retainedHousehold.created_by_user_id), replacement.userId);
+    const [retainedAuthorization] = await database`
+      select authorized_by_user_id, privacy_notice_version from child_authorizations
+      where child_user_id = ${authorizationChild.body.user.id}
+    `;
+    assert.equal(retainedAuthorization.authorized_by_user_id, null);
+    assert.equal(retainedAuthorization.privacy_notice_version, '2026-08-05.4');
+
+    await app.close();
+    app = null;
+    await appSql.end({ timeout: 1 });
+    appSql = null;
+  } finally {
+    if (app) await app.close();
+    if (appSql) await appSql.end({ timeout: 1 });
+    if (database) await database.end({ timeout: 1 });
+    await admin.unsafe(`drop database if exists ${databaseName} with (force)`);
+    await admin.end({ timeout: 1 });
+  }
+});

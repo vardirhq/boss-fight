@@ -1,5 +1,7 @@
 import 'dotenv/config';
 import { createHash, randomBytes, scrypt as scryptCallback, timingSafeEqual } from 'node:crypto';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import Fastify, { type FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
@@ -2467,13 +2469,15 @@ export async function buildApp() {
   return app;
 }
 
-const app = await buildApp();
-const initialRetention = await runOperationalRetention();
-app.log.info({ removed: initialRetention }, 'operational retention cleanup completed');
-await app.listen({ port: Number(process.env.PORT ?? 3002), host: '0.0.0.0' });
-const retentionTimer = setInterval(() => {
-  void runOperationalRetention()
-    .then((removed) => app.log.info({ removed }, 'operational retention cleanup completed'))
-    .catch((error) => app.log.error({ error }, 'operational retention cleanup failed'));
-}, 24 * 60 * 60 * 1000);
-retentionTimer.unref();
+if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
+  const app = await buildApp();
+  const initialRetention = await runOperationalRetention();
+  app.log.info({ removed: initialRetention }, 'operational retention cleanup completed');
+  await app.listen({ port: Number(process.env.PORT ?? 3002), host: '0.0.0.0' });
+  const retentionTimer = setInterval(() => {
+    void runOperationalRetention()
+      .then((removed) => app.log.info({ removed }, 'operational retention cleanup completed'))
+      .catch((error) => app.log.error({ error }, 'operational retention cleanup failed'));
+  }, 24 * 60 * 60 * 1000);
+  retentionTimer.unref();
+}

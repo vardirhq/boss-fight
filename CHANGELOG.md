@@ -9,6 +9,9 @@ increasing Android version codes for install/update compatibility.
 
 ### Added
 
+- Exercise child, household, and adult-account erasure against an isolated real
+  PostgreSQL database in CI, including schema migrations, sole-owner protection,
+  retained anonymized records, and cascading identity cleanup.
 - Let adults permanently erase their account, credentials, devices,
   memberships, and identifying game links after password/email confirmation,
   while protecting households that still depend on them as sole owner.
