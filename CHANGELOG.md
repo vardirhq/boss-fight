@@ -27,6 +27,8 @@ increasing Android version codes for install/update compatibility.
 
 ### Fixed
 
+- Hide the expected browser-storage fallback banner in native Android builds
+  while retaining warnings for corrupted restores and failed writes.
 - Restore compact boss-battle section spacing after the accessibility live region
   shifted child-position-based layout selectors.
 - Keep the boss-introduction overlay dismissed during background synchronization.
