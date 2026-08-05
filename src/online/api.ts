@@ -152,6 +152,8 @@ export interface ServerSyncState {
   };
 }
 
+export type SyncCursors = Record<keyof ServerSyncState['events'], number>;
+
 export type ApiErrorKind = 'network' | 'unauthenticated' | 'forbidden' | 'conflict' | 'validation' | 'server' | 'unknown';
 export const PRIVACY_NOTICE_VERSION = '2026-08-05.4';
 
@@ -452,14 +454,14 @@ export async function pushSyncMutations(token: string | null, householdId: strin
   }, token, householdDeviceToken);
 }
 
-export async function pullSyncState(token: string | null, householdId: string, householdDeviceToken?: string | null) {
+export async function pullSyncState(token: string | null, householdId: string, cursors: SyncCursors, householdDeviceToken?: string | null) {
   const query = new URLSearchParams({
     household_id: householdId,
-    since_chore_completions: '0',
-    since_boss_resets: '0',
-    since_boss_victories: '0',
-    since_wallet_transactions: '0',
-    since_reward_redemptions: '0',
+    since_chore_completions: String(cursors.chore_completions),
+    since_boss_resets: String(cursors.boss_resets),
+    since_boss_victories: String(cursors.boss_victories),
+    since_wallet_transactions: String(cursors.wallet_transactions),
+    since_reward_redemptions: String(cursors.reward_redemptions),
   });
   const result = await request<Partial<ServerSyncState>>(`/api/sync/pull?${query}`, {}, token, householdDeviceToken);
   if (!result.mutable || !result.events || typeof result.serverTime !== 'string') {
