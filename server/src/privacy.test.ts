@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { householdExportFields, PRIVACY_NOTICE_VERSION, privacyExportRows } from './privacy.js';
+import { assertChildErasureTarget, householdExportFields, PRIVACY_NOTICE_VERSION, privacyExportRows } from './privacy.js';
 
 const secrets = ['password_hash', 'pin_hash', 'token_hash', 'code_hash', 'join_code_hash'];
 
@@ -15,4 +15,10 @@ test('privacy export discards fields outside its explicit contract', () => {
   assert.deepEqual(privacyExportRows('devices', [{
     id: 'device-1', name: 'Tablet', token_hash: 'secret', code_hash: 'secret', internal: true,
   }]), [{ id: 'device-1', name: 'Tablet' }]);
+});
+
+test('self-service child erasure cannot target adult or unclaimed fighters', () => {
+  assert.equal(assertChildErasureTarget({ userId: 'child-1', userKind: 'child', role: 'child' }), 'child-1');
+  assert.throws(() => assertChildErasureTarget({ userId: 'adult-1', userKind: 'adult', role: 'member' }));
+  assert.throws(() => assertChildErasureTarget({ userId: null, userKind: null, role: null }));
 });

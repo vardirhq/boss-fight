@@ -28,3 +28,14 @@ export function privacyExportRows(section: HouseholdExportSection, rows: Array<R
     fields.filter((field) => field in row).map((field) => [field, row[field]]),
   ));
 }
+
+export function assertChildErasureTarget(input: {
+  userId: unknown;
+  userKind: unknown;
+  role: unknown;
+}) {
+  if (typeof input.userId !== 'string' || input.userKind !== 'child' || input.role !== 'child') {
+    throw new Error('Only child identities can be erased through this route');
+  }
+  return input.userId;
+}

@@ -9,6 +9,9 @@ increasing Android version codes for install/update compatibility.
 
 ### Added
 
+- Allow owners and parents to permanently erase a child identity, credentials,
+  devices, avatar, and authorization record while retaining only de-identified
+  gameplay and wallet history.
 - Publish a bilingual privacy notice, record the responsible adult and notice
   version for new child logins, and let owners and parents download a
   credential-free JSON export of family configuration and activity history.

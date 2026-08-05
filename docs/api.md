@@ -448,6 +448,11 @@ history:
   restores the linked member; suspension revokes their sessions and devices.
 - `POST /api/households/:householdId/fighters/:fighterId/unlink` removes the
   identity link and unlocks the fighter without deleting its history.
+- `DELETE /api/households/:householdId/children/:fighterId` permanently erases a
+  child identity, authorization record, PIN, sessions, devices, pairings, avatar,
+  and identifying actor links. It replaces the fighter with a deleted generic
+  tombstone so de-identified gameplay and wallet records retain referential and
+  accounting integrity. This route rejects adult and unclaimed fighters.
 
 Household governance follows a strict hierarchy: owners may administer another
 member, while parents may administer only members and children. Callers cannot
