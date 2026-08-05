@@ -86,6 +86,7 @@ interface OnlineActions {
   loginChildWithPairing(code: string, pin: string, deviceName: string, platform: string): Promise<void>;
   pairHouseholdDevice(code: string, deviceName: string, platform: string): Promise<void>;
   logout(): Promise<void>;
+  forgetHousehold(householdId: string): void;
   createHousehold(name: string, snapshot: BootstrapSnapshot): Promise<ServerHouseholdConfig>;
   getConfiguration(): Promise<ServerHouseholdConfig>;
   enqueueMutation(type: SyncMutationType, payload: Record<string, unknown>): string;
@@ -550,6 +551,21 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
         await clearNativeCredentials().catch(() => undefined);
         replaceState(localState);
       }
+    },
+    forgetHousehold: (householdId) => {
+      const retained = loadPendingMutations().filter((mutation) => mutation.householdId !== householdId);
+      persistPendingMutations(retained);
+      setPendingMutations(retained);
+      replaceState({
+        ...state,
+        status: 'authenticated', householdId: null, householdName: null, role: null,
+        householdDeviceToken: null, deviceId: null, fighterId: null,
+        lastSyncCursor: null, lastSuccessfulSyncAt: null, configurationRevision: 0,
+        configurationConnectedAt: null, entityMappings: null,
+        pendingMutationCount: retained.length,
+        rejectedMutationCount: retained.filter((mutation) => Boolean(mutation.rejectedAt)).length,
+        error: null,
+      });
     },
     createHousehold: async (name, snapshot) => {
       if (!state.sessionToken) throw new ApiError('Authentication required', 'unauthenticated');

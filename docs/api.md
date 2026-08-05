@@ -373,6 +373,24 @@ hashes are never included.
 }
 ```
 
+### `DELETE /api/households/:householdId`
+
+Permanently erases the household and every household-owned child identity,
+fighter, avatar, device, invitation, pairing, configuration row, gameplay event,
+wallet transaction, and reward redemption. Adult user accounts remain and may
+create or join another household. Requires `owner`, the owner's current password,
+and an exact case-sensitive household-name confirmation.
+
+```json
+{
+  "password": "current adult password",
+  "confirmedName": "Exact Family Name"
+}
+```
+
+Sessions attached to household devices are revoked before the household cascade.
+Child user rows are removed after their household-owned records have been deleted.
+
 ### `POST /api/households/:householdId/fighters`
 
 Creates an unclaimed or already-linked fighter. Requires `owner` or `parent`.

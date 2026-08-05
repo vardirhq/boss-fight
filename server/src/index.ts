@@ -14,7 +14,7 @@ import { sendHouseholdInviteEmail } from './email.js';
 import { assertCanManageMembership, type GovernanceRole } from './governance.js';
 import { childAuthRateLimit, committedChildPairAuthentication } from './childAuth.js';
 import { publicSyncRows } from './syncProjection.js';
-import { acceptedPrivacyNoticeVersion, assertChildErasureTarget, PRIVACY_NOTICE_VERSION, privacyExportRows } from './privacy.js';
+import { acceptedPrivacyNoticeVersion, assertChildErasureTarget, assertHouseholdErasureConfirmation, PRIVACY_NOTICE_VERSION, privacyExportRows } from './privacy.js';
 import { runOperationalRetention } from './retention.js';
 
 type JsonObject = Record<string, unknown>;
@@ -368,7 +368,7 @@ export async function buildApp() {
     const validationMessages = [
       'is required', 'must be an array', 'must be a string', 'Expected JSON object', 'Expected numeric value',
       'Password must be at least', 'PIN must be at least', 'Invalid pairing role', 'Invalid invite role',
-      'Unsupported redemption status', 'email must be valid'
+      'Unsupported redemption status', 'email must be valid', 'Household name confirmation does not match'
     ];
     if (validationMessages.some((part) => message.includes(part))) {
       reply.code(400).send({ error: message, code: 'invalid_request' });
@@ -902,6 +902,54 @@ export async function buildApp() {
         rewardRedemptions: privacyExportRows('rewardRedemptions', rewardRedemptions),
       },
     };
+  });
+
+  app.delete('/api/households/:householdId', async (request) => {
+    const auth = await requireAuth(request);
+    const householdId = (request.params as { householdId: string }).householdId;
+    await requireHouseholdRole(auth.userId, householdId, ['owner']);
+    const body = requireObject(request.body);
+    const password = requireString(body.password, 'password');
+    const confirmedName = requireString(body.confirmedName, 'confirmedName');
+
+    return sql.begin(async (tx) => {
+      const [context] = await tx`
+        select h.id, h.name, u.password_hash
+        from households h
+        join users u on u.id = ${auth.userId}
+        where h.id = ${householdId} and h.deleted_at is null
+          and u.kind = 'adult' and u.deleted_at is null
+        for update of h, u
+      `;
+      if (!context) throw new Error('Not found');
+      assertHouseholdErasureConfirmation({ currentName: context.name, confirmedName });
+      if (!(await verifyPassword(password, context.password_hash))) throw new Error('Unauthorized');
+
+      const childUsers = await tx`
+        select u.id
+        from users u
+        join household_members hm on hm.user_id = u.id
+        where hm.household_id = ${householdId} and u.kind = 'child'
+        for update of u
+      `;
+      await tx`
+        update sessions set revoked_at = now()
+        where revoked_at is null
+          and device_id in (select id from devices where household_id = ${householdId})
+      `;
+      const [deleted] = await tx`delete from households where id = ${householdId} returning id`;
+      if (!deleted) throw new Error('Not found');
+
+      const childUserIds = childUsers.map((user) => String(user.id));
+      if (childUserIds.length > 0) {
+        await tx`
+          delete from users u
+          where u.id = any(${childUserIds}::uuid[]) and u.kind = 'child'
+            and not exists (select 1 from household_members hm where hm.user_id = u.id)
+        `;
+      }
+      return { ok: true };
+    });
   });
 
   app.patch('/api/households/:householdId', async (request) => {

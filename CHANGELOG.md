@@ -9,6 +9,9 @@ increasing Android version codes for install/update compatibility.
 
 ### Added
 
+- Let household owners permanently erase all synchronized family data after
+  confirming the exact household name and re-entering their current password,
+  while preserving independent adult accounts.
 - Enforce documented cleanup windows for expired invitations, pairings and
   sessions, revoked devices, and avatars belonging to deleted fighters, with
   startup gating and daily retries.
