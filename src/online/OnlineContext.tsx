@@ -29,6 +29,7 @@ import {
 } from './credentialStorage';
 import type { Fighter } from '../game/types';
 import { clearSyncEventCache, loadSyncEventCache, mergeSyncEvents, saveSyncEventCache, syncCursors } from './syncCache';
+import { clearAvatarCache, knownAvatarHashes, loadAvatarCache, mergeAvatarCache, saveAvatarCache } from './avatarCache';
 
 const STORAGE_KEY = 'boss-kamp-online-state-v2';
 const MUTATIONS_KEY = 'boss-kamp-pending-mutations-v1';
@@ -494,9 +495,12 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
             });
           }
           const cachedEvents = loadSyncEventCache(householdId);
-          latest = await pullSyncState(token, householdId, syncCursors(cachedEvents), householdDeviceToken);
+          const cachedAvatars = loadAvatarCache(householdId);
+          latest = await pullSyncState(token, householdId, syncCursors(cachedEvents), knownAvatarHashes(cachedAvatars), householdDeviceToken);
           latest = { ...latest, events: mergeSyncEvents(cachedEvents, latest.events) };
+          latest.mutable.fighter_avatars = mergeAvatarCache(latest.mutable.fighters, cachedAvatars, latest.mutable.fighter_avatars);
           saveSyncEventCache(householdId, latest.events);
+          saveAvatarCache(householdId, latest.mutable.fighter_avatars);
           const syncedAt = new Date().toISOString();
           const revision = latest.configurationRevision;
           setState((current) => {
@@ -553,13 +557,17 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
         // Local logout must work while offline; the remote session expires or
         // can be revoked from another authenticated device later.
       } finally {
-        if (state.householdId) clearSyncEventCache(state.householdId);
+        if (state.householdId) {
+          clearSyncEventCache(state.householdId);
+          clearAvatarCache(state.householdId);
+        }
         await clearNativeCredentials().catch(() => undefined);
         replaceState(localState);
       }
     },
     forgetHousehold: (householdId) => {
       clearSyncEventCache(householdId);
+      clearAvatarCache(householdId);
       const retained = loadPendingMutations().filter((mutation) => mutation.householdId !== householdId);
       persistPendingMutations(retained);
       setPendingMutations(retained);

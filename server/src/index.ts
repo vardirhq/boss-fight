@@ -390,7 +390,7 @@ export async function buildApp() {
       'Password must be at least', 'PIN must be at least', 'Invalid pairing role', 'Invalid invite role',
       'Unsupported redemption status', 'email must be valid', 'Household name confirmation does not match',
       'Account email confirmation does not match', 'Invalid or expired password reset token',
-      'Invalid or expired email verification token'
+      'Invalid or expired email verification token', 'known_avatar_hashes must be valid'
     ];
     if (validationMessages.some((part) => message.includes(part))) {
       reply.code(400).send({ error: message, code: 'invalid_request' });
@@ -1889,14 +1889,22 @@ export async function buildApp() {
       wallet_transactions: optionalNumber(query.since_wallet_transactions),
       reward_redemptions: optionalNumber(query.since_reward_redemptions)
     };
-
+    let knownAvatarHashes: Record<string, string> = {};
+    if (query.known_avatar_hashes) {
+      try {
+        const parsed = JSON.parse(query.known_avatar_hashes) as unknown;
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || Object.keys(parsed).length > 50) throw new Error();
+        knownAvatarHashes = Object.fromEntries(Object.entries(parsed).filter(([id, hash]) => uuidPattern.test(id) && typeof hash === 'string' && /^[a-f0-9]{64}$/i.test(hash)));
+        if (Object.keys(knownAvatarHashes).length !== Object.keys(parsed).length) throw new Error();
+      } catch { throw new Error('known_avatar_hashes must be valid'); }
+    }
     const [households, fighters, avatars, bosses, chores] = await Promise.all([
       sql`
         select id, name, timezone, victories_baseline, configuration_revision
         from households where id = ${householdId} and deleted_at is null
       `,
       sql`
-        select f.id, f.user_id, f.name, f.color, f.streak, f.coins_cached,
+        select f.id, f.user_id, f.name, f.color, f.avatar_hash, f.streak, f.coins_cached,
           f.career_xp_cached, f.sort, (f.deleted_at is not null) as deleted,
           u.kind as user_kind, hm.status as account_status, hm.role as account_role
         from fighters f
@@ -1906,7 +1914,7 @@ export async function buildApp() {
         order by f.sort, f.created_at, f.id
       `,
       sql`
-        select fa.fighter_id, fa.mime, encode(fa.bytes, 'base64') as bytes_base64
+        select fa.fighter_id, fa.mime, encode(fa.bytes, 'base64') as bytes_base64, fa.hash
         from fighter_avatars fa
         join fighters f on f.id = fa.fighter_id
         where f.household_id = ${householdId}
@@ -1962,7 +1970,9 @@ export async function buildApp() {
       mutable: {
         households: publicSyncRows('households', households),
         fighters: publicSyncRows('fighters', fighters),
-        fighter_avatars: publicSyncRows('fighter_avatars', avatars),
+        fighter_avatars: publicSyncRows('fighter_avatars', avatars.filter((avatar) => (
+          knownAvatarHashes[String(avatar.fighter_id)] !== avatar.hash
+        ))),
         bosses: publicSyncRows('bosses', decorateBosses(bosses, householdId, timezone)),
         chores: publicSyncRows('chores', chores)
       },
