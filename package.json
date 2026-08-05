@@ -1,7 +1,7 @@
 {
   "name": "boss-kamp",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "description": "Boss Kamp — turn household chores into epic co-op battles. An offline-first PWA arcade-RPG for the whole family.",
   "scripts": {
