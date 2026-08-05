@@ -418,6 +418,17 @@ history:
 - `POST /api/households/:householdId/fighters/:fighterId/unlink` removes the
   identity link and unlocks the fighter without deleting its history.
 
+Household governance follows a strict hierarchy: owners may administer another
+member, while parents may administer only members and children. Callers cannot
+administer their own membership, and suspension or unlinking can never leave a
+household without an active owner. Claimed fighters cannot be deleted directly
+or omitted from a full configuration replacement; they must be unlinked through
+the explicit governance route first.
+
+Suspension and unlinking revoke only sessions attached to devices in the target
+household. Unscoped adult login sessions remain valid for other households, but
+the changed membership immediately prevents access to this household.
+
 Response:
 
 ```json

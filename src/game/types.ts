@@ -65,6 +65,7 @@ export interface Fighter {
   userId?: string;
   userKind?: 'adult' | 'child';
   accountStatus?: 'active' | 'suspended' | 'left' | 'invited';
+  accountRole?: 'owner' | 'parent' | 'member' | 'child';
 }
 
 /** A single attack recorded during the current battle cycle. */

@@ -28,6 +28,9 @@ increasing Android version codes for install/update compatibility.
   retain rejected changes as visible diagnostics, and serialize overlapping syncs.
 - Derive reward redemption status, metadata, cost, requester, and approval data
   on the server; enforce final-state transitions and refund cancellations once.
+- Enforce household role hierarchy and last-owner protection, require explicit
+  governance for claimed fighters, and scope administrative session revocation
+  to the affected household.
 
 ## [1.0.0] - 2026-08-04
 

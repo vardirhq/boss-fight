@@ -113,9 +113,9 @@ landed but the recommendation is not yet satisfied in full.
 | BF-001 | Remediated | Household configuration revisions reject stale snapshots; merged in [PR #36](https://github.com/vardirhq/boss-fight/pull/36) (`c423064`). |
 | BF-002 | Remediated | Mutations commit independently and rejected items are quarantined without blocking later work; [PR #36](https://github.com/vardirhq/boss-fight/pull/36). |
 | BF-003 | Remediated | Redemption metadata, status, identity, cost, charging, refunds, and final transitions are server-authoritative; [PR #37](https://github.com/vardirhq/boss-fight/pull/37) (`087f84f`). |
-| BF-004 | Open | Role hierarchy and household-scoped session administration remain. |
+| BF-004 | Remediated | Role hierarchy, last-owner protection, explicit claimed-fighter governance, and household-scoped session revocation implemented in PR #39. |
 | BF-005 | Open | Privacy notice, consent/authorization records, export, erasure, and retention remain. |
-| BF-006 | In progress | Sync queue and reward-integrity tests now run in CI; broad game, database, authorization, offline, and UI coverage remains. |
+| BF-006 | In progress | Sync queue, reward-integrity, and household-governance tests now run in CI; broad game, database, authorization, offline, and UI coverage remains. |
 | BF-007 | Open | A formal versioned production migration and rollback workflow remains. |
 | BF-008 | Open | Native credential storage hardening remains. |
 | BF-009 | Open | Incremental mutable-state and avatar synchronization remains. |

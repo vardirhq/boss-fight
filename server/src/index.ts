@@ -11,6 +11,7 @@ import {
   redemptionTransition, requestedRedemptionStatus,
 } from './redemption.js';
 import { sendHouseholdInviteEmail } from './email.js';
+import { assertCanManageMembership, type GovernanceRole } from './governance.js';
 
 type JsonObject = Record<string, unknown>;
 type AuthContext = { userId: string; sessionId: string };
@@ -380,7 +381,9 @@ export async function buildApp() {
       'Cycle key is no longer current', 'Boss is not currently available',
       'Reset sequence conflict',
       'Transfer amount must be positive',
-      'Victory payout amount must be positive', 'Unsupported mutation type'
+      'Victory payout amount must be positive', 'Unsupported mutation type',
+      'Cannot administer your own membership', 'Parents cannot administer owners or other parents',
+      'Household must retain an active owner', 'Claimed fighters require explicit account governance'
     ];
     if (domainMessages.some((part) => message.includes(part))) {
       reply.code(422).send({ error: message, code: 'domain_rule' });
@@ -789,7 +792,7 @@ export async function buildApp() {
     const [members, fighters, avatars, bosses, chores, rewards, balances] = await Promise.all([
       sql`select * from household_members where household_id = ${householdId} order by joined_at`,
       sql`
-        select f.*, u.kind as user_kind, hm.status as account_status
+        select f.*, u.kind as user_kind, hm.status as account_status, hm.role as account_role
         from fighters f
         left join users u on u.id = f.user_id
         left join household_members hm on hm.household_id = f.household_id and hm.user_id = f.user_id
@@ -884,10 +887,15 @@ export async function buildApp() {
     const [fighter] = await sql`
       update fighters
       set deleted_at = now(), version = version + 1
-      where id = ${fighterId} and household_id = ${householdId} and deleted_at is null
+      where id = ${fighterId} and household_id = ${householdId}
+        and deleted_at is null and user_id is null
       returning id
     `;
-    if (!fighter) throw new Error('Not found');
+    if (!fighter) {
+      const [claimed] = await sql`select id from fighters where id = ${fighterId} and household_id = ${householdId} and deleted_at is null`;
+      if (claimed) throw new Error('Claimed fighters require explicit account governance');
+      throw new Error('Not found');
+    }
     return { ok: true };
   });
 
@@ -958,22 +966,38 @@ export async function buildApp() {
   app.post('/api/households/:householdId/fighters/:fighterId/suspend', async (request) => {
     const auth = await requireAuth(request);
     const { householdId, fighterId } = request.params as { householdId: string; fighterId: string };
-    await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
+    const actor = await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
     const body = requireObject(request.body);
     const suspended = body.suspended !== false;
     const result = await sql.begin(async (tx) => {
       const [fighter] = await tx`
-        select id, user_id from fighters
-        where id = ${fighterId} and household_id = ${householdId} and deleted_at is null
-        for update
+        select f.id, f.user_id, hm.role, hm.status
+        from fighters f join household_members hm
+          on hm.household_id = f.household_id and hm.user_id = f.user_id
+        where f.id = ${fighterId} and f.household_id = ${householdId} and f.deleted_at is null
+        for update of f, hm
       `;
       if (!fighter?.user_id) throw new Error('Not found');
+      const activeOwners = await tx`
+        select id from household_members
+        where household_id = ${householdId} and role = 'owner' and status = 'active'
+        for update
+      `;
+      assertCanManageMembership({
+        actorUserId: auth.userId, actorRole: actor.role as GovernanceRole,
+        targetUserId: String(fighter.user_id), targetRole: fighter.role as GovernanceRole,
+        removingAccess: suspended && fighter.status === 'active', activeOwnerCount: activeOwners.length,
+      });
       await tx`
         update household_members set status = ${suspended ? 'suspended' : 'active'}, version = version + 1
         where household_id = ${householdId} and user_id = ${fighter.user_id}
       `;
       if (suspended) {
-        await tx`update sessions set revoked_at = now() where user_id = ${fighter.user_id} and revoked_at is null`;
+        await tx`
+          update sessions s set revoked_at = now()
+          where s.user_id = ${fighter.user_id} and s.revoked_at is null
+            and exists (select 1 from devices d where d.id = s.device_id and d.household_id = ${householdId})
+        `;
         await tx`update devices set revoked_at = now() where household_id = ${householdId} and user_id = ${fighter.user_id} and revoked_at is null`;
       }
       return { ok: true };
@@ -984,22 +1008,37 @@ export async function buildApp() {
   app.post('/api/households/:householdId/fighters/:fighterId/unlink', async (request) => {
     const auth = await requireAuth(request);
     const { householdId, fighterId } = request.params as { householdId: string; fighterId: string };
-    await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
+    const actor = await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
     return sql.begin(async (tx) => {
       const [fighter] = await tx`
-        select f.id, f.user_id, u.kind as user_kind
+        select f.id, f.user_id, u.kind as user_kind, hm.role, hm.status
         from fighters f left join users u on u.id = f.user_id
+        left join household_members hm on hm.household_id = f.household_id and hm.user_id = f.user_id
         where f.id = ${fighterId} and f.household_id = ${householdId} and f.deleted_at is null
         for update of f
       `;
       if (!fighter?.user_id) throw new Error('Not found');
-      await tx`update sessions set revoked_at = now() where user_id = ${fighter.user_id} and revoked_at is null`;
+      const activeOwners = await tx`
+        select id from household_members
+        where household_id = ${householdId} and role = 'owner' and status = 'active'
+        for update
+      `;
+      assertCanManageMembership({
+        actorUserId: auth.userId, actorRole: actor.role as GovernanceRole,
+        targetUserId: String(fighter.user_id), targetRole: fighter.role as GovernanceRole,
+        removingAccess: fighter.status === 'active', activeOwnerCount: activeOwners.length,
+      });
+      await tx`
+        update sessions s set revoked_at = now()
+        where s.user_id = ${fighter.user_id} and s.revoked_at is null
+          and exists (select 1 from devices d where d.id = s.device_id and d.household_id = ${householdId})
+      `;
       await tx`update devices set revoked_at = now() where household_id = ${householdId} and user_id = ${fighter.user_id} and revoked_at is null`;
+      await tx`
+        update household_members set status = 'left', version = version + 1
+        where household_id = ${householdId} and user_id = ${fighter.user_id}
+      `;
       if (fighter.user_kind === 'child') {
-        await tx`
-          update household_members set status = 'left', version = version + 1
-          where household_id = ${householdId} and user_id = ${fighter.user_id}
-        `;
         await tx`delete from fighter_credentials where fighter_id = ${fighterId}`;
       }
       const [unlinked] = await tx`
@@ -1415,7 +1454,7 @@ export async function buildApp() {
       sql`select * from household_members where household_id = ${householdId}`,
       sql`select * from devices where household_id = ${householdId}`,
       sql`
-        select f.*, u.kind as user_kind, hm.status as account_status
+        select f.*, u.kind as user_kind, hm.status as account_status, hm.role as account_role
         from fighters f
         left join users u on u.id = f.user_id
         left join household_members hm on hm.household_id = f.household_id and hm.user_id = f.user_id
@@ -1691,6 +1730,12 @@ export async function buildApp() {
             where household_id = ${householdId} and deleted_at is null and not (id = any(${choreIds}))
           `;
           removedChores.forEach((row) => bossesNeedingReset.add(String(row.boss_id)));
+          const omittedClaimedFighters = await tx`
+            select id from fighters
+            where household_id = ${householdId} and deleted_at is null and user_id is not null
+              and not (id = any(${fighterIds}))
+          `;
+          if (omittedClaimedFighters.length > 0) throw new Error('Claimed fighters require explicit account governance');
           await tx`update chores set deleted_at = now(), version = version + 1 where household_id = ${householdId} and deleted_at is null and not (id = any(${choreIds}))`;
           await tx`update bosses set deleted_at = now(), version = version + 1 where household_id = ${householdId} and deleted_at is null and not (id = any(${bossIds}))`;
           await tx`update fighters set deleted_at = now(), version = version + 1 where household_id = ${householdId} and deleted_at is null and not (id = any(${fighterIds}))`;
