@@ -121,7 +121,7 @@ landed but the recommendation is not yet satisfied in full.
 | BF-009 | Open | Incremental mutable-state and avatar synchronization remains. |
 | BF-010 | Remediated | Client synchronization uses a single-flight coordinator with a pending rerun; [PR #36](https://github.com/vardirhq/boss-fight/pull/36). |
 | BF-011 | Open | Explicit sync response projections remain. |
-| BF-012 | Open | Transactionally persistent child-PIN failure accounting remains. |
+| BF-012 | Remediated | Invalid pairing PIN attempts commit before the route returns 401, the eighth failure starts the database lockout, and both child-authentication routes have explicit per-IP limits and regression tests. |
 | BF-013 | Open | Authentication and API hardening work remains. |
 | BF-014 | Open | Reproducible Android release inputs remain. |
 | BF-015 | Open | Deployment rollback, artifact promotion, and recovery automation remain. |

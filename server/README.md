@@ -34,6 +34,8 @@ DATABASE_URL=postgresql://boss_kamp_app:<password>@127.0.0.1:5432/boss_kamp
 CORS_ORIGIN=*
 LOG_LEVEL=info
 SESSION_DAYS=90
+CHILD_AUTH_RATE_LIMIT_MAX=20
+CHILD_AUTH_RATE_LIMIT_WINDOW=10 minutes
 SMTP_HOST=<smtp-host>
 SMTP_PORT=587
 SMTP_USER=<smtp-user>
@@ -43,6 +45,10 @@ SMTP_REPLY_TO=chris@vardir.no
 ```
 
 Never commit environment files.
+
+The child authentication limit applies per client IP independently to direct
+child login and pairing-code login. Database-backed credential lockout still
+starts after eight invalid PIN attempts and lasts ten minutes.
 
 SMTP is required for adult and parent invitations. The API only reports an
 invitation as created after the mail server accepts the message. For local

@@ -12,6 +12,7 @@ import {
 } from './redemption.js';
 import { sendHouseholdInviteEmail } from './email.js';
 import { assertCanManageMembership, type GovernanceRole } from './governance.js';
+import { childAuthRateLimit, committedChildPairAuthentication } from './childAuth.js';
 
 type JsonObject = Record<string, unknown>;
 type AuthContext = { userId: string; sessionId: string };
@@ -433,7 +434,7 @@ export async function buildApp() {
     return { user: { id: user.id, email: user.email, displayName: user.display_name }, session };
   });
 
-  app.post('/api/auth/child-login', async (request) => {
+  app.post('/api/auth/child-login', { config: { rateLimit: childAuthRateLimit } }, async (request) => {
     const body = requireObject(request.body);
     const householdId = requireString(body.householdId, 'householdId');
     const fighterId = requireString(body.fighterId, 'fighterId');
@@ -484,14 +485,18 @@ export async function buildApp() {
     };
   });
 
-  app.post('/api/auth/child-pair', async (request) => {
+  app.post('/api/auth/child-pair', { config: { rateLimit: childAuthRateLimit } }, async (request) => {
     const body = requireObject(request.body);
     const code = requireString(body.code, 'code').toUpperCase();
     const pin = requireString(body.pin, 'pin');
     const deviceName = optionalString(body.deviceName) ?? '';
     const platform = optionalString(body.platform) ?? 'android';
 
-    const result = await sql.begin(async (tx) => {
+    const result = await committedChildPairAuthentication<{
+      user: { id: unknown; kind: 'child'; displayName: unknown };
+      fighterId: unknown;
+      deviceId: unknown;
+    }>(() => sql.begin(async (tx) => {
       const [pairing] = await tx`
         select id, fighter_id from device_pairings
         where role = 'fighter'
@@ -518,7 +523,7 @@ export async function buildApp() {
             locked_until = case when failed_attempts + 1 >= 8 then now() + interval '10 minutes' else locked_until end
           where fighter_id = ${pairing.fighter_id}
         `;
-        throw new Error('Unauthorized');
+        return { authenticated: false as const };
       }
       const [device] = await tx`
         insert into devices (household_id, user_id, kind, name, platform, last_seen_at)
@@ -528,11 +533,14 @@ export async function buildApp() {
       await tx`update fighter_credentials set failed_attempts = 0, locked_until = null where fighter_id = ${pairing.fighter_id}`;
       await tx`update device_pairings set claimed_at = now(), claimed_device_id = ${device.id} where id = ${pairing.id}`;
       return {
-        user: { id: fighter.user_id, kind: 'child', displayName: fighter.name },
-        fighterId: fighter.id,
-        deviceId: device.id
+        authenticated: true as const,
+        value: {
+          user: { id: fighter.user_id, kind: 'child', displayName: fighter.name },
+          fighterId: fighter.id,
+          deviceId: device.id
+        }
       };
-    });
+    }));
     const session = await createSession(requireString(result.user.id, 'user_id'), requireString(result.deviceId, 'device_id'));
     return { ...result, session };
   });

@@ -39,6 +39,9 @@ increasing Android version codes for install/update compatibility.
 - Enforce household role hierarchy and last-owner protection, require explicit
   governance for claimed fighters, and scope administrative session revocation
   to the affected household.
+- Persist invalid child-pairing PIN attempts before returning authentication
+  failures, enforce the intended database lockout, and apply route-specific
+  rate limits to child login and pairing.
 
 ## [1.0.0] - 2026-08-04
 
