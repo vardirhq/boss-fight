@@ -26,10 +26,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: npm
@@ -40,6 +42,10 @@ jobs:
         env:
           RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag }}
         run: |
+          if [[ "$GITHUB_REF_TYPE" != "tag" || "$GITHUB_REF_NAME" != "$RELEASE_TAG" ]]; then
+            echo "Release build must run from tag $RELEASE_TAG, not $GITHUB_REF"
+            exit 1
+          fi
           npm run release:check
           npm run release:notes > release-notes.md
           node scripts/release-metadata.mjs >> "$GITHUB_STEP_SUMMARY"
@@ -57,13 +63,13 @@ jobs:
           file public/icons/icon-source.png | grep -q 'PNG image data'
 
       - name: Set up Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
         with:
           distribution: temurin
           java-version: 21
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
 
       - name: Restore Android signing keystore
         shell: bash
@@ -76,14 +82,11 @@ jobs:
       - name: Install web dependencies
         run: npm ci
 
-      - name: Install Deploid
-        run: npm install --global @deploid/cli
-
       - name: Package Android app with Deploid
         env:
           DEPLOID_ANDROID_STORE_PASSWORD: ${{ secrets.DEPLOID_ANDROID_STORE_PASSWORD }}
           DEPLOID_ANDROID_KEY_PASSWORD: ${{ secrets.DEPLOID_ANDROID_KEY_PASSWORD }}
-        run: deploid package
+        run: ./node_modules/.bin/deploid package
 
       - name: Configure Android system bars
         shell: bash
@@ -180,7 +183,7 @@ jobs:
         env:
           DEPLOID_ANDROID_STORE_PASSWORD: ${{ secrets.DEPLOID_ANDROID_STORE_PASSWORD }}
           DEPLOID_ANDROID_KEY_PASSWORD: ${{ secrets.DEPLOID_ANDROID_KEY_PASSWORD }}
-        run: deploid build
+        run: ./node_modules/.bin/deploid build
 
       - name: Build signed release APK with Gradle
         working-directory: android
@@ -232,7 +235,7 @@ jobs:
           fi
 
       - name: Upload signed release APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: boss-kamp-release-apk
           path: boss-kamp-release.apk
@@ -240,7 +243,7 @@ jobs:
           retention-days: 30
 
       - name: Upload signed release AAB
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: boss-kamp-release-aab
           path: boss-kamp-release.aab
