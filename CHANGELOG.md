@@ -9,6 +9,8 @@ increasing Android version codes for install/update compatibility.
 
 ### Added
 
+- Verify ownership of new adult email addresses with emailed, hashed, single-use
+  24-hour codes, resend controls, and a bilingual in-app confirmation flow.
 - Add enumeration-resistant adult password recovery with emailed 30-minute
   single-use tokens, global session revocation after reset, and bilingual UI.
 - Bound bearer sessions by both a 90-day absolute lifetime and a 30-day idle

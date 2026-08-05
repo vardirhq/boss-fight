@@ -3,7 +3,7 @@ import type { Lang } from '../game/types';
 import { useGame } from '../store/GameContext';
 import { useOnline, type OnlineError } from './OnlineContext';
 import { createBootstrapSnapshot, serverConfigToGameState, serverSyncToGameState } from './gameSync';
-import { acceptHouseholdInvite, ApiError, confirmPasswordReset, createHouseholdDevicePairing, eraseAdultAccount, eraseHousehold, getAccountSessions, getHouseholdExport, inviteParent, requestPasswordReset, revokeAccountSession, type AccountSession } from './api';
+import { acceptHouseholdInvite, ApiError, confirmEmailVerification, confirmPasswordReset, createHouseholdDevicePairing, eraseAdultAccount, eraseHousehold, getAccountSessions, getHouseholdExport, inviteParent, requestPasswordReset, resendEmailVerification, revokeAccountSession, type AccountSession } from './api';
 
 const field: React.CSSProperties = {
   width: '100%', boxSizing: 'border-box', background: '#0f1420', border: '1px solid #333c50', borderRadius: 12,
@@ -30,6 +30,7 @@ const COPY = {
     accountStep: '1 av 2 · Din konto', familyStep: '2 av 2 · Familien',
     register: 'Opprett konto', login: 'Logg inn', name: 'Navn', email: 'E-post', password: 'Passord, minst 10 tegn',
     forgotPassword: 'Glemt passord?', recoveryBody: 'Vi sender en engangskode hvis e-postadressen tilhører en konto.', sendRecovery: 'Send engangskode', recoverySent: 'Hvis kontoen finnes, er en kode sendt. Sjekk også søppelpost.', resetToken: 'Engangskode fra e-posten', newPassword: 'Nytt passord, minst 10 tegn', resetPassword: 'Lagre nytt passord', resetComplete: 'Passordet er endret. Du kan logge inn nå.', resetFailed: 'Koden er ugyldig eller utløpt.',
+    verifyEmail: 'Bekreft e-postadressen', verifyEmailBody: 'Lim inn engangskoden vi sendte til e-postadressen din.', verificationToken: 'Bekreftelseskode', confirmEmailButton: 'Bekreft e-post', resendVerification: 'Send ny kode', verificationSent: 'En ny kode er sendt.', verificationFailed: 'Koden kunne ikke bekreftes.',
     childLogin: 'Jeg har en barnekode', sharedLogin: 'Dette er en familieenhet', sharedDevice: 'Familieenhet', otherLogin: 'Har du fått en kode?',
     familyInvite: 'Jeg har en familieinvitasjon', createAndJoin: 'Opprett konto og bli med', loginAndJoin: 'Logg inn og bli med',
     pairingCode: 'Kode', pin: 'PIN', deviceName: 'Navn på enheten', connecting: 'Kobler til…',
@@ -63,6 +64,7 @@ const COPY = {
     accountStep: '1 of 2 · Your account', familyStep: '2 of 2 · The family',
     register: 'Create account', login: 'Sign in', name: 'Name', email: 'Email', password: 'Password, at least 10 characters',
     forgotPassword: 'Forgot password?', recoveryBody: 'We will send a one-time code if the email address belongs to an account.', sendRecovery: 'Send one-time code', recoverySent: 'If the account exists, a code has been sent. Check your spam folder too.', resetToken: 'One-time code from the email', newPassword: 'New password, at least 10 characters', resetPassword: 'Save new password', resetComplete: 'Your password has been changed. You can sign in now.', resetFailed: 'The code is invalid or has expired.',
+    verifyEmail: 'Verify your email', verifyEmailBody: 'Paste the one-time code sent to your email address.', verificationToken: 'Verification code', confirmEmailButton: 'Verify email', resendVerification: 'Send a new code', verificationSent: 'A new code has been sent.', verificationFailed: 'The code could not be verified.',
     childLogin: 'I have a child code', sharedLogin: 'This is a family device', sharedDevice: 'Family device', otherLogin: 'Have you received a code?',
     familyInvite: 'I have a family invitation', createAndJoin: 'Create account and join', loginAndJoin: 'Sign in and join',
     pairingCode: 'Code', pin: 'PIN', deviceName: 'Device name', connecting: 'Connecting…',
@@ -112,6 +114,8 @@ export function AccountSettings({ lang, setup = false }: { lang: Lang; setup?: b
   const [recoveryComplete, setRecoveryComplete] = useState(false);
   const [recoveryError, setRecoveryError] = useState<string | null>(null);
   const [recovering, setRecovering] = useState(false);
+  const [verificationToken, setVerificationToken] = useState('');
+  const [verificationStatus, setVerificationStatus] = useState<string | null>(null);
   const [pairingCode, setPairingCode] = useState('');
   const [pin, setPin] = useState('');
   const [deviceName, setDeviceName] = useState('');
@@ -223,6 +227,38 @@ export function AccountSettings({ lang, setup = false }: { lang: Lang; setup?: b
       setRecovering(false);
     }
   }
+
+  async function verifyEmailAddress() {
+    if (!verificationToken.trim()) return;
+    setVerificationStatus(null);
+    try {
+      await confirmEmailVerification(verificationToken.trim());
+      setVerificationToken('');
+      await actions.refreshIdentity();
+    } catch { setVerificationStatus(copy.verificationFailed); }
+  }
+
+  async function resendVerification() {
+    if (!state.sessionToken) return;
+    setVerificationStatus(null);
+    try {
+      await resendEmailVerification(state.sessionToken);
+      setVerificationStatus(copy.verificationSent);
+    } catch { setVerificationStatus(copy.verificationFailed); }
+  }
+
+  const emailVerification = state.mode === 'adult-account' && state.account && !state.account.emailVerified ? (
+    <section style={{ ...card, borderColor: '#8a6a25' }}>
+      <h2 style={{ color: '#F4B942', fontSize: 16, margin: 0 }}>{copy.verifyEmail}</h2>
+      <p style={{ color: '#A8B0BF', fontSize: 12.5, lineHeight: 1.5 }}>{copy.verifyEmailBody}</p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <input aria-label={copy.verificationToken} value={verificationToken} onChange={(event) => setVerificationToken(event.target.value)} autoComplete="one-time-code" placeholder={copy.verificationToken} style={field} />
+        <button disabled={!verificationToken.trim()} onClick={() => void verifyEmailAddress()} style={primary}>{copy.confirmEmailButton}</button>
+        <button onClick={() => void resendVerification()} style={secondary}>{copy.resendVerification}</button>
+        {verificationStatus && <Notice color={verificationStatus === copy.verificationSent ? '#67D391' : '#ff8f85'}>{verificationStatus}</Notice>}
+      </div>
+    </section>
+  ) : null;
 
   async function createSharedPairing() {
     if (!state.sessionToken || !state.householdId) return;
@@ -535,6 +571,7 @@ export function AccountSettings({ lang, setup = false }: { lang: Lang; setup?: b
           </div>}
         </section>
 
+        {emailVerification}
         {sessionManagement}
         {accountErasure}
         <button onClick={() => void actions.logout()} style={secondary}>{copy.logout}</button>
@@ -550,6 +587,8 @@ export function AccountSettings({ lang, setup = false }: { lang: Lang; setup?: b
 
   return (
     <div style={{ width: '100%', maxWidth: 520, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {emailVerification}
+
       <section style={card}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 13 }}>
           <div style={{ width: 48, height: 48, flex: 'none', borderRadius: 14, background: 'rgba(244,185,66,.13)', display: 'grid', placeItems: 'center', fontSize: 23 }}>🏠</div>

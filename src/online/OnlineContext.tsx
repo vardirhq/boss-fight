@@ -179,6 +179,7 @@ function loadPersistedState(): OnlineState {
         email: typeof legacy.user.email === 'string' ? legacy.user.email : null,
         displayName: legacy.user.displayName,
         kind: legacy.user.kind === 'child' ? 'child' : 'adult',
+        emailVerified: false,
       };
       const migrated: OnlineState = {
         ...localState,

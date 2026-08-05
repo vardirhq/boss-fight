@@ -218,6 +218,21 @@ test('PostgreSQL lifecycle erasure preserves only the documented records', {
       token: resetToken, password: 'another-integration-password',
     })).status, 400);
 
+    const verification = await register('verification@example.com', 'Verify Parent');
+    const verificationToken = 'integration-verification-token';
+    await database`
+      insert into email_verification_tokens (user_id, token_hash, expires_at)
+      values (${verification.userId}, ${createHash('sha256').update(verificationToken).digest('hex')}, now() + interval '1 day')
+    `;
+    assert.equal((await call('POST', '/api/auth/email-verification/confirm', undefined, {
+      token: verificationToken,
+    })).status, 200);
+    const verifiedMe = await call('GET', '/api/me', verification.token);
+    assert.ok(verifiedMe.body.user.email_verified_at);
+    assert.equal((await call('POST', '/api/auth/email-verification/confirm', undefined, {
+      token: verificationToken,
+    })).status, 400);
+
     await app.close();
     app = null;
     await appSql.end({ timeout: 1 });
