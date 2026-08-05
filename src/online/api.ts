@@ -8,6 +8,7 @@ export interface OnlineUser {
   email: string | null;
   displayName: string;
   kind: 'adult' | 'child';
+  emailVerified: boolean;
 }
 
 export interface HouseholdMembership {
@@ -177,6 +178,8 @@ interface AuthResponse {
     display_name?: unknown;
     displayName?: unknown;
     kind?: unknown;
+    emailVerified?: unknown;
+    email_verified_at?: unknown;
   };
   session?: {
     token?: unknown;
@@ -216,6 +219,7 @@ function normalizeUser(user: AuthResponse['user']): OnlineUser {
     email: nullableString(user.email),
     displayName: nullableString(user.displayName) ?? nullableString(user.display_name) ?? '',
     kind,
+    emailVerified: user.emailVerified === true || typeof user.email_verified_at === 'string',
   };
 }
 
@@ -291,6 +295,14 @@ export async function confirmPasswordReset(token: string, password: string) {
   await request('/api/auth/password-reset/confirm', {
     method: 'POST', body: JSON.stringify({ token, password }),
   });
+}
+
+export async function resendEmailVerification(token: string) {
+  await request('/api/auth/email-verification/resend', { method: 'POST', body: '{}' }, token);
+}
+
+export async function confirmEmailVerification(token: string) {
+  await request('/api/auth/email-verification/confirm', { method: 'POST', body: JSON.stringify({ token }) });
 }
 
 export async function loginChild(householdId: string, fighterId: string, pin: string, deviceName: string, platform: string) {

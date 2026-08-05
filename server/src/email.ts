@@ -5,7 +5,7 @@ export class MailDeliveryError extends Error {
   readonly statusCode = 502;
 
   constructor() {
-    super('Invitation email could not be delivered');
+    super('Email could not be delivered');
   }
 }
 
@@ -118,4 +118,18 @@ export async function sendPasswordResetEmail(input: {
   } catch {
     throw new MailDeliveryError();
   }
+}
+
+export async function sendEmailVerification(input: { to: string; displayName: string; token: string; expiresAt: Date }) {
+  const from = process.env.SMTP_FROM ?? 'Boss Kamp <chris@vardir.no>';
+  const replyTo = process.env.SMTP_REPLY_TO ?? 'chris@vardir.no';
+  const name = escapeHtml(input.displayName);
+  const token = escapeHtml(input.token);
+  try {
+    await transporter().sendMail({
+      from, replyTo, to: input.to, subject: 'Bekreft e-postadressen din i Boss Kamp',
+      text: [`Hei ${input.displayName},`, '', 'Bruk denne engangskoden for å bekrefte e-postadressen din:', '', input.token, '', 'Koden gjelder i 24 timer.'].join('\n'),
+      html: `<div style="font-family:system-ui;max-width:560px;margin:0 auto;padding:28px;color:#182033"><div style="font-size:13px;font-weight:800;color:#b27b12">BOSS KAMP</div><h1>Bekreft e-postadressen din</h1><p>Hei ${name}. Lim inn denne engangskoden i Boss Kamp:</p><div style="margin:24px 0;padding:20px;border-radius:14px;background:#f3f5f8;text-align:center;font-family:monospace;font-size:18px;font-weight:800;overflow-wrap:anywhere">${token}</div><p>Koden gjelder i 24 timer.</p></div>`,
+    });
+  } catch { throw new MailDeliveryError(); }
 }

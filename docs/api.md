@@ -126,6 +126,17 @@ Accepts the emailed `token` and a new `password` of at least ten characters.
 Successful use changes the password, consumes the token, and revokes every
 existing session for the account.
 
+### `POST /api/auth/email-verification/resend`
+
+Authenticated adults can request a new 24-hour, single-use email verification
+code. Requests are rate-limited.
+
+### `POST /api/auth/email-verification/confirm`
+
+Consumes an emailed verification `token` and records the account's verified
+timestamp. Existing accounts at migration time are preserved as verified;
+new registrations begin unverified.
+
 ### `POST /api/auth/child-login`
 
 Logs a child in using a claimed fighter and PIN. This also creates a personal

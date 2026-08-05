@@ -12,7 +12,7 @@ import {
   assertRedemptionFunds, assertRedemptionManagerRole, initialRedemption,
   redemptionTransition, requestedRedemptionStatus,
 } from './redemption.js';
-import { sendHouseholdInviteEmail, sendPasswordResetEmail } from './email.js';
+import { sendEmailVerification, sendHouseholdInviteEmail, sendPasswordResetEmail } from './email.js';
 import { assertCanManageMembership, type GovernanceRole } from './governance.js';
 import { childAuthRateLimit, committedChildPairAuthentication } from './childAuth.js';
 import { publicSyncRows } from './syncProjection.js';
@@ -179,6 +179,18 @@ async function createSession(userId: string, deviceId?: string | null) {
     returning id, expires_at
   `;
   return { token, sessionId: publicId(session), expiresAt: session.expires_at };
+}
+
+async function issueEmailVerification(userId: string, email: string, displayName: string) {
+  const token = randomBytes(32).toString('base64url');
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  const [record] = await sql`insert into email_verification_tokens (user_id, token_hash, expires_at) values (${userId}, ${tokenHash(token)}, ${expiresAt}) returning id`;
+  try {
+    await sendEmailVerification({ to: email, displayName, token, expiresAt });
+  } catch (error) {
+    await sql`delete from email_verification_tokens where id = ${record.id}`;
+    throw error;
+  }
 }
 
 async function requireAuth(request: FastifyRequest): Promise<AuthContext> {
@@ -350,7 +362,7 @@ export async function buildApp() {
       return;
     }
     if (errorInfo.code === 'mail_delivery_failed') {
-      reply.code(502).send({ error: 'Invitation email could not be delivered', code: 'mail_delivery_failed' });
+      reply.code(502).send({ error: 'Email could not be delivered', code: 'mail_delivery_failed' });
       return;
     }
     if (message === 'Unauthorized') {
@@ -377,7 +389,8 @@ export async function buildApp() {
       'is required', 'must be an array', 'must be a string', 'Expected JSON object', 'Expected numeric value',
       'Password must be at least', 'PIN must be at least', 'Invalid pairing role', 'Invalid invite role',
       'Unsupported redemption status', 'email must be valid', 'Household name confirmation does not match',
-      'Account email confirmation does not match', 'Invalid or expired password reset token'
+      'Account email confirmation does not match', 'Invalid or expired password reset token',
+      'Invalid or expired email verification token'
     ];
     if (validationMessages.some((part) => message.includes(part))) {
       reply.code(400).send({ error: message, code: 'invalid_request' });
@@ -420,11 +433,16 @@ export async function buildApp() {
     const [user] = await sql`
       insert into users (kind, email, password_hash, display_name)
       values ('adult', ${email}, ${passwordHash}, ${displayName})
-      returning id, email, display_name
+      returning id, email, display_name, email_verified_at
     `;
     const session = await createSession(publicId(user));
+    try {
+      await issueEmailVerification(publicId(user), email, displayName);
+    } catch (error) {
+      request.log.error({ err: error }, 'Verification email could not be delivered after registration');
+    }
 
-    return { user, session };
+    return { user: { ...user, emailVerified: false }, session };
   });
 
   app.post('/api/auth/login', async (request) => {
@@ -433,7 +451,7 @@ export async function buildApp() {
     const password = requireString(body.password, 'password');
 
     const [user] = await sql`
-      select id, email, display_name, password_hash
+      select id, email, display_name, password_hash, email_verified_at
       from users
       where lower(email) = ${email}
         and kind = 'adult'
@@ -444,7 +462,26 @@ export async function buildApp() {
     }
 
     const session = await createSession(publicId(user));
-    return { user: { id: user.id, email: user.email, displayName: user.display_name }, session };
+    return { user: { id: user.id, email: user.email, displayName: user.display_name, emailVerified: Boolean(user.email_verified_at) }, session };
+  });
+
+  app.post('/api/auth/email-verification/resend', { config: { rateLimit: { max: 5, timeWindow: '1 hour' } } }, async (request) => {
+    const auth = await requireAuth(request);
+    const [user] = await sql`select email, display_name, email_verified_at from users where id = ${auth.userId} and kind = 'adult' and deleted_at is null`;
+    if (!user) throw new Error('Not found');
+    if (!user.email_verified_at) await issueEmailVerification(auth.userId, requireString(user.email, 'email'), requireString(user.display_name, 'display_name'));
+    return { accepted: true };
+  });
+
+  app.post('/api/auth/email-verification/confirm', async (request) => {
+    const token = requireString(requireObject(request.body).token, 'token');
+    return sql.begin(async (tx) => {
+      const [record] = await tx`select id, user_id from email_verification_tokens where token_hash = ${tokenHash(token)} and used_at is null and expires_at > now() for update`;
+      if (!record) throw new Error('Invalid or expired email verification token');
+      await tx`update users set email_verified_at = coalesce(email_verified_at, now()), version = version + 1 where id = ${record.user_id} and kind = 'adult'`;
+      await tx`update email_verification_tokens set used_at = now() where id = ${record.id}`;
+      return { ok: true };
+    });
   });
 
   app.post('/api/auth/password-reset/request', {

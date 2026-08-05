@@ -26,6 +26,12 @@ export async function runOperationalRetention(now = new Date(), policy = retenti
         and (used_at is not null or expires_at < ${now})
       returning id
     `;
+    const emailVerifications = await tx`
+      delete from email_verification_tokens
+      where coalesce(used_at, expires_at) < ${cutoffs.passwordResets}
+        and (used_at is not null or expires_at < ${now})
+      returning id
+    `;
 
     const oldDevices = await tx`
       select id from devices where revoked_at < ${cutoffs.devices} for update
@@ -50,6 +56,7 @@ export async function runOperationalRetention(now = new Date(), policy = retenti
       pairings: pairings.length,
       sessions: sessions.length,
       passwordResets: passwordResets.length,
+      emailVerifications: emailVerifications.length,
       devices: oldDeviceIds.length,
       deletedFighterAvatars: avatars.length,
     };
