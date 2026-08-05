@@ -9,10 +9,12 @@ RUN npm run build
 FROM node:22-alpine
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN npm ci --omit=dev \
+  && npm cache clean --force \
+  && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 COPY --from=builder /app/dist ./dist
 COPY schema.sql ./schema.sql
 COPY migrations ./migrations
 COPY scripts/migrate.mjs scripts/migration-lib.mjs ./scripts/
 EXPOSE 3002
-CMD ["sh", "-c", "npm run migrate && npm start"]
+CMD ["sh", "-c", "node scripts/migrate.mjs && node dist/index.js"]

@@ -57,14 +57,16 @@ development, Mailpit or another SMTP catcher can be used.
 ## Deploy
 
 Deploys are automated by GitHub Actions after quality checks pass on `main`.
-The production checkout lives at `/opt/boss-fight`.
+CI builds and scans the Docker image, and production pulls that exact digest;
+the host does not rebuild source. The production checkout lives at
+`/opt/boss-fight`. See `docs/deployment.md` for promotion and rollback details.
 
 Manual deploy on the server:
 
 ```bash
-docker compose build
-docker compose run --rm boss-kamp-api npm run migrate
-docker compose up -d --no-build
+cd /opt/boss-fight
+bash scripts/deploy-production.sh \
+  ghcr.io/vardirhq/boss-fight-api@sha256:<digest>
 ```
 
 The Caddy route is configured outside this repo in `/srv/friskr/Caddyfile`.

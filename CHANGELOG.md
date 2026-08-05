@@ -46,6 +46,10 @@ increasing Android version codes for install/update compatibility.
   omit unused household-membership, device, and reward-configuration data.
 - Make Android builds reproducible by locking Deploid, standardizing Node,
   pinning workflow actions to commit SHAs, and building releases from their tags.
+- Promote scanned, digest-pinned API images from CI to production and restore the
+  previously running image automatically when deployment readiness fails.
+- Exclude npm and its unused global dependency tree from the production API
+  image, invoking migrations and the server directly with Node.
 
 ## [1.0.0] - 2026-08-04
 

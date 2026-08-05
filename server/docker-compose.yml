@@ -2,8 +2,7 @@ name: boss-kamp-api
 
 services:
   boss-kamp-api:
-    image: boss-kamp-api:latest
-    build: .
+    image: ${BOSS_KAMP_API_IMAGE:?Set BOSS_KAMP_API_IMAGE to an immutable image digest}
     network_mode: host
     env_file: .env.production
     restart: unless-stopped

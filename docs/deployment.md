@@ -48,9 +48,19 @@ Quality checks:
 - build the server with `npm run build`
 - run migration ordering and checksum tests with the server test suite
 - run server dependency audit at `high` threshold
+- build the API image once and push it to GHCR under the source commit
+- scan that image for High and Critical vulnerabilities
 
-Deploy runs only after checks pass, and only for `main` pushes or manual
-`workflow_dispatch` runs. Pull requests run checks but do not deploy.
+Pull requests build and scan the image locally without publishing it. On `main`,
+the image job pushes the same commit-tagged image and returns a digest-pinned
+reference. Deploy runs only after checks and the image scan pass, and only for
+`main` pushes or manual `workflow_dispatch` runs. Pull requests never publish or
+deploy.
+
+The final runtime image contains production application dependencies but not the
+npm CLI or npm's global dependency tree. Migrations and the API entrypoint invoke
+their Node scripts directly. npm remains available only in the discarded build
+stage where dependencies are installed and TypeScript is compiled.
 
 ## Required GitHub Secrets
 
@@ -63,6 +73,9 @@ BOSS_KAMP_DEPLOY_SSH_KEY
 ```
 
 These are configured in the `vardirhq/boss-fight` GitHub repository.
+GHCR authentication uses the job-scoped `GITHUB_TOKEN`; no long-lived registry
+password is stored on the production host, and the workflow logs out after each
+deployment attempt.
 
 ## Server User
 
@@ -72,40 +85,35 @@ Deploys run as:
 bosskamp-deploy
 ```
 
-The user owns `/opt/boss-fight` and belongs to the `docker` group so it can run:
+The user owns `/opt/boss-fight` and belongs to the `docker` group. Automated
+deployments run the checked-in helper with a digest produced by the image job:
 
 ```bash
-cd /opt/boss-fight/server
-docker compose build
-docker compose run --rm boss-kamp-api npm run migrate
-docker compose up -d --no-build
+cd /opt/boss-fight
+bash scripts/deploy-production.sh \
+  ghcr.io/vardirhq/boss-fight-api@sha256:<digest>
 ```
 
 ## Manual Deploy
 
-From the server:
+For manual recovery, authenticate Docker to GHCR with a token that has
+`read:packages`, check out the exact source commit associated with the image,
+and deploy its digest:
 
 ```bash
 sudo -u bosskamp-deploy bash -lc '
   cd /opt/boss-fight
-  git fetch origin main
-  git reset --hard origin/main
-  cd server
-  docker compose build
-  set -a
-  . ./.env.production
-  set +a
-  install -d -m 700 /opt/boss-fight/backups
-  pg_dump --format=custom --file="/opt/boss-fight/backups/pre-deploy-$(date -u +%Y%m%dT%H%M%SZ).dump" "$DATABASE_URL"
-  docker compose run --rm boss-kamp-api npm run migrate
-  docker compose up -d --no-build
-  curl -fsS http://127.0.0.1:3002/health
+  git fetch origin <commit-sha>
+  git reset --hard <commit-sha>
+  bash scripts/deploy-production.sh \
+    ghcr.io/vardirhq/boss-fight-api@sha256:<digest>
 '
 ```
 
 The host must provide PostgreSQL client tools compatible with the production
-server. Automated deployment uses the same order: build, backup, migrate, replace,
-health-check. Migration failure leaves the existing application container running.
+server. Automated deployment uses the order: pull scanned image, capture the
+current image, backup, migrate, replace, health-check. Migration failure leaves
+the existing application container running.
 
 ## Database Migrations
 
@@ -126,15 +134,20 @@ compatible changes so the previous application image remains usable during rollb
 ## Rollback
 
 Application rollback is safe without a database restore only when every migration
-since the target commit is backward-compatible. To roll back to a known commit:
+since the previous image is backward-compatible. The deployment helper retains
+both image references under `/opt/boss-fight/deployments/`. If replacement or
+readiness fails, it recreates the service from `previous-api-image`, verifies
+health, and then exits unsuccessfully so GitHub reports and alerts on the failed
+release.
+
+To select a retained image manually:
 
 ```bash
 sudo -u bosskamp-deploy bash -lc '
-  cd /opt/boss-fight
-  git fetch origin
-  git reset --hard <commit-sha>
-  cd server
-  docker compose up -d --build
+  cd /opt/boss-fight/server
+  export BOSS_KAMP_API_IMAGE="$(cat ../deployments/previous-api-image)"
+  docker compose up -d --no-build --force-recreate boss-kamp-api
+  curl -fsS http://127.0.0.1:3002/health
 '
 ```
 
