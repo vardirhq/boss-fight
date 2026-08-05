@@ -335,6 +335,14 @@ export async function unlinkFighterAccount(token: string, householdId: string, f
   }, token);
 }
 
+export async function eraseChildData(token: string, householdId: string, fighterId: string) {
+  return request<{ ok: boolean; retainedFighterId: string }>(
+    `/api/households/${encodeURIComponent(householdId)}/children/${encodeURIComponent(fighterId)}`,
+    { method: 'DELETE' },
+    token,
+  );
+}
+
 export async function bootstrapHousehold(token: string, householdName: string, snapshot?: BootstrapSnapshot) {
   const result = await request<{
     householdId?: unknown;

@@ -14,7 +14,7 @@ import { sendHouseholdInviteEmail } from './email.js';
 import { assertCanManageMembership, type GovernanceRole } from './governance.js';
 import { childAuthRateLimit, committedChildPairAuthentication } from './childAuth.js';
 import { publicSyncRows } from './syncProjection.js';
-import { PRIVACY_NOTICE_VERSION, privacyExportRows } from './privacy.js';
+import { assertChildErasureTarget, PRIVACY_NOTICE_VERSION, privacyExportRows } from './privacy.js';
 
 type JsonObject = Record<string, unknown>;
 type AuthContext = { userId: string; sessionId: string };
@@ -1137,6 +1137,74 @@ export async function buildApp() {
         returning *
       `;
       return { fighter: unlinked };
+    });
+  });
+
+  app.delete('/api/households/:householdId/children/:fighterId', async (request) => {
+    const auth = await requireAuth(request);
+    const { householdId, fighterId } = request.params as { householdId: string; fighterId: string };
+    const actor = await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
+
+    return sql.begin(async (tx) => {
+      const [fighter] = await tx`
+        select f.id, f.user_id, u.kind as user_kind, hm.role, hm.status
+        from fighters f
+        join users u on u.id = f.user_id
+        join household_members hm on hm.household_id = f.household_id and hm.user_id = f.user_id
+        where f.id = ${fighterId} and f.household_id = ${householdId} and f.deleted_at is null
+        for update of f, u, hm
+      `;
+      if (!fighter) throw new Error('Not found');
+      const childUserId = assertChildErasureTarget({
+        userId: fighter.user_id, userKind: fighter.user_kind, role: fighter.role,
+      });
+      assertCanManageMembership({
+        actorUserId: auth.userId, actorRole: actor.role as GovernanceRole,
+        targetUserId: childUserId, targetRole: 'child', removingAccess: fighter.status === 'active',
+        activeOwnerCount: 1,
+      });
+
+      await tx`delete from sessions where user_id = ${childUserId}`;
+      await tx`
+        update chore_completions set performed_by_device_id = null
+        where household_id = ${householdId}
+          and performed_by_device_id in (select id from devices where user_id = ${childUserId})
+      `;
+      await tx`
+        update device_pairings set claimed_device_id = null
+        where household_id = ${householdId}
+          and claimed_device_id in (select id from devices where user_id = ${childUserId})
+      `;
+      await tx`delete from devices where household_id = ${householdId} and user_id = ${childUserId}`;
+      await tx`delete from device_pairings where household_id = ${householdId} and fighter_id = ${fighterId}`;
+      await tx`delete from fighter_credentials where fighter_id = ${fighterId}`;
+      await tx`delete from fighter_avatars where fighter_id = ${fighterId}`;
+
+      await tx`update household_members set invited_by_user_id = null where invited_by_user_id = ${childUserId}`;
+      await tx`update fighters set created_by_user_id = null where created_by_user_id = ${childUserId}`;
+      await tx`update household_invites set accepted_by_user_id = null where accepted_by_user_id = ${childUserId}`;
+      await tx`update chore_completions set performed_by_user_id = null where performed_by_user_id = ${childUserId}`;
+      await tx`update chore_completions set voided_by_user_id = null where voided_by_user_id = ${childUserId}`;
+      await tx`update boss_resets set created_by_user_id = null where created_by_user_id = ${childUserId}`;
+      await tx`update wallet_transactions set created_by_user_id = null where created_by_user_id = ${childUserId}`;
+      await tx`update reward_redemptions set requested_by_user_id = null where requested_by_user_id = ${childUserId}`;
+      await tx`update reward_redemptions set approved_by_user_id = null where approved_by_user_id = ${childUserId}`;
+
+      await tx`
+        update fighters
+        set user_id = null, name = 'Erased fighter', avatar_hash = null,
+            require_own_device = false, deleted_at = now(), version = version + 1
+        where id = ${fighterId}
+      `;
+      await tx`delete from child_authorizations where household_id = ${householdId} and child_user_id = ${childUserId}`;
+      await tx`delete from household_members where household_id = ${householdId} and user_id = ${childUserId}`;
+      await tx`delete from users where id = ${childUserId} and kind = 'child'`;
+      await tx`
+        update households set configuration_revision = configuration_revision + 1, version = version + 1
+        where id = ${householdId}
+      `;
+
+      return { ok: true, retainedFighterId: fighterId };
     });
   });
 

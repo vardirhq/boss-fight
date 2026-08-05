@@ -11,6 +11,7 @@ import { useOnline } from '../online/OnlineContext';
 import {
   ApiError,
   createFighterPairing,
+  eraseChildData,
   inviteAdultFighter,
   resetChildPin,
   setupChildFighter,
@@ -302,6 +303,21 @@ function FighterOnlineControls({ fighter }: { fighter: Fighter }) {
       setError(en ? 'Could not unlink the account.' : 'Kunne ikke koble fra kontoen.');
     }
   };
+  const eraseChild = async () => {
+    if (busy) return;
+    if (!window.confirm(en
+      ? `Permanently erase ${fighter.name}'s child account, name, avatar, credentials, and devices? This cannot be undone. De-identified game history will remain.`
+      : `Vil du slette barnekontoen, navnet, avataren, innloggingen og enhetene til ${fighter.name} permanent? Dette kan ikke angres. Anonymisert spillhistorikk beholdes.`)) return;
+    setBusy(true); setError(null);
+    try {
+      await eraseChildData(token, householdId, fighter.id);
+      await refresh();
+    } catch {
+      setError(en ? 'Could not erase the child data.' : 'Kunne ikke slette barnets data.');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #2b3346' }}>
@@ -324,6 +340,7 @@ function FighterOnlineControls({ fighter }: { fighter: Fighter }) {
         {fighter.userKind === 'child' && <>
           <button onClick={() => void pairChild()} style={smallAction}>{en ? 'Connect a device' : 'Koble til en enhet'}</button>
           <button onClick={() => void resetPin()} style={smallAction}>{en ? 'Change PIN' : 'Bytt PIN'}</button>
+          {mayManageAccount && <button disabled={busy} onClick={() => void eraseChild()} style={{ ...smallAction, color: '#ff8f85', opacity: busy ? .6 : 1 }}>{en ? 'Erase child data' : 'Slett barnets data'}</button>}
         </>}
         {fighter.userId && mayManageAccount && <>
           <button onClick={() => void suspendAccess()} style={{ ...smallAction, color: '#F4B942' }}>{fighter.accountStatus === 'suspended' ? (en ? 'Restore access' : 'Gjenopprett tilgang') : (en ? 'Suspend access' : 'Sperr tilgang')}</button>

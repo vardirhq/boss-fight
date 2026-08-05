@@ -16,6 +16,9 @@ existing child-authorization records.
 - Export projections exclude password, PIN, session, device, pairing, and join-code
   hashes.
 - Parents can suspend child access and revoke household-scoped sessions/devices.
+- Owners and parents can permanently erase a child identity, credentials,
+  devices, avatar, authorization record, and identifying actor links. Gameplay
+  and economy rows remain attached only to a deleted generic fighter tombstone.
 
 ## Current Retention
 
@@ -29,8 +32,8 @@ procedures, but a tested backup-expiry and erasure runbook remains outstanding.
 
 - Obtain qualified review of lawful basis, notice language, processors, and
   hosting disclosures.
-- Add self-service child, adult-account, and household erasure with tests across
-  primary storage.
+- Add self-service adult-account and household erasure, plus real-database tests
+  that verify child erasure across primary storage.
 - Implement and enforce retention windows for invitations, pairings, sessions,
   devices, avatars, activity events, and backups.
 - Document processor agreements, storage locations, deletion SLAs, and restoration
