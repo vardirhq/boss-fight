@@ -144,6 +144,8 @@ export function serverConfigToGameState(config: ServerHouseholdConfig, current: 
         : row.account_status === 'left' ? 'left'
           : row.account_status === 'invited' ? 'invited'
             : row.account_status === 'active' ? 'active' : undefined,
+      accountRole: row.account_role === 'owner' || row.account_role === 'parent'
+        || row.account_role === 'member' || row.account_role === 'child' ? row.account_role : undefined,
     }));
 
   return {
