@@ -117,7 +117,7 @@ landed but the recommendation is not yet satisfied in full.
 | BF-005 | Open | Privacy notice, consent/authorization records, export, erasure, and retention remain. |
 | BF-006 | In progress | Sync queue, reward-integrity, and household-governance tests now run in CI; broad game, database, authorization, offline, and UI coverage remains. |
 | BF-007 | Remediated | Locked, checksum-verified, versioned migrations now gate deployment after a pre-deploy backup; bootstrap, authoring, and rollback procedures are documented in PR #40. |
-| BF-008 | Open | Native credential storage hardening remains. |
+| BF-008 | Remediated | Android credentials use Keystore-backed AES-GCM storage with legacy-token migration and browser-record scrubbing; a restrictive CSP limits script and connection origins in PR #41. Session listing and token lifetime improvements remain under BF-013. |
 | BF-009 | Open | Incremental mutable-state and avatar synchronization remains. |
 | BF-010 | Remediated | Client synchronization uses a single-flight coordinator with a pending rerun; [PR #36](https://github.com/vardirhq/boss-fight/pull/36). |
 | BF-011 | Open | Explicit sync response projections remain. |

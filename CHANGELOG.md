@@ -18,6 +18,9 @@ increasing Android version codes for install/update compatibility.
   merged implementation evidence.
 - Versioned, checksum-verified database migrations with deployment gating and
   documented backup and rollback procedures.
+- Android Keystore-backed encrypted storage for session and household-device
+  credentials, including migration from legacy browser storage and a restrictive
+  application Content Security Policy.
 
 ### Fixed
 

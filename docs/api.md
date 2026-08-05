@@ -919,10 +919,17 @@ HTTP status mapping:
 
 ## Android Notes
 
-Recommended client storage:
+Client storage contract:
 
-- Store bearer session tokens in Android encrypted storage.
-- Store household-device tokens in encrypted storage on shared devices.
+- The packaged Android app stores bearer sessions and household-device tokens
+  through `@aparajita/capacitor-secure-storage`, using AES-GCM and an Android
+  Keystore-generated key. Native tokens must never be copied back to WebView
+  `localStorage`.
+- Existing Android installations migrate legacy browser-stored tokens into the
+  secure store on first launch after upgrade, then scrub the browser record.
+- The browser/PWA keeps credentials in origin-scoped web storage because native
+  platform storage is unavailable there; the application CSP limits executable
+  and connect origins.
 - Store gameplay/config locally in SQLite/Room.
 - Queue offline mutations with stable UUIDs.
 - Pull by per-table `serverSeq` after every successful push.

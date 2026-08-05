@@ -20,6 +20,7 @@ below).
 - **Vite 5** — build & dev server
 - **React 18 + TypeScript** (strict mode, `noUnusedLocals`/`noUnusedParameters`)
 - **`@sqlite.org/sqlite-wasm`** — genuine SQLite in the browser (OPFS, in-memory fallback)
+- **Capacitor 8 + secure storage** — Android packaging and Keystore-backed online credentials
 - **`vite-plugin-pwa`** (Workbox) — web manifest + service worker
 - No CSS framework, no component library, or state library. Focused tests use
   Node's built-in test runner.
@@ -118,6 +119,11 @@ synchronous so `flush()` is a no-op). If OPFS is unavailable it falls back to an
 **in-memory** DB serialized to `localStorage` (base64) on every `flush()`. Both
 paths keep the app persistent and offline. All `localStorage` access is wrapped
 in try/catch (private-mode safe).
+
+Online bearer and household-device credentials are different: packaged native
+apps persist them through `src/online/credentialStorage.ts` using Android
+Keystore-backed secure storage. Never put native tokens back into `localStorage`.
+The browser/PWA fallback remains web storage because native APIs are unavailable.
 
 `repository.ts` owns the row↔object mapping. On first boot it seeds and stamps
 `SCHEMA_VERSION`. On later boots, if the stored version is behind, it runs
