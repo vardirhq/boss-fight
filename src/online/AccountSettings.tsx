@@ -3,7 +3,7 @@ import type { Lang } from '../game/types';
 import { useGame } from '../store/GameContext';
 import { useOnline, type OnlineError } from './OnlineContext';
 import { createBootstrapSnapshot, serverConfigToGameState, serverSyncToGameState } from './gameSync';
-import { acceptHouseholdInvite, ApiError, createHouseholdDevicePairing, getHouseholdExport, inviteParent } from './api';
+import { acceptHouseholdInvite, ApiError, createHouseholdDevicePairing, eraseHousehold, getHouseholdExport, inviteParent } from './api';
 
 const field: React.CSSProperties = {
   width: '100%', boxSizing: 'border-box', background: '#0f1420', border: '1px solid #333c50', borderRadius: 12,
@@ -45,6 +45,7 @@ const COPY = {
     parentInviteSent: 'Invitasjonen er sendt til {email}.', inviteSendFailed: 'E-posten kunne ikke sendes. Prøv igjen senere.',
     createSharedCode: 'Koble til en felles enhet', sharedCodeTitle: 'Skriv denne koden på familieenheten', copy: 'Kopier', copied: 'Kopiert',
     privacyData: 'Personvern og familiedata', privacyDataBody: 'Last ned en JSON-kopi av familieoppsettet, spillerne og aktivitetshistorikken som er lagret på nett.', downloadData: 'Last ned familiedata', downloadingData: 'Laster ned…', exportFailed: 'Familiedataene kunne ikke lastes ned.',
+    eraseFamily: 'Slett familien permanent', eraseFamilyBody: 'Sletter alle spillere, barnekontoer, enheter, oppsett, aktivitet, mynter og belønninger fra serveren. Voksenkontoene beholdes. Dette kan ikke angres.', confirmFamilyName: 'Skriv familienavnet nøyaktig', currentPassword: 'Ditt nåværende passord', eraseFamilyButton: 'Slett alle familiedata', erasingFamily: 'Sletter…', eraseFamilyFailed: 'Familien kunne ikke slettes. Kontroller navnet og passordet.',
     joinHousehold: 'Bytt eller bli med i en annen familie', logout: 'Logg ut',
     advanced: 'Teknisk informasjon', pending: 'endringer venter', rejected: 'avviste endringer krever oppfølging', revision: 'Konfigurasjonsversjon', lastSync: 'Sist lagret', syncNow: 'Synkroniser nå', role: 'Tilgang',
     fighterNameRequired: 'Gi alle spillerne et navn før familien opprettes.', joinFailed: 'Invitasjonen kunne ikke godtas.',
@@ -74,6 +75,7 @@ const COPY = {
     parentInviteSent: 'The invitation was sent to {email}.', inviteSendFailed: 'The email could not be sent. Try again later.',
     createSharedCode: 'Connect a shared device', sharedCodeTitle: 'Enter this code on the family device', copy: 'Copy', copied: 'Copied',
     privacyData: 'Privacy and family data', privacyDataBody: 'Download a JSON copy of the family configuration, fighters, and activity history stored online.', downloadData: 'Download family data', downloadingData: 'Downloading…', exportFailed: 'The family data could not be downloaded.',
+    eraseFamily: 'Permanently erase family', eraseFamilyBody: 'Deletes every fighter, child account, device, configuration item, activity, coin, and reward from the server. Adult accounts remain. This cannot be undone.', confirmFamilyName: 'Enter the exact family name', currentPassword: 'Your current password', eraseFamilyButton: 'Erase all family data', erasingFamily: 'Erasing…', eraseFamilyFailed: 'The family could not be erased. Check the name and password.',
     joinHousehold: 'Switch or join another family', logout: 'Sign out',
     advanced: 'Technical information', pending: 'changes waiting', rejected: 'rejected changes need attention', revision: 'Configuration revision', lastSync: 'Last saved', syncNow: 'Sync now', role: 'Access',
     fighterNameRequired: 'Name every fighter before creating the family.', joinFailed: 'The invitation could not be accepted.',
@@ -109,11 +111,15 @@ export function AccountSettings({ lang, setup = false }: { lang: Lang; setup?: b
   const [copied, setCopied] = useState(false);
   const [setupError, setSetupError] = useState<string | null>(null);
   const [exportingData, setExportingData] = useState(false);
+  const [eraseFamilyName, setEraseFamilyName] = useState('');
+  const [eraseFamilyPassword, setEraseFamilyPassword] = useState('');
+  const [erasingFamily, setErasingFamily] = useState(false);
   const busy = state.status === 'syncing' || state.status === 'restoring';
   const signedIn = Boolean(state.sessionToken || state.householdDeviceToken);
   const connected = Boolean(state.householdId && state.configurationConnectedAt);
   const needsRetry = connected && (state.status === 'offline' || state.status === 'error' || state.pendingMutationCount > 0);
   const isParent = state.mode === 'adult-account' && (state.role === 'owner' || state.role === 'parent');
+  const isOwner = state.mode === 'adult-account' && state.role === 'owner';
   const ownFighter = state.userId
     ? gameState.game.fighters.find((fighter) => fighter.userId === state.userId || fighter.id === `account-${state.userId}`)
     : undefined;
@@ -238,6 +244,24 @@ export function AccountSettings({ lang, setup = false }: { lang: Lang; setup?: b
       setSetupError(copy.exportFailed);
     } finally {
       setExportingData(false);
+    }
+  }
+
+  async function eraseFamilyData() {
+    if (!state.sessionToken || !state.householdId || !isOwner || erasingFamily) return;
+    const householdId = state.householdId;
+    setSetupError(null);
+    setErasingFamily(true);
+    try {
+      await eraseHousehold(state.sessionToken, householdId, eraseFamilyPassword, eraseFamilyName);
+      actions.forgetHousehold(householdId);
+      gameActions.doReset();
+      setEraseFamilyName('');
+      setEraseFamilyPassword('');
+    } catch {
+      setSetupError(copy.eraseFamilyFailed);
+    } finally {
+      setErasingFamily(false);
     }
   }
 
@@ -431,6 +455,17 @@ export function AccountSettings({ lang, setup = false }: { lang: Lang; setup?: b
         <button disabled={exportingData} onClick={() => void downloadFamilyData()} style={{ ...secondary, marginTop: 10 }}>
           {exportingData ? copy.downloadingData : copy.downloadData}
         </button>
+        {isOwner && <details style={{ ...details, marginTop: 14, paddingTop: 12, borderTop: '1px solid #3a2428' }}>
+          <summary style={{ ...summary, color: '#ff8f85', fontSize: 13 }}>{copy.eraseFamily}</summary>
+          <p style={{ color: '#A8B0BF', fontSize: 12, lineHeight: 1.5, margin: '10px 0' }}>{copy.eraseFamilyBody}</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <input aria-label={copy.confirmFamilyName} value={eraseFamilyName} onChange={(event) => setEraseFamilyName(event.target.value)} placeholder={copy.confirmFamilyName} autoComplete="off" style={field} />
+            <input aria-label={copy.currentPassword} value={eraseFamilyPassword} onChange={(event) => setEraseFamilyPassword(event.target.value)} placeholder={copy.currentPassword} type="password" autoComplete="current-password" style={field} />
+            <button disabled={erasingFamily || eraseFamilyName.trim() !== state.householdName || !eraseFamilyPassword} onClick={() => void eraseFamilyData()} style={{ ...secondary, color: '#ff8f85', borderColor: '#873f44', opacity: erasingFamily ? .6 : 1 }}>
+              {erasingFamily ? copy.erasingFamily : copy.eraseFamilyButton}
+            </button>
+          </div>
+        </details>}
       </details>}
 
       <button onClick={() => void actions.logout()} style={secondary}>{copy.logout}</button>

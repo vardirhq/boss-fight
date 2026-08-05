@@ -1,5 +1,5 @@
-export const PRIVACY_NOTICE_VERSION = '2026-08-05.2';
-export const SUPPORTED_PRIVACY_NOTICE_VERSIONS = ['2026-08-05', PRIVACY_NOTICE_VERSION] as const;
+export const PRIVACY_NOTICE_VERSION = '2026-08-05.3';
+export const SUPPORTED_PRIVACY_NOTICE_VERSIONS = ['2026-08-05', '2026-08-05.2', PRIVACY_NOTICE_VERSION] as const;
 
 export function acceptedPrivacyNoticeVersion(value: unknown) {
   if (typeof value !== 'string' || !SUPPORTED_PRIVACY_NOTICE_VERSIONS.includes(value as never)) {
@@ -46,4 +46,14 @@ export function assertChildErasureTarget(input: {
     throw new Error('Only child identities can be erased through this route');
   }
   return input.userId;
+}
+
+export function assertHouseholdErasureConfirmation(input: {
+  currentName: unknown;
+  confirmedName: unknown;
+}) {
+  if (typeof input.currentName !== 'string' || typeof input.confirmedName !== 'string'
+    || input.currentName !== input.confirmedName.trim()) {
+    throw new Error('Household name confirmation does not match');
+  }
 }

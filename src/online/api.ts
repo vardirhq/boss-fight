@@ -142,7 +142,7 @@ export interface ServerSyncState {
 }
 
 export type ApiErrorKind = 'network' | 'unauthenticated' | 'forbidden' | 'conflict' | 'validation' | 'server' | 'unknown';
-export const PRIVACY_NOTICE_VERSION = '2026-08-05.2';
+export const PRIVACY_NOTICE_VERSION = '2026-08-05.3';
 
 export class ApiError extends Error {
   constructor(
@@ -391,6 +391,12 @@ export async function getHouseholdExport(token: string, householdId: string) {
     throw new ApiError('Invalid API response: household export', 'server');
   }
   return result;
+}
+
+export async function eraseHousehold(token: string, householdId: string, password: string, confirmedName: string) {
+  return request<{ ok: boolean }>(`/api/households/${encodeURIComponent(householdId)}`, {
+    method: 'DELETE', body: JSON.stringify({ password, confirmedName }),
+  }, token);
 }
 
 export async function pushSyncMutations(token: string | null, householdId: string, mutations: PendingMutation[], householdDeviceToken?: string | null) {
