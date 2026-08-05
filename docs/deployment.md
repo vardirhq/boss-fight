@@ -31,6 +31,17 @@ SMTP_FROM="Boss Kamp <chris@vardir.no>"
 SMTP_REPLY_TO=chris@vardir.no
 ```
 
+The API also requires explicit browser origins and opt-in proxy trust:
+
+```text
+CORS_ORIGIN=https://boss-kamp.vardir.no,http://localhost,https://localhost,capacitor://localhost
+TRUST_PROXY=true
+```
+
+Do not use a wildcard origin. The checked-in production Compose configuration
+overrides legacy values with this allowlist and enables proxy trust. Keep proxy
+trust enabled only while Caddy remains the sole public path to the API.
+
 The sender address must be permitted by the configured SMTP service. These
 values belong in `.env.production`, not in GitHub Actions or the repository.
 

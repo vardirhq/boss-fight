@@ -12,9 +12,10 @@ COPY package*.json ./
 RUN npm ci --omit=dev \
   && npm cache clean --force \
   && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
-COPY --from=builder /app/dist ./dist
-COPY schema.sql ./schema.sql
-COPY migrations ./migrations
-COPY scripts/migrate.mjs scripts/migration-lib.mjs ./scripts/
+COPY --chown=node:node --from=builder /app/dist ./dist
+COPY --chown=node:node schema.sql ./schema.sql
+COPY --chown=node:node migrations ./migrations
+COPY --chown=node:node scripts/migrate.mjs scripts/migration-lib.mjs ./scripts/
+USER node
 EXPOSE 3002
 CMD ["node", "dist/index.js"]

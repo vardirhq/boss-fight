@@ -35,11 +35,11 @@ Response:
 
 ```json
 {
-  "ok": true,
-  "database": "boss_kamp",
-  "checkedAt": "2026-08-03T17:04:57.465Z"
+  "ok": true
 }
 ```
+
+The public response intentionally omits database and service internals.
 
 Each mutation is committed independently. The response has a `results` entry for
 every submitted mutation with an `outcome` of `accepted`, `duplicate`, `conflict`,

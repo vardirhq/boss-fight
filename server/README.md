@@ -45,7 +45,8 @@ Create `.env.production` on the server:
 ```text
 PORT=3002
 DATABASE_URL=postgresql://boss_kamp_app:<password>@127.0.0.1:5432/boss_kamp
-CORS_ORIGIN=*
+CORS_ORIGIN=https://boss-kamp.vardir.no,http://localhost,https://localhost,capacitor://localhost
+TRUST_PROXY=true
 LOG_LEVEL=info
 SESSION_DAYS=90
 RETENTION_INVITES_DAYS=30
@@ -64,6 +65,12 @@ SMTP_REPLY_TO=chris@vardir.no
 ```
 
 Never commit environment files.
+
+Production requires an explicit comma-separated CORS allowlist; wildcard origins
+are rejected. The production Compose file supplies the web and packaged-app
+origins and enables `TRUST_PROXY` for the trusted Caddy path. Enable proxy trust
+in other environments only when their ingress is trusted, so client-address rate
+limiting cannot be spoofed.
 
 The child authentication limit applies per client IP independently to direct
 child login and pairing-code login. Database-backed credential lockout still
