@@ -4,6 +4,7 @@ import { mayActAsFighter, mayManageHousehold, useOnline } from '../online/Online
 import { useT, BossSprite, Avatar, initialOf, GOLD } from '../ui/common';
 import { maxHpOf, scheduleLabel, statusOf, hexA, isElite } from '../game/logic';
 import { eliteSpriteFor } from '../game/seed';
+import { VisuallyHidden } from '../ui/a11y';
 
 const PS = "'Press Start 2P'";
 
@@ -44,9 +45,10 @@ export function BattleScreen() {
 
   return (
     <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column', maxWidth: 560, margin: '0 auto', width: '100%' }}>
+      <VisuallyHidden><span role="status" aria-live="polite" aria-atomic="true">{ui.dmgNums[ui.dmgNums.length - 1]?.label ?? ''}</span></VisuallyHidden>
       {/* header */}
       <div style={{ flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 18px 10px' }}>
-        <button onClick={() => actions.go('home')} style={iconBtn}>‹</button>
+        <button type="button" aria-label={t.navBosses} onClick={() => actions.go('home')} style={iconBtn}>‹</button>
         <div style={{ textAlign: 'center' }}>
           <div style={{ fontFamily: PS, fontSize: 9, color: GOLD, letterSpacing: 1 }}>{scheduleLabel(boss, lang).toUpperCase()}</div>
         </div>
@@ -123,11 +125,11 @@ export function BattleScreen() {
 
         {ui.won && <VictoryOverlay mvp={mvpName} coins={ui.lastRewardTotal} elite={elite} />}
         {ui.intro && (
-          <div onClick={actions.startFight} style={{ position: 'absolute', inset: 0, zIndex: 35, background: 'rgba(7,9,13,.72)', backdropFilter: 'blur(3px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 20 }}>
+          <button type="button" aria-label={t.tapStart} onClick={actions.startFight} style={{ position: 'absolute', inset: 0, zIndex: 35, width: '100%', border: 0, color: 'inherit', background: 'rgba(7,9,13,.72)', backdropFilter: 'blur(3px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 20 }}>
             <div style={{ fontFamily: PS, fontSize: 9, color: '#E0564A', letterSpacing: 2, animation: 'victoryPop .4s ease-out both' }}>{t.introAppears}</div>
             <div style={{ fontFamily: PS, fontSize: 20, color: '#F6EBDD', textShadow: '0 3px 0 rgba(0,0,0,.6),0 0 20px rgba(244,185,66,.4)', marginTop: 18, textAlign: 'center', lineHeight: 1.5, textTransform: 'uppercase', animation: 'introSlam .7s cubic-bezier(.2,.9,.2,1) both' }}>{boss.name}</div>
             <div style={{ marginTop: 22, fontSize: 12, color: '#A8B0BF', letterSpacing: 1, animation: 'floatBadge 1.4s ease-in-out infinite' }}>{t.tapStart}</div>
-          </div>
+          </button>
         )}
       </div>
 
@@ -144,7 +146,7 @@ export function BattleScreen() {
             const pinging = ui.ping?.fighterId === f.id;
             const accessible = mayActAsFighter(online.state, f);
             return (
-              <button key={f.id} disabled={!accessible} title={!accessible ? (lang === 'en' ? `Only ${f.name}'s account can use this fighter` : `Bare kontoen til ${f.name} kan bruke denne spilleren`) : undefined} onClick={() => actions.selectFighter(f.id)} style={{ ...railBtn, opacity: accessible ? 1 : .38, cursor: accessible ? 'pointer' : 'not-allowed' }}>
+              <button key={f.id} aria-disabled={!accessible} aria-label={!accessible ? (lang === 'en' ? `${f.name}. Only this fighter's account can select them.` : `${f.name}. Bare denne spillerens konto kan velge dem.`) : f.name} onClick={() => { if (accessible) actions.selectFighter(f.id); }} style={{ ...railBtn, opacity: accessible ? 1 : .38, cursor: accessible ? 'pointer' : 'not-allowed' }}>
                 <div style={{ position: 'relative', width: 48, height: 48, borderRadius: 14, background: '#2C3548', border: `2px solid ${f.color}`, display: 'grid', placeItems: 'center', fontFamily: PS, fontSize: 13, color: f.color }}>
                   {sel && <div style={{ position: 'absolute', inset: -3, borderRadius: 15, background: hexA(f.color, .16), boxShadow: `0 0 0 2px ${f.color},0 0 18px ${hexA(f.color, .55)}` }} />}
                   <Avatar fighter={f} radius={12} />
@@ -171,7 +173,7 @@ export function BattleScreen() {
           <span style={{ fontFamily: PS, fontSize: 8, color: '#6C7486', letterSpacing: 1 }}>{t.chooseAttack}</span>
           <div style={{ flex: 1, height: 1, background: 'linear-gradient(90deg,#2b3346,transparent)' }} />
           <span style={{ fontSize: 11, color: '#A8B0BF', fontWeight: 600, whiteSpace: 'nowrap' }}><b style={{ color: GOLD }}>{activeName}</b>{t.turnSuffix}</span>
-          {mayManageHousehold(online.state) && <button onClick={() => actions.openEditChores()} title={t.editChoresTitle} style={{ flex: 'none', width: 30, height: 30, borderRadius: 9, background: '#1b2130', border: '1px solid #333c50', color: '#A8B0BF', cursor: 'pointer', display: 'grid', placeItems: 'center' }}><EditIcon size={15} /></button>}
+          {mayManageHousehold(online.state) && <button aria-label={t.editChoresTitle} onClick={() => actions.openEditChores()} style={{ flex: 'none', width: 30, height: 30, borderRadius: 9, background: '#1b2130', border: '1px solid #333c50', color: '#A8B0BF', cursor: 'pointer', display: 'grid', placeItems: 'center' }}><EditIcon size={15} /></button>}
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
           {boss.chores.map((c, i) => {
@@ -210,7 +212,7 @@ function VictoryOverlay({ mvp, coins, elite }: { mvp: string; coins: number; eli
   const { confetti } = useGame();
   const t = useT();
   return (
-    <div style={{ position: 'absolute', inset: 0, zIndex: 30, background: 'radial-gradient(circle at 50% 42%,rgba(103,211,145,.18),rgba(9,11,16,.82) 70%)', backdropFilter: 'blur(2px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+    <div role="status" aria-live="assertive" aria-atomic="true" style={{ position: 'absolute', inset: 0, zIndex: 30, background: 'radial-gradient(circle at 50% 42%,rgba(103,211,145,.18),rgba(9,11,16,.82) 70%)', backdropFilter: 'blur(2px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       {confetti.map((c) => (
         <div key={c.id} style={{ position: 'absolute', top: -20, left: `${c.left}%`, width: c.w, height: c.h, background: c.color, borderRadius: 2, animation: `confetti ${c.dur}s ${c.delay}s linear infinite`, zIndex: 1 }} />
       ))}

@@ -2,15 +2,17 @@ import { useState } from 'react';
 import { useGame } from '../store/GameContext';
 import { useT, GOLD } from '../ui/common';
 import type { Lang } from '../game/types';
+import { DialogSurface } from '../ui/a11y';
 
 const PS = "'Press Start 2P'";
 
-function Toggle({ on, onClick }: { on: boolean; onClick: () => void }) {
+function Toggle({ on, onClick, label }: { on: boolean; onClick: () => void; label: string }) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={on}
+      aria-label={label}
       onClick={onClick}
       style={{ position: 'relative', flex: 'none', width: 48, height: 28, padding: 0, border: `1px solid ${on ? '#dca32f' : '#3a4356'}`, borderRadius: 15, cursor: 'pointer', transition: 'background .2s,border-color .2s', background: on ? GOLD : '#293142' }}
     >
@@ -67,7 +69,7 @@ export function SettingsPanel({ onOpenAccount, accountSubtitle, accountConnected
   );
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 90, background: 'linear-gradient(180deg,#0d111b,#090c13)', display: 'flex', flexDirection: 'column' }}>
+    <DialogSurface label={copy.title} onClose={actions.closeSettings} style={{ position: 'fixed', inset: 0, zIndex: 90, background: 'linear-gradient(180deg,#0d111b,#090c13)', display: 'flex', flexDirection: 'column' }}>
       {header}
       {page === 'main' ? (
         <div className="scr" style={{ flex: 1, overflowY: 'auto', padding: '20px 16px calc(32px + env(safe-area-inset-bottom))' }}>
@@ -90,11 +92,11 @@ export function SettingsPanel({ onOpenAccount, accountSubtitle, accountConnected
 
             <SectionLabel>{copy.experience}</SectionLabel>
             <Section>
-              <MenuRow icon={<SoundIcon />} iconColor="#67d391" title={t.sound} subtitle={t.soundSub} trailing={<Toggle on={s.sound} onClick={() => actions.setSetting('sound', !s.sound)} />} />
+              <MenuRow icon={<SoundIcon />} iconColor="#67d391" title={t.sound} subtitle={t.soundSub} trailing={<Toggle label={t.sound} on={s.sound} onClick={() => actions.setSetting('sound', !s.sound)} />} />
               <Divider />
-              <MenuRow icon={<HapticsIcon />} iconColor="#f4b942" title={t.haptics} subtitle={t.hapticsSub} trailing={<Toggle on={s.haptics} onClick={() => actions.setSetting('haptics', !s.haptics)} />} />
+              <MenuRow icon={<HapticsIcon />} iconColor="#f4b942" title={t.haptics} subtitle={t.hapticsSub} trailing={<Toggle label={t.haptics} on={s.haptics} onClick={() => actions.setSetting('haptics', !s.haptics)} />} />
               <Divider />
-              <MenuRow icon={<MotionIcon />} iconColor="#e68278" title={t.reducedMotion} subtitle={t.reducedMotionSub} trailing={<Toggle on={s.reducedMotion} onClick={() => actions.setSetting('reducedMotion', !s.reducedMotion)} />} />
+              <MenuRow icon={<MotionIcon />} iconColor="#e68278" title={t.reducedMotion} subtitle={t.reducedMotionSub} trailing={<Toggle label={t.reducedMotion} on={s.reducedMotion} onClick={() => actions.setSetting('reducedMotion', !s.reducedMotion)} />} />
             </Section>
 
             <SectionLabel>{copy.data}</SectionLabel>
@@ -117,7 +119,7 @@ export function SettingsPanel({ onOpenAccount, accountSubtitle, accountConnected
       )}
 
       {state.ui.confirmReset && (
-        <div style={{ position: 'absolute', inset: 0, zIndex: 2, background: 'rgba(6,8,12,.82)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 28, backdropFilter: 'blur(3px)' }}>
+        <DialogSurface label={t.resetConfirmTitle} onClose={actions.cancelReset} style={{ position: 'absolute', inset: 0, zIndex: 2, background: 'rgba(6,8,12,.82)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 28, backdropFilter: 'blur(3px)' }}>
           <div style={{ maxWidth: 340, width: '100%', background: '#161c2b', border: '1px solid #333c50', borderRadius: 20, padding: 24, textAlign: 'center' }}>
             <div style={{ fontSize: 42 }}>⚠️</div>
             <div style={{ fontFamily: PS, fontSize: 14, color: '#E0564A', marginTop: 14, lineHeight: 1.5 }}>{t.resetConfirmTitle}</div>
@@ -127,9 +129,9 @@ export function SettingsPanel({ onOpenAccount, accountSubtitle, accountConnected
               <button onClick={actions.doReset} style={{ flex: 1, padding: 14, border: 'none', borderRadius: 12, background: 'linear-gradient(180deg,#ef6a5f,#E0564A)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 0 #9f2f27' }}>{t.resetYes}</button>
             </div>
           </div>
-        </div>
+        </DialogSurface>
       )}
-    </div>
+    </DialogSurface>
   );
 }
 
@@ -196,7 +198,7 @@ export function Splash() {
   const { actions } = useGame();
   const t = useT();
   return (
-    <div onClick={actions.dismissSplash} style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'radial-gradient(120% 90% at 50% 22%,#1a2338,#0c0f16 60%,#070910)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', overflow: 'hidden', padding: 24 }}>
+    <button type="button" aria-label={t.splashStart} onClick={actions.dismissSplash} style={{ position: 'fixed', inset: 0, zIndex: 100, width: '100%', border: 0, color: 'inherit', background: 'radial-gradient(120% 90% at 50% 22%,#1a2338,#0c0f16 60%,#070910)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', overflow: 'hidden', padding: 24 }}>
       <div style={{ position: 'absolute', inset: 0, backgroundImage: 'linear-gradient(rgba(91,155,232,.08) 1px,transparent 1px),linear-gradient(90deg,rgba(91,155,232,.08) 1px,transparent 1px)', backgroundSize: '34px 34px', maskImage: 'linear-gradient(180deg,#000,transparent 85%)', WebkitMaskImage: 'linear-gradient(180deg,#000,transparent 85%)' }} />
       <img src="/uploads/sock-void-boss-transparent.webp" alt="" style={{ position: 'absolute', bottom: -50, left: '50%', transform: 'translateX(-50%)', width: 'min(94vw,480px)', opacity: .09, filter: 'grayscale(1)', pointerEvents: 'none' }} />
       <div style={{ position: 'relative', zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20, animation: 'introSlam .8s cubic-bezier(.2,.9,.2,1) both' }}>
@@ -213,7 +215,7 @@ export function Splash() {
         </div>
         <div style={{ textAlign: 'center', marginTop: 16, fontFamily: PS, fontSize: 9, color: '#A8B0BF', animation: 'blink 1s steps(1) infinite' }}>{t.splashStart}</div>
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -310,7 +312,7 @@ export function Toast() {
   const { state } = useGame();
   if (!state.ui.toast) return null;
   return (
-    <div style={{ position: 'fixed', bottom: 112, left: 16, right: 16, zIndex: 60, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
+    <div role="status" aria-live="polite" aria-atomic="true" style={{ position: 'fixed', bottom: 112, left: 16, right: 16, zIndex: 60, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
       <div style={{ maxWidth: 340, background: 'linear-gradient(180deg,#ffd873,#F4B942)', color: '#20160A', fontFamily: PS, fontSize: 9, lineHeight: 1.5, letterSpacing: .5, padding: '13px 20px', borderRadius: 13, boxShadow: '0 8px 20px rgba(0,0,0,.5)', animation: 'victoryPop .35s ease-out both', textAlign: 'center' }}>🎉 {state.ui.toast}</div>
     </div>
   );

@@ -42,7 +42,7 @@ export function RewardsScreen() {
               const sel = g.activeFighterId === f.id;
               const accessible = mayActAsFighter(online.state, f);
               return (
-                <button key={f.id} disabled={!accessible} onClick={() => actions.selectFighter(f.id)} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: accessible ? 'pointer' : 'not-allowed', padding: 0, opacity: accessible ? 1 : .35 }}>
+                <button key={f.id} aria-disabled={!accessible} aria-label={!accessible ? (g.settings.lang === 'en' ? `${f.name}. Only this fighter's account can select them.` : `${f.name}. Bare denne spillerens konto kan velge dem.`) : `${f.name}: ${f.coins}`} onClick={() => { if (accessible) actions.selectFighter(f.id); }} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: accessible ? 'pointer' : 'not-allowed', padding: 0, opacity: accessible ? 1 : .35 }}>
                   <div style={{ position: 'relative', width: 46, height: 46, borderRadius: 14, background: '#2C3548', border: `2px solid ${f.color}`, display: 'grid', placeItems: 'center', fontFamily: PS, fontSize: 13, color: f.color }}>
                     {sel && <div style={{ position: 'absolute', inset: -3, borderRadius: 15, boxShadow: `0 0 0 2px ${f.color},0 0 14px ${hexA(f.color, .5)}` }} />}
                     <Avatar fighter={f} radius={12} />{!f.avatar && <span style={{ position: 'relative', zIndex: 1 }}>{initialOf(f.name)}</span>}

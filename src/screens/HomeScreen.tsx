@@ -34,12 +34,12 @@ export function HomeScreen() {
           <div style={{ fontSize: 13, color: '#6C7486', marginTop: 8, fontWeight: 500 }}>{t.tagline}</div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button onClick={actions.openSettings} title={t.settings} style={hdrBtn}><GearIcon /></button>
-          {mayManageHousehold(online.state) && <button onClick={actions.openBossManager} title={t.bossMgrTitle} style={hdrBtn}><EditIcon size={16} /></button>}
-          <div onClick={() => actions.go('rewards')} style={{ display: 'flex', alignItems: 'center', gap: 7, background: '#14202a', border: '1px solid rgba(91,155,232,.4)', borderRadius: 13, padding: '10px 13px', cursor: 'pointer' }}>
+          <button aria-label={t.settings} onClick={actions.openSettings} style={hdrBtn}><GearIcon /></button>
+          {mayManageHousehold(online.state) && <button aria-label={t.bossMgrTitle} onClick={actions.openBossManager} style={hdrBtn}><EditIcon size={16} /></button>}
+          <button type="button" aria-label={`${t.statPool}: ${g.pool}`} onClick={() => actions.go('rewards')} style={{ display: 'flex', alignItems: 'center', gap: 7, background: '#14202a', border: '1px solid rgba(91,155,232,.4)', borderRadius: 13, padding: '10px 13px', cursor: 'pointer' }}>
             <div style={coinBlue} />
             <span style={{ fontFamily: PS, fontSize: 12, color: '#8fc0ff' }}>{g.pool}</span>
-          </div>
+          </button>
         </div>
       </div>
 
@@ -127,7 +127,7 @@ function BossCard({ boss, status }: { boss: Boss; status: BossStatus }) {
   }
 
   return (
-    <div onClick={onTap} style={{ position: 'relative', borderRadius: 22, overflow: 'hidden', background: bg, border: `1px solid ${border}`, cursor: 'pointer', padding: 18, marginBottom: 12, opacity }}>
+    <button type="button" aria-label={`${boss.name}. ${statusLabel}. ${ctaLabel}`} onClick={onTap} style={{ position: 'relative', display: 'block', width: '100%', color: 'inherit', textAlign: 'left', borderRadius: 22, overflow: 'hidden', background: bg, border: `1px solid ${border}`, cursor: 'pointer', padding: 18, marginBottom: 12, opacity }}>
       <div style={{ position: 'absolute', right: -26, bottom: -22, width: 180, opacity: status === 'aktiv' ? .9 : .5, filter: status === 'aktiv' ? 'drop-shadow(0 12px 18px rgba(0,0,0,.5))' : 'grayscale(.5) drop-shadow(0 12px 18px rgba(0,0,0,.5))' }}>
         <BossSprite
           boss={boss}
@@ -156,7 +156,7 @@ function BossCard({ boss, status }: { boss: Boss; status: BossStatus }) {
           ? { background: 'linear-gradient(180deg,#ffd873,#F4B942)', color: '#20160A', boxShadow: '0 5px 0 #b8801f', padding: '12px 18px' }
           : { background: 'rgba(103,211,145,.14)', border: '1px solid rgba(103,211,145,.4)', color: '#67D391', padding: '11px 16px' }), fontFamily: PS, fontSize: 9, letterSpacing: 1, borderRadius: 12 }}>{ctaLabel}</div>
       </div>
-    </div>
+    </button>
   );
 }
 

@@ -125,7 +125,7 @@ landed but the recommendation is not yet satisfied in full.
 | BF-013 | Open | Authentication and API hardening work remains. |
 | BF-014 | Remediated | Android workflows install locked project dependencies, use Deploid 2.1.1 from the repository, standardize on Node 22, pin third-party actions by commit SHA, and require signed builds to run from the immutable release tag; workflow regression tests enforce the contract. |
 | BF-015 | Remediated | CI builds and scans a commit-versioned API image, deployment promotes its immutable digest without rebuilding, and the tested deploy helper retains and automatically restores the previous image when readiness fails. |
-| BF-016 | Open | Accessibility remediation remains. |
+| BF-016 | Remediated | Critical flows use keyboard-native controls, programmatically named fields, focus-managed dialogs, focus indicators, reduced-motion support, accessible disabled-state explanations, and live status/error/gameplay announcements, protected by accessibility contract tests. |
 | BF-017 | Remediated | Language-key parity and English regression tests cover generated labels; reward definitions, voucher and transfer copy, shared attribution, fallback names, level titles, and weekdays now follow the active language across local and synchronized state. |
 | BF-018 | Remediated | Database writes return explicit results; fallback, corrupt-restore, and failed-write states remain visibly announced with retry and SQLite backup actions, with quota and corruption regression tests. |
 | BF-019 | Open | Backend route/service decomposition remains. |
@@ -498,6 +498,16 @@ Examples include:
 **Recommendation:** Establish accessible primitives for buttons, cards, dialogs,
 forms, alerts, and focus management, then run automated and keyboard/screen-reader
 checks on critical flows.
+
+**Remediation:** Completed. Clickable cards and full-screen actions now use native
+buttons; icon controls and form fields have programmatic names; unavailable fighter
+choices remain keyboard focusable and explain their restriction. A shared dialog
+surface traps focus, closes on Escape, and restores focus for settings, confirmation,
+account, boss, chore, and fighter overlays. Toasts, sync state, persistence errors,
+battle damage, victories, and account errors use live-region semantics. Global
+focus-visible and reduced-motion rules cover keyboard and OS preferences. Automated
+contracts test focus wrapping, dialog adoption, named fields, and the absence of
+non-keyboard click targets in critical flows.
 
 ### BF-017 — English mode still emits Norwegian product text
 
