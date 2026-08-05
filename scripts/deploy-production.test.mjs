@@ -106,14 +106,17 @@ test('CI promotes a scanned digest and never rebuilds on the production host', a
   assert.doesNotMatch(compose, /^\s*build:/m);
 });
 
-test('the production image excludes npm and invokes runtime entrypoints with Node', async () => {
+test('the production image is least-privileged and invokes runtime entrypoints with Node', async () => {
   const dockerfile = await readFile(new URL('../server/Dockerfile', import.meta.url), 'utf8');
   const compose = await readFile(new URL('../server/docker-compose.yml', import.meta.url), 'utf8');
   const deploy = await readFile(deployScript, 'utf8');
   assert.match(dockerfile, /rm -rf \/usr\/local\/lib\/node_modules\/npm/);
   assert.match(dockerfile, /CMD \["node", "dist\/index\.js"\]/);
+  assert.match(dockerfile, /^USER node$/m);
   assert.doesNotMatch(dockerfile, /CMD .*npm/);
   assert.match(compose, /command: \["node", "dist\/index\.js"\]/);
+  assert.match(compose, /CORS_ORIGIN: https:\/\/boss-kamp\.vardir\.no,http:\/\/localhost,https:\/\/localhost,capacitor:\/\/localhost/);
+  assert.match(compose, /TRUST_PROXY: "true"/);
   assert.match(deploy, /docker exec "\$postgres_container" pg_dump/);
   assert.match(deploy, /BOSS_KAMP_MIGRATION_DATABASE_URL/);
   assert.match(deploy, /docker compose run --rm/);

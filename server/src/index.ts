@@ -18,6 +18,7 @@ import { childAuthRateLimit, committedChildPairAuthentication } from './childAut
 import { publicSyncRows } from './syncProjection.js';
 import { acceptedPrivacyNoticeVersion, assertAdultErasureConfirmation, assertChildErasureTarget, assertHouseholdErasureConfirmation, PRIVACY_NOTICE_VERSION, privacyExportRows } from './privacy.js';
 import { runOperationalRetention } from './retention.js';
+import { apiSecurityHeaders, configuredCorsOrigins, normalizedEmail, trustProxyEnabled } from './apiSecurity.js';
 
 type JsonObject = Record<string, unknown>;
 type AuthContext = { userId: string; sessionId: string };
@@ -325,10 +326,18 @@ function decorateBosses(rows: JsonObject[], householdId: string, timezone: strin
 }
 
 export async function buildApp() {
-  const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' }, trustProxy: true });
+  const production = process.env.NODE_ENV === 'production';
+  const app = Fastify({
+    logger: { level: process.env.LOG_LEVEL ?? 'info' },
+    trustProxy: trustProxyEnabled(process.env.TRUST_PROXY),
+  });
 
   await app.register(cors, {
-    origin: process.env.CORS_ORIGIN?.split(',').map((origin) => origin.trim()).filter(Boolean) ?? true
+    origin: configuredCorsOrigins(process.env.CORS_ORIGIN, production),
+  });
+
+  app.addHook('onSend', async (_request, reply) => {
+    for (const [name, value] of Object.entries(apiSecurityHeaders)) reply.header(name, value);
   });
 
   await app.register(rateLimit, {
@@ -401,13 +410,13 @@ export async function buildApp() {
   });
 
   app.get('/health', async () => {
-    const [db] = await sql`select current_database() as database, now() as checked_at`;
-    return { ok: true, database: db.database, checkedAt: db.checked_at };
+    await sql`select 1`;
+    return { ok: true };
   });
 
   app.post('/api/auth/register', async (request) => {
     const body = requireObject(request.body);
-    const email = requireString(body.email, 'email').toLowerCase();
+    const email = normalizedEmail(body.email);
     const displayName = requireString(body.displayName, 'displayName');
     const passwordHash = await hashPassword(requireString(body.password, 'password'));
 
@@ -423,7 +432,7 @@ export async function buildApp() {
 
   app.post('/api/auth/login', async (request) => {
     const body = requireObject(request.body);
-    const email = requireString(body.email, 'email').toLowerCase();
+    const email = normalizedEmail(body.email);
     const password = requireString(body.password, 'password');
 
     const [user] = await sql`
@@ -2457,14 +2466,6 @@ export async function buildApp() {
       accepted: results.filter((result) => result.outcome === 'accepted' || result.outcome === 'duplicate')
     };
   });
-
-  app.get('/api/meta', async () => ({
-    service: 'boss-kamp-api',
-    database: 'boss_kamp',
-    auth: 'bearer-session',
-    mutableTables,
-    appendTables
-  }));
 
   return app;
 }

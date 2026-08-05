@@ -6,6 +6,9 @@ services:
     command: ["node", "dist/index.js"]
     network_mode: host
     env_file: .env.production
+    environment:
+      CORS_ORIGIN: https://boss-kamp.vardir.no,http://localhost,https://localhost,capacitor://localhost
+      TRUST_PROXY: "true"
     restart: unless-stopped
     logging:
       driver: json-file
