@@ -115,7 +115,7 @@ landed but the recommendation is not yet satisfied in full.
 | BF-003 | Remediated | Redemption metadata, status, identity, cost, charging, refunds, and final transitions are server-authoritative; [PR #37](https://github.com/vardirhq/boss-fight/pull/37) (`087f84f`). |
 | BF-004 | Remediated | Role hierarchy, last-owner protection, explicit claimed-fighter governance, and household-scoped session revocation implemented in PR #39. |
 | BF-005 | Open | Privacy notice, consent/authorization records, export, erasure, and retention remain. |
-| BF-006 | In progress | Sync queue, reward-integrity, and household-governance tests now run in CI; broad game, database, authorization, offline, and UI coverage remains. |
+| BF-006 | In progress | Game rules, recurrence, elite/rare encounters, progression, seed integrity, bootstrap/projection, sync queue, reward-integrity, and household-governance tests now run in CI. Real-database integration, PWA/offline-update, and UI/accessibility journeys remain. |
 | BF-007 | Remediated | Locked, checksum-verified, versioned migrations now gate deployment after a pre-deploy backup; bootstrap, authoring, and rollback procedures are documented in PR #40. |
 | BF-008 | Remediated | Android credentials use Keystore-backed AES-GCM storage with legacy-token migration and browser-record scrubbing; a restrictive CSP limits script and connection origins in PR #41. Session listing and token lifetime improvements remain under BF-013. |
 | BF-009 | Open | Incremental mutable-state and avatar synchronization remains. |

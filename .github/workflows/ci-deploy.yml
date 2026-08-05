@@ -30,7 +30,7 @@ jobs:
       - name: Build PWA
         run: npm run build
 
-      - name: Test PWA sync queue
+      - name: Test PWA game and sync logic
         run: npm test
 
       - name: Check release metadata
