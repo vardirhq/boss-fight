@@ -180,6 +180,18 @@ Response:
 { "ok": true }
 ```
 
+### `GET /api/me/sessions`
+
+Lists the authenticated user's active, unexpired sessions. Each item includes
+its creation, last-use and expiry timestamps, optional device name/platform,
+and whether it is the session making the request. Tokens and token hashes are
+never returned.
+
+### `DELETE /api/me/sessions/:sessionId`
+
+Revokes one session owned by the authenticated user. Revoking the current
+session immediately invalidates its bearer token.
+
 ### `GET /api/me`
 
 Returns the authenticated user and active household memberships.
