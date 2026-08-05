@@ -16,6 +16,10 @@ function booleanValue(value: unknown) {
   return value === true || value === 1 || value === '1';
 }
 
+function isDeleted(row: Record<string, unknown>) {
+  return booleanValue(row.deleted) || Boolean(row.deleted_at);
+}
+
 function compareConfiguredRows(a: Record<string, unknown>, b: Record<string, unknown>) {
   const bySort = numberValue(a.sort) - numberValue(b.sort);
   if (bySort !== 0) return bySort;
@@ -89,7 +93,7 @@ export function serverConfigToGameState(config: ServerHouseholdConfig, current: 
   ]));
   const choresByBoss = new Map<string, Chore[]>();
   for (const row of config.chores) {
-    if (row.deleted_at) continue;
+    if (isDeleted(row)) continue;
     const bossId = stringValue(row.boss_id);
     const chores = choresByBoss.get(bossId) ?? [];
     chores.push({
@@ -101,7 +105,7 @@ export function serverConfigToGameState(config: ServerHouseholdConfig, current: 
     choresByBoss.set(bossId, chores);
   }
 
-  const bosses: Boss[] = config.bosses.filter((row) => !row.deleted_at).map((row) => {
+  const bosses: Boss[] = config.bosses.filter((row) => !isDeleted(row)).map((row) => {
     const chores = choresByBoss.get(stringValue(row.id)) ?? [];
     return {
       id: stringValue(row.id),
@@ -128,7 +132,7 @@ export function serverConfigToGameState(config: ServerHouseholdConfig, current: 
     };
   });
   const fighters: Fighter[] = config.fighters
-    .filter((row) => !row.deleted_at)
+    .filter((row) => !isDeleted(row))
     .sort(compareConfiguredRows)
     .map((row) => ({
       id: stringValue(row.id),
@@ -173,7 +177,7 @@ export function serverSyncToGameState(sync: ServerSyncState, current: GameState)
     fighterAvatars: sync.mutable.fighter_avatars,
     bosses: sync.mutable.bosses,
     chores: sync.mutable.chores,
-    rewards: sync.mutable.rewards,
+    rewards: [],
     balances: [],
   };
   const base = serverConfigToGameState(configuration, current);

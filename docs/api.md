@@ -712,10 +712,12 @@ restore the correct household without already knowing its UUID.
 
 ## Sync
 
-The sync API separates mutable config from append-only events.
-
-Mutable config is returned in full because it uses `version` and tombstones.
-Append-only tables are pulled incrementally with per-table `server_seq` cursors.
+The sync API separates mutable config from append-only events. Responses use
+explicit public projections: database credentials, actor/audit identifiers,
+revocation metadata, and other implementation-only columns are never part of
+the client contract. Mutable rows include only fields needed to rebuild game
+state, including deletion tombstones. Event rows retain `server_seq` for
+incremental cursors.
 
 ### `GET /api/sync/pull`
 
@@ -737,15 +739,13 @@ Response:
 ```json
 {
   "serverTime": "2026-08-03T17:17:20.067Z",
+  "configurationRevision": 12,
   "mutable": {
     "households": [],
-    "household_members": [],
-    "devices": [],
     "fighters": [],
     "fighter_avatars": [],
     "bosses": [],
-    "chores": [],
-    "rewards": []
+    "chores": []
   },
   "events": {
     "chore_completions": [],
@@ -756,6 +756,11 @@ Response:
   }
 }
 ```
+
+The authoritative field allowlists live in `server/src/syncProjection.ts` and
+are enforced again at the response boundary. Household membership, device, and
+reward-configuration collections are omitted because the game-state projection
+does not consume them.
 
 ### `POST /api/sync/push`
 

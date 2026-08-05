@@ -42,6 +42,8 @@ increasing Android version codes for install/update compatibility.
 - Persist invalid child-pairing PIN attempts before returning authentication
   failures, enforce the intended database lockout, and apply route-specific
   rate limits to child login and pairing.
+- Restrict synchronization responses to explicit public field projections and
+  omit unused household-membership, device, and reward-configuration data.
 
 ## [1.0.0] - 2026-08-04
 

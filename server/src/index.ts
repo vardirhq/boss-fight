@@ -13,6 +13,7 @@ import {
 import { sendHouseholdInviteEmail } from './email.js';
 import { assertCanManageMembership, type GovernanceRole } from './governance.js';
 import { childAuthRateLimit, committedChildPairAuthentication } from './childAuth.js';
+import { publicSyncRows } from './syncProjection.js';
 
 type JsonObject = Record<string, unknown>;
 type AuthContext = { userId: string; sessionId: string };
@@ -1456,12 +1457,15 @@ export async function buildApp() {
       reward_redemptions: optionalNumber(query.since_reward_redemptions)
     };
 
-    const [households, members, devices, fighters, avatars, bosses, chores, rewards] = await Promise.all([
-      sql`select * from households where id = ${householdId}`,
-      sql`select * from household_members where household_id = ${householdId}`,
-      sql`select * from devices where household_id = ${householdId}`,
+    const [households, fighters, avatars, bosses, chores] = await Promise.all([
       sql`
-        select f.*, u.kind as user_kind, hm.status as account_status, hm.role as account_role
+        select id, name, timezone, victories_baseline, configuration_revision
+        from households where id = ${householdId} and deleted_at is null
+      `,
+      sql`
+        select f.id, f.user_id, f.name, f.color, f.streak, f.coins_cached,
+          f.career_xp_cached, f.sort, (f.deleted_at is not null) as deleted,
+          u.kind as user_kind, hm.status as account_status, hm.role as account_role
         from fighters f
         left join users u on u.id = f.user_id
         left join household_members hm on hm.household_id = f.household_id and hm.user_id = f.user_id
@@ -1469,39 +1473,50 @@ export async function buildApp() {
         order by f.sort, f.created_at, f.id
       `,
       sql`
-        select fa.fighter_id, fa.mime, encode(fa.bytes, 'base64') as bytes_base64, fa.hash, fa.updated_at
+        select fa.fighter_id, fa.mime, encode(fa.bytes, 'base64') as bytes_base64
         from fighter_avatars fa
         join fighters f on f.id = fa.fighter_id
         where f.household_id = ${householdId}
       `,
-      sql`select * from bosses where household_id = ${householdId}`,
-      sql`select * from chores where household_id = ${householdId}`,
-      sql`select * from rewards where household_id = ${householdId}`
+      sql`
+        select id, name, sprite, frames, rare, hue, trigger_type, trigger_day,
+          trigger_date, trigger_note, dormant, unlock_at, sort,
+          (deleted_at is not null) as deleted
+        from bosses where household_id = ${householdId}
+        order by sort, created_at, id
+      `,
+      sql`
+        select id, boss_id, title, damage, repeatable, sort,
+          (deleted_at is not null) as deleted
+        from chores where household_id = ${householdId}
+        order by boss_id, sort, created_at, id
+      `
     ]);
 
     const [completions, resets, victories, wallet, redemptions] = await Promise.all([
       sql`
-        select * from chore_completions
+        select id, boss_id, chore_id, fighter_id, cycle_key, reset_seq,
+          chore_title, damage, voided_at, server_seq from chore_completions
         where household_id = ${householdId} and server_seq > ${since.chore_completions}
         order by server_seq
       `,
       sql`
-        select * from boss_resets
+        select id, boss_id, cycle_key, reset_seq, server_seq from boss_resets
         where household_id = ${householdId} and server_seq > ${since.boss_resets}
         order by server_seq
       `,
       sql`
-        select * from boss_victories
+        select id, boss_id, cycle_key, reset_seq, elite, rare, server_seq from boss_victories
         where household_id = ${householdId} and server_seq > ${since.boss_victories}
         order by server_seq
       `,
       sql`
-        select * from wallet_transactions
+        select id, fighter_id, amount, server_seq from wallet_transactions
         where household_id = ${householdId} and server_seq > ${since.wallet_transactions}
         order by server_seq
       `,
       sql`
-        select * from reward_redemptions
+        select id, fighter_id, icon, title, cost, status, created_at, server_seq from reward_redemptions
         where household_id = ${householdId} and server_seq > ${since.reward_redemptions}
         order by server_seq
       `
@@ -1512,10 +1527,19 @@ export async function buildApp() {
       serverTime: new Date().toISOString(),
       configurationRevision: Number(households[0]?.configuration_revision ?? 0),
       mutable: {
-        households, household_members: members, devices, fighters, fighter_avatars: avatars,
-        bosses: decorateBosses(bosses, householdId, timezone), chores, rewards
+        households: publicSyncRows('households', households),
+        fighters: publicSyncRows('fighters', fighters),
+        fighter_avatars: publicSyncRows('fighter_avatars', avatars),
+        bosses: publicSyncRows('bosses', decorateBosses(bosses, householdId, timezone)),
+        chores: publicSyncRows('chores', chores)
       },
-      events: { chore_completions: completions, boss_resets: resets, boss_victories: victories, wallet_transactions: wallet, reward_redemptions: redemptions }
+      events: {
+        chore_completions: publicSyncRows('chore_completions', completions),
+        boss_resets: publicSyncRows('boss_resets', resets),
+        boss_victories: publicSyncRows('boss_victories', victories),
+        wallet_transactions: publicSyncRows('wallet_transactions', wallet),
+        reward_redemptions: publicSyncRows('reward_redemptions', redemptions)
+      },
     };
   });
 
