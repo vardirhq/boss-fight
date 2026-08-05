@@ -1,14 +1,14 @@
 # Privacy And Data Lifecycle
 
 The public, bilingual notice is published at `/privacy.html`. Its current version
-is `2026-08-05.3`, matching `PRIVACY_NOTICE_VERSION` in `server/src/privacy.ts`.
+is `2026-08-05.4`, matching `PRIVACY_NOTICE_VERSION` in `server/src/privacy.ts`.
 Changing the substance of the notice requires a new version and must not rewrite
 existing child-authorization records.
 
-The API temporarily accepts the preceding `2026-08-05` and `2026-08-05.2`
-versions so installed APKs continue to create authorized child logins while new
-clients roll out. Each authorization stores the exact client-submitted version;
-new clients submit `2026-08-05.3`.
+The API temporarily accepts the preceding `2026-08-05`, `2026-08-05.2`, and
+`2026-08-05.3` versions so installed APKs continue to create authorized child
+logins while new clients roll out. Each authorization stores the exact
+client-submitted version; new clients submit `2026-08-05.4`.
 
 ## Implemented Controls
 
@@ -28,6 +28,10 @@ new clients submit `2026-08-05.3`.
   password and the exact household name. All household-owned configuration,
   child identities, devices, activity, wallet, and reward data is deleted;
   independent adult accounts remain.
+- Adults can permanently erase their own account after re-entering their password
+  and email address, provided every household they own has another active owner.
+  Credentials, devices, memberships, and identifying fighter/actor links are
+  removed; historical child authorizations retain only non-identifying evidence.
 
 ## Current Retention
 
@@ -51,9 +55,9 @@ remains outstanding.
 
 - Obtain qualified review of lawful basis, notice language, processors, and
   hosting disclosures.
-- Add self-service adult-account erasure and real-database tests that verify
-  child and household erasure across primary storage.
+- Add real-database tests that verify child, household, and adult-account erasure
+  across primary storage.
 - Define and enforce lifecycle rules for active configuration, activity events,
-  adult-account erasure and backups.
+  and backups.
 - Document processor agreements, storage locations, deletion SLAs, and restoration
   behavior after an erasure request.

@@ -1,5 +1,5 @@
-export const PRIVACY_NOTICE_VERSION = '2026-08-05.3';
-export const SUPPORTED_PRIVACY_NOTICE_VERSIONS = ['2026-08-05', '2026-08-05.2', PRIVACY_NOTICE_VERSION] as const;
+export const PRIVACY_NOTICE_VERSION = '2026-08-05.4';
+export const SUPPORTED_PRIVACY_NOTICE_VERSIONS = ['2026-08-05', '2026-08-05.2', '2026-08-05.3', PRIVACY_NOTICE_VERSION] as const;
 
 export function acceptedPrivacyNoticeVersion(value: unknown) {
   if (typeof value !== 'string' || !SUPPORTED_PRIVACY_NOTICE_VERSIONS.includes(value as never)) {
@@ -55,5 +55,19 @@ export function assertHouseholdErasureConfirmation(input: {
   if (typeof input.currentName !== 'string' || typeof input.confirmedName !== 'string'
     || input.currentName !== input.confirmedName.trim()) {
     throw new Error('Household name confirmation does not match');
+  }
+}
+
+export function assertAdultErasureConfirmation(input: {
+  currentEmail: unknown;
+  confirmedEmail: unknown;
+  soleOwnerHouseholds: unknown[];
+}) {
+  if (typeof input.currentEmail !== 'string' || typeof input.confirmedEmail !== 'string'
+    || input.currentEmail.toLowerCase() !== input.confirmedEmail.trim().toLowerCase()) {
+    throw new Error('Account email confirmation does not match');
+  }
+  if (input.soleOwnerHouseholds.length > 0) {
+    throw new Error('Transfer or erase owned households before deleting the account');
   }
 }

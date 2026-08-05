@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { acceptedPrivacyNoticeVersion, assertChildErasureTarget, assertHouseholdErasureConfirmation, householdExportFields, PRIVACY_NOTICE_VERSION, privacyExportRows } from './privacy.js';
+import { acceptedPrivacyNoticeVersion, assertAdultErasureConfirmation, assertChildErasureTarget, assertHouseholdErasureConfirmation, householdExportFields, PRIVACY_NOTICE_VERSION, privacyExportRows } from './privacy.js';
 
 const secrets = ['password_hash', 'pin_hash', 'token_hash', 'code_hash', 'join_code_hash'];
 
@@ -21,6 +21,7 @@ test('the previous released notice remains accepted during APK rollout', () => {
   assert.equal(acceptedPrivacyNoticeVersion(PRIVACY_NOTICE_VERSION), PRIVACY_NOTICE_VERSION);
   assert.equal(acceptedPrivacyNoticeVersion('2026-08-05'), '2026-08-05');
   assert.equal(acceptedPrivacyNoticeVersion('2026-08-05.2'), '2026-08-05.2');
+  assert.equal(acceptedPrivacyNoticeVersion('2026-08-05.3'), '2026-08-05.3');
   assert.throws(() => acceptedPrivacyNoticeVersion('2026-01-01'));
 });
 
@@ -34,4 +35,16 @@ test('household erasure requires an exact trimmed name confirmation', () => {
   assert.doesNotThrow(() => assertHouseholdErasureConfirmation({ currentName: 'The Family', confirmedName: ' The Family ' }));
   assert.throws(() => assertHouseholdErasureConfirmation({ currentName: 'The Family', confirmedName: 'the family' }));
   assert.throws(() => assertHouseholdErasureConfirmation({ currentName: 'The Family', confirmedName: null }));
+});
+
+test('adult erasure requires email confirmation and another active owner', () => {
+  assert.doesNotThrow(() => assertAdultErasureConfirmation({
+    currentEmail: 'Parent@example.com', confirmedEmail: ' parent@example.com ', soleOwnerHouseholds: [],
+  }));
+  assert.throws(() => assertAdultErasureConfirmation({
+    currentEmail: 'parent@example.com', confirmedEmail: 'other@example.com', soleOwnerHouseholds: [],
+  }));
+  assert.throws(() => assertAdultErasureConfirmation({
+    currentEmail: 'parent@example.com', confirmedEmail: 'parent@example.com', soleOwnerHouseholds: ['Family'],
+  }));
 });

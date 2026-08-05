@@ -9,6 +9,9 @@ increasing Android version codes for install/update compatibility.
 
 ### Added
 
+- Let adults permanently erase their account, credentials, devices,
+  memberships, and identifying game links after password/email confirmation,
+  while protecting households that still depend on them as sole owner.
 - Let household owners permanently erase all synchronized family data after
   confirming the exact household name and re-entering their current password,
   while preserving independent adult accounts.
