@@ -59,6 +59,8 @@ increasing Android version codes for install/update compatibility.
 - Add keyboard-native interactive cards, named controls and form fields, visible
   focus indicators, reduced-motion support, focus-managed dialogs, accessible
   disabled-state explanations, and live announcements for critical game feedback.
+- Give debug Android builds the distinct `no.vardir.bosskamp.dev` application ID
+  and “Boss Kamp Dev” launcher name so they install beside signed releases.
 
 ## [1.0.0] - 2026-08-04
 

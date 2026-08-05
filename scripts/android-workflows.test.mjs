@@ -49,3 +49,13 @@ test('release workflows use Node 22 and dispatch the signed build from its tag',
   assert.match(release, /GITHUB_REF_TYPE.*tag/);
   assert.match(release, /GITHUB_REF_NAME.*RELEASE_TAG/);
 });
+
+test('debug APK installs beside release with a distinct identity and label', async () => {
+  const debug = await workflow('.github/workflows/android-debug.yml');
+  const release = await workflow('.github/workflows/android-release.yml');
+  assert.match(debug, /applicationIdSuffix '\.dev'/);
+  assert.match(debug, /<string name="app_name">Boss Kamp Dev<\/string>/);
+  assert.match(debug, /package: name='no\.vardir\.bosskamp\.dev'/);
+  assert.match(debug, /application-label:'Boss Kamp Dev'/);
+  assert.doesNotMatch(release, /applicationIdSuffix|bosskamp\.dev|Boss Kamp Dev/);
+});
