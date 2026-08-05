@@ -9,6 +9,8 @@ increasing Android version codes for install/update compatibility.
 
 ### Added
 
+- Add enumeration-resistant adult password recovery with emailed 30-minute
+  single-use tokens, global session revocation after reset, and bilingual UI.
 - Bound bearer sessions by both a 90-day absolute lifetime and a 30-day idle
   lifetime, with validated deployment overrides and inactive-session filtering.
 - Let signed-in adults review active sessions, their recent use and expiry, and

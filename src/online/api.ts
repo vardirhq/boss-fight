@@ -281,6 +281,18 @@ export async function loginAdult(email: string, password: string) {
   }));
 }
 
+export async function requestPasswordReset(email: string) {
+  await request('/api/auth/password-reset/request', {
+    method: 'POST', body: JSON.stringify({ email }),
+  });
+}
+
+export async function confirmPasswordReset(token: string, password: string) {
+  await request('/api/auth/password-reset/confirm', {
+    method: 'POST', body: JSON.stringify({ token, password }),
+  });
+}
+
 export async function loginChild(householdId: string, fighterId: string, pin: string, deviceName: string, platform: string) {
   return normalizeAuth(await request<AuthResponse>('/api/auth/child-login', {
     method: 'POST',

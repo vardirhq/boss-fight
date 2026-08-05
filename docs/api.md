@@ -114,6 +114,18 @@ Response:
 }
 ```
 
+### `POST /api/auth/password-reset/request`
+
+Accepts an adult email address and always returns `{ "accepted": true }`, whether
+or not the account exists. For an existing account, the server emails a
+single-use reset token that expires after 30 minutes. Requests are rate-limited.
+
+### `POST /api/auth/password-reset/confirm`
+
+Accepts the emailed `token` and a new `password` of at least ten characters.
+Successful use changes the password, consumes the token, and revokes every
+existing session for the account.
+
 ### `POST /api/auth/child-login`
 
 Logs a child in using a claimed fighter and PIN. This also creates a personal

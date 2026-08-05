@@ -42,6 +42,7 @@ The API runs retention cleanup at startup and every 24 hours:
 - expired or accepted invitations: 30 days;
 - expired or claimed device pairings: 7 days;
 - expired or revoked sessions: 30 days;
+- used or expired password-reset records: 30 days;
 - revoked devices: 30 days, after detaching retained activity references;
 - avatars belonging to deleted fighters: 30 days.
 
@@ -55,8 +56,6 @@ remains outstanding.
 
 - Obtain qualified review of lawful basis, notice language, processors, and
   hosting disclosures.
-- Add real-database tests that verify child, household, and adult-account erasure
-  across primary storage.
 - Define and enforce lifecycle rules for active configuration, activity events,
   and backups.
 - Document processor agreements, storage locations, deletion SLAs, and restoration

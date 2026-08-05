@@ -53,6 +53,7 @@ SESSION_IDLE_DAYS=30
 RETENTION_INVITES_DAYS=30
 RETENTION_PAIRINGS_DAYS=7
 RETENTION_SESSIONS_DAYS=30
+RETENTION_PASSWORD_RESETS_DAYS=30
 RETENTION_REVOKED_DEVICES_DAYS=30
 RETENTION_DELETED_AVATARS_DAYS=30
 CHILD_AUTH_RATE_LIMIT_MAX=20
@@ -88,9 +89,10 @@ development, Mailpit or another SMTP catcher can be used.
 
 Operational retention runs at API startup and every 24 hours. Defaults remove
 expired/accepted invitation metadata after 30 days, pairing metadata after 7
-days, expired/revoked sessions after 30 days, revoked devices after 30 days, and
-avatars for fighters deleted for 30 days. Startup fails if the initial cleanup
-cannot complete; scheduled failures are logged and retried on the next interval.
+days, expired/revoked sessions and used/expired password-reset records after 30
+days, revoked devices after 30 days, and avatars for fighters deleted for 30
+days. Startup fails if the initial cleanup cannot complete; scheduled failures
+are logged and retried on the next interval.
 
 ## Deploy
 
