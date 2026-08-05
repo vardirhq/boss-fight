@@ -28,6 +28,7 @@ import {
   loadNativeCredentials, saveNativeCredentials, usesNativeCredentialStorage,
 } from './credentialStorage';
 import type { Fighter } from '../game/types';
+import { clearSyncEventCache, loadSyncEventCache, mergeSyncEvents, saveSyncEventCache, syncCursors } from './syncCache';
 
 const STORAGE_KEY = 'boss-kamp-online-state-v2';
 const MUTATIONS_KEY = 'boss-kamp-pending-mutations-v1';
@@ -492,7 +493,10 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
               return next;
             });
           }
-          latest = await pullSyncState(token, householdId, householdDeviceToken);
+          const cachedEvents = loadSyncEventCache(householdId);
+          latest = await pullSyncState(token, householdId, syncCursors(cachedEvents), householdDeviceToken);
+          latest = { ...latest, events: mergeSyncEvents(cachedEvents, latest.events) };
+          saveSyncEventCache(householdId, latest.events);
           const syncedAt = new Date().toISOString();
           const revision = latest.configurationRevision;
           setState((current) => {
@@ -549,11 +553,13 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
         // Local logout must work while offline; the remote session expires or
         // can be revoked from another authenticated device later.
       } finally {
+        if (state.householdId) clearSyncEventCache(state.householdId);
         await clearNativeCredentials().catch(() => undefined);
         replaceState(localState);
       }
     },
     forgetHousehold: (householdId) => {
+      clearSyncEventCache(householdId);
       const retained = loadPendingMutations().filter((mutation) => mutation.householdId !== householdId);
       persistPendingMutations(retained);
       setPendingMutations(retained);
