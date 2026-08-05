@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Capacitor } from '@capacitor/core';
 import { useGame } from './store/GameContext';
 import { BattleScreen } from './screens/BattleScreen';
 import { HomeScreen } from './screens/HomeScreen';
@@ -13,6 +14,7 @@ import { mayManageHousehold, useOnline } from './online/OnlineContext';
 import { serverSyncToGameState } from './online/gameSync';
 import { GOLD, useT } from './ui/common';
 import { DialogSurface } from './ui/a11y';
+import { shouldShowPersistenceWarning } from './db/persistenceWarning';
 
 const PS = "'Press Start 2P'";
 const LEGACY_NEW_FIGHTER_NAME = 'Ny kjemper';
@@ -28,6 +30,10 @@ export function App() {
   gameRef.current = state.game;
   const t = useT();
   const { ui, game } = state;
+  const showPersistenceWarning = shouldShowPersistenceWarning(
+    persistence,
+    Capacitor.isNativePlatform(),
+  );
   const [accountOpen, setAccountOpen] = useState(false);
   const currentBoss = game.bosses.find((boss) => boss.id === game.currentBossId) ?? game.bosses[0];
   const householdReady = Boolean(online.state.householdId && online.state.configurationConnectedAt);
@@ -96,7 +102,7 @@ export function App() {
 
   return (
     <div className="app-shell" style={{ width: '100%', height: '100%', minHeight: 0, position: 'relative', background: 'linear-gradient(180deg,#12161f 0%,#0c0f16 60%,#090b10 100%)', display: 'flex', flexDirection: 'column', color: '#F6EBDD', overflow: 'hidden' }}>
-      {persistence.issue && ui.phase === 'app' && (
+      {showPersistenceWarning && ui.phase === 'app' && (
         <div role="alert" aria-live="assertive" style={{ flex: 'none', padding: '10px 12px', paddingTop: 'calc(10px + env(safe-area-inset-top))', background: persistence.issue === 'opfs-unavailable' ? '#30250f' : '#3a1719', borderBottom: `1px solid ${persistence.issue === 'opfs-unavailable' ? '#785c20' : '#873f44'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, flexWrap: 'wrap', zIndex: 89 }}>
           <span style={{ maxWidth: 620, fontSize: 12, lineHeight: 1.45, fontWeight: 650, color: '#f6ebdd' }}>
             {persistence.issue === 'restore-failed' ? t.persistenceRestoreFailed
