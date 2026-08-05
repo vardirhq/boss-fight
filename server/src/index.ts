@@ -1898,8 +1898,6 @@ export async function buildApp() {
         if (Object.keys(knownAvatarHashes).length !== Object.keys(parsed).length) throw new Error();
       } catch { throw new Error('known_avatar_hashes must be valid'); }
     }
-    const knownAvatarHashesJson = JSON.stringify(knownAvatarHashes);
-
     const [households, fighters, avatars, bosses, chores] = await Promise.all([
       sql`
         select id, name, timezone, victories_baseline, configuration_revision
@@ -1920,12 +1918,6 @@ export async function buildApp() {
         from fighter_avatars fa
         join fighters f on f.id = fa.fighter_id
         where f.household_id = ${householdId}
-          and not exists (
-            select 1
-            from jsonb_each_text(${knownAvatarHashesJson}::jsonb) as known(fighter_id, hash)
-            where known.fighter_id = fa.fighter_id::text
-              and known.hash = fa.hash
-          )
       `,
       sql`
         select id, name, sprite, frames, rare, hue, trigger_type, trigger_day,
@@ -1978,7 +1970,9 @@ export async function buildApp() {
       mutable: {
         households: publicSyncRows('households', households),
         fighters: publicSyncRows('fighters', fighters),
-        fighter_avatars: publicSyncRows('fighter_avatars', avatars),
+        fighter_avatars: publicSyncRows('fighter_avatars', avatars.filter((avatar) => (
+          knownAvatarHashes[String(avatar.fighter_id)] !== avatar.hash
+        ))),
         bosses: publicSyncRows('bosses', decorateBosses(bosses, householdId, timezone)),
         chores: publicSyncRows('chores', chores)
       },
