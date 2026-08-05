@@ -14,7 +14,7 @@ import { sendHouseholdInviteEmail } from './email.js';
 import { assertCanManageMembership, type GovernanceRole } from './governance.js';
 import { childAuthRateLimit, committedChildPairAuthentication } from './childAuth.js';
 import { publicSyncRows } from './syncProjection.js';
-import { acceptedPrivacyNoticeVersion, assertChildErasureTarget, assertHouseholdErasureConfirmation, PRIVACY_NOTICE_VERSION, privacyExportRows } from './privacy.js';
+import { acceptedPrivacyNoticeVersion, assertAdultErasureConfirmation, assertChildErasureTarget, assertHouseholdErasureConfirmation, PRIVACY_NOTICE_VERSION, privacyExportRows } from './privacy.js';
 import { runOperationalRetention } from './retention.js';
 
 type JsonObject = Record<string, unknown>;
@@ -368,7 +368,8 @@ export async function buildApp() {
     const validationMessages = [
       'is required', 'must be an array', 'must be a string', 'Expected JSON object', 'Expected numeric value',
       'Password must be at least', 'PIN must be at least', 'Invalid pairing role', 'Invalid invite role',
-      'Unsupported redemption status', 'email must be valid', 'Household name confirmation does not match'
+      'Unsupported redemption status', 'email must be valid', 'Household name confirmation does not match',
+      'Account email confirmation does not match'
     ];
     if (validationMessages.some((part) => message.includes(part))) {
       reply.code(400).send({ error: message, code: 'invalid_request' });
@@ -386,7 +387,8 @@ export async function buildApp() {
       'Transfer amount must be positive',
       'Victory payout amount must be positive', 'Unsupported mutation type',
       'Cannot administer your own membership', 'Parents cannot administer owners or other parents',
-      'Household must retain an active owner', 'Claimed fighters require explicit account governance'
+      'Household must retain an active owner', 'Claimed fighters require explicit account governance',
+      'Transfer or erase owned households before deleting the account'
     ];
     if (domainMessages.some((part) => message.includes(part))) {
       reply.code(422).send({ error: message, code: 'domain_rule' });
@@ -571,6 +573,99 @@ export async function buildApp() {
       order by h.created_at
     `;
     return { user, households };
+  });
+
+  app.delete('/api/me', async (request) => {
+    const auth = await requireAuth(request);
+    const body = requireObject(request.body);
+    const password = requireString(body.password, 'password');
+    const confirmedEmail = requireString(body.confirmedEmail, 'confirmedEmail');
+
+    return sql.begin(async (tx) => {
+      const [user] = await tx`
+        select id, email, password_hash from users
+        where id = ${auth.userId} and kind = 'adult' and deleted_at is null
+        for update
+      `;
+      if (!user) throw new Error('Not found');
+      const soleOwnerHouseholds = await tx`
+        select h.id, h.name
+        from household_members own
+        join households h on h.id = own.household_id and h.deleted_at is null
+        where own.user_id = ${auth.userId} and own.role = 'owner' and own.status = 'active'
+          and not exists (
+            select 1 from household_members other
+            where other.household_id = own.household_id and other.user_id <> own.user_id
+              and other.role = 'owner' and other.status = 'active'
+          )
+        for update of h, own
+      `;
+      assertAdultErasureConfirmation({
+        currentEmail: user.email, confirmedEmail, soleOwnerHouseholds,
+      });
+      if (!(await verifyPassword(password, user.password_hash))) throw new Error('Unauthorized');
+
+      const linkedFighters = await tx`select id, household_id from fighters where user_id = ${auth.userId} for update`;
+      const memberships = await tx`select household_id from household_members where user_id = ${auth.userId} for update`;
+      const createdHouseholds = await tx`select id from households where created_by_user_id = ${auth.userId} for update`;
+      for (const household of createdHouseholds) {
+        const [replacement] = await tx`
+          select user_id from household_members
+          where household_id = ${household.id} and user_id <> ${auth.userId}
+            and role = 'owner' and status = 'active'
+          order by joined_at, id limit 1
+        `;
+        if (!replacement) throw new Error('Transfer or erase owned households before deleting the account');
+        await tx`update households set created_by_user_id = ${replacement.user_id} where id = ${household.id}`;
+      }
+
+      const devices = await tx`select id from devices where user_id = ${auth.userId} for update`;
+      const deviceIds = devices.map((device) => String(device.id));
+      await tx`delete from sessions where user_id = ${auth.userId}`;
+      if (deviceIds.length > 0) {
+        await tx`update chore_completions set performed_by_device_id = null where performed_by_device_id = any(${deviceIds}::uuid[])`;
+        await tx`update device_pairings set claimed_device_id = null where claimed_device_id = any(${deviceIds}::uuid[])`;
+      }
+      await tx`delete from devices where user_id = ${auth.userId}`;
+
+      await tx`delete from household_invites where created_by_user_id = ${auth.userId}`;
+      await tx`update household_invites set accepted_by_user_id = null where accepted_by_user_id = ${auth.userId}`;
+      await tx`delete from device_pairings where created_by_user_id = ${auth.userId}`;
+      await tx`update household_members set invited_by_user_id = null where invited_by_user_id = ${auth.userId}`;
+      await tx`update fighters set created_by_user_id = null where created_by_user_id = ${auth.userId}`;
+      await tx`update chore_completions set performed_by_user_id = null where performed_by_user_id = ${auth.userId}`;
+      await tx`update chore_completions set voided_by_user_id = null where voided_by_user_id = ${auth.userId}`;
+      await tx`update boss_resets set created_by_user_id = null where created_by_user_id = ${auth.userId}`;
+      await tx`update wallet_transactions set created_by_user_id = null where created_by_user_id = ${auth.userId}`;
+      await tx`update reward_redemptions set requested_by_user_id = null where requested_by_user_id = ${auth.userId}`;
+      await tx`update reward_redemptions set approved_by_user_id = null where approved_by_user_id = ${auth.userId}`;
+
+      for (const fighter of linkedFighters) {
+        await tx`delete from fighter_avatars where fighter_id = ${fighter.id}`;
+        await tx`delete from fighter_credentials where fighter_id = ${fighter.id}`;
+        await tx`delete from device_pairings where fighter_id = ${fighter.id}`;
+        await tx`
+          update fighters
+          set user_id = null, name = 'Erased fighter', avatar_hash = null,
+              require_own_device = false, deleted_at = now(), version = version + 1
+          where id = ${fighter.id}
+        `;
+      }
+
+      const householdIds = [...new Set([
+        ...memberships.map((membership) => String(membership.household_id)),
+        ...linkedFighters.map((fighter) => String(fighter.household_id)),
+      ])];
+      await tx`delete from household_members where user_id = ${auth.userId}`;
+      if (householdIds.length > 0) {
+        await tx`
+          update households set configuration_revision = configuration_revision + 1, version = version + 1
+          where id = any(${householdIds}::uuid[])
+        `;
+      }
+      await tx`delete from users where id = ${auth.userId} and kind = 'adult'`;
+      return { ok: true };
+    });
   });
 
   app.post('/api/bootstrap', async (request) => {

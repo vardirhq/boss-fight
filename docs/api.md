@@ -215,6 +215,26 @@ Response:
 }
 ```
 
+### `DELETE /api/me`
+
+Permanently erases the authenticated adult account, including email, display
+name, password, sessions, devices, memberships, and identifying fighter/actor
+links. Requires the current password and an exact case-insensitive email
+confirmation.
+
+```json
+{
+  "password": "current adult password",
+  "confirmedEmail": "parent@example.com"
+}
+```
+
+Deletion is blocked if the adult is the last active owner of any household. They
+must first transfer ownership to another active owner or erase that household.
+Linked fighters become deleted generic tombstones so other households retain
+referential and accounting integrity. Historical child-authorization rows retain
+their notice version and timestamp but no longer identify the erased adult.
+
 ## Household Setup
 
 ### `POST /api/bootstrap`

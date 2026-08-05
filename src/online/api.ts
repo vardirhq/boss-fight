@@ -142,7 +142,7 @@ export interface ServerSyncState {
 }
 
 export type ApiErrorKind = 'network' | 'unauthenticated' | 'forbidden' | 'conflict' | 'validation' | 'server' | 'unknown';
-export const PRIVACY_NOTICE_VERSION = '2026-08-05.3';
+export const PRIVACY_NOTICE_VERSION = '2026-08-05.4';
 
 export class ApiError extends Error {
   constructor(
@@ -396,6 +396,12 @@ export async function getHouseholdExport(token: string, householdId: string) {
 export async function eraseHousehold(token: string, householdId: string, password: string, confirmedName: string) {
   return request<{ ok: boolean }>(`/api/households/${encodeURIComponent(householdId)}`, {
     method: 'DELETE', body: JSON.stringify({ password, confirmedName }),
+  }, token);
+}
+
+export async function eraseAdultAccount(token: string, password: string, confirmedEmail: string) {
+  return request<{ ok: boolean }>('/api/me', {
+    method: 'DELETE', body: JSON.stringify({ password, confirmedEmail }),
   }, token);
 }
 

@@ -196,7 +196,7 @@ create table child_authorizations (
   id                     uuid primary key default gen_random_uuid(),
   household_id           uuid not null references households(id) on delete cascade,
   child_user_id           uuid not null references users(id) on delete cascade,
-  authorized_by_user_id   uuid not null references users(id),
+  authorized_by_user_id   uuid references users(id) on delete set null,
   privacy_notice_version  text not null,
   authorized_at           timestamptz not null default now(),
   unique (household_id, child_user_id)
