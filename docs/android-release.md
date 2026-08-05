@@ -1,5 +1,10 @@
 # Android Release Signing
 
+Release builds use the Android application ID `no.vardir.bosskamp`. CI debug APKs
+use `no.vardir.bosskamp.dev` and the launcher name “Boss Kamp Dev”, allowing both
+variants to be installed on the same device even though they use different signing
+keys.
+
 Boss Kamp release builds are signed in GitHub Actions with an Android upload
 keystore.
 
