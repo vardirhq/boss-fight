@@ -3,6 +3,7 @@ name: boss-kamp-api
 services:
   boss-kamp-api:
     image: ${BOSS_KAMP_API_IMAGE:?Set BOSS_KAMP_API_IMAGE to an immutable image digest}
+    command: ["node", "dist/index.js"]
     network_mode: host
     env_file: .env.production
     restart: unless-stopped

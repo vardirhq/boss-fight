@@ -110,10 +110,13 @@ sudo -u bosskamp-deploy bash -lc '
 '
 ```
 
-The host must provide PostgreSQL client tools compatible with the production
-server. Automated deployment uses the order: pull scanned image, capture the
-current image, backup, migrate, replace, health-check. Migration failure leaves
-the existing application container running.
+Automated deployment uses the order: pull scanned image, capture the current
+image, backup, migrate, replace, health-check. On production, backups are
+captured with `pg_dump` inside the existing Postgres container
+(`BOSS_KAMP_POSTGRES_CONTAINER`, default `friskr_postgres`), and migrations run
+with the database-owner connection derived from that container. The live API
+continues to use the limited app role from `server/.env.production`. Migration
+failure leaves the existing application container running.
 
 ## Database Migrations
 

@@ -69,6 +69,10 @@ bash scripts/deploy-production.sh \
   ghcr.io/vardirhq/boss-fight-api@sha256:<digest>
 ```
 
+The deploy helper backs up and migrates through the production Postgres
+container by default, then starts the API with the limited app credentials from
+`.env.production`.
+
 The Caddy route is configured outside this repo in `/srv/friskr/Caddyfile`.
 See [`../docs/deployment.md`](../docs/deployment.md) for the full deployment
 setup.

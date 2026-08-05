@@ -12,12 +12,17 @@ readonly state_dir="$app_root/deployments"
 readonly service="boss-kamp-api"
 readonly health_url="${BOSS_KAMP_HEALTH_URL:-http://127.0.0.1:3002/health}"
 readonly health_attempts="${BOSS_KAMP_HEALTH_ATTEMPTS:-30}"
+readonly postgres_container="${BOSS_KAMP_POSTGRES_CONTAINER:-friskr_postgres}"
+readonly postgres_database="${BOSS_KAMP_POSTGRES_DATABASE:-boss_kamp}"
+readonly postgres_owner="${BOSS_KAMP_POSTGRES_OWNER:-friskr}"
 
 cd "$app_root/server"
 export BOSS_KAMP_API_IMAGE="$image_ref"
 
 install -d -m 700 "$app_root/backups" "$state_dir"
-docker compose pull "$service"
+if ! docker image inspect "$image_ref" >/dev/null 2>&1; then
+  docker compose pull "$service"
+fi
 
 current_container="$(docker compose ps -q "$service")"
 previous_image=''
@@ -28,12 +33,28 @@ fi
 set -a
 . ./.env.production
 set +a
-pg_dump --format=custom \
-  --file="$app_root/backups/pre-deploy-$(date -u +%Y%m%dT%H%M%SZ).dump" \
-  "$DATABASE_URL"
+backup_file="$app_root/backups/pre-deploy-$(date -u +%Y%m%dT%H%M%SZ).dump"
+if docker inspect "$postgres_container" >/dev/null 2>&1; then
+  docker exec "$postgres_container" pg_dump \
+    --format=custom \
+    --username="$postgres_owner" \
+    --dbname="$postgres_database" > "$backup_file"
+else
+  pg_dump --format=custom --file="$backup_file" "$DATABASE_URL"
+fi
 
 # A migration failure occurs before replacement, leaving the old container live.
-docker compose run --rm "$service" node scripts/migrate.mjs
+if [[ -z "${BOSS_KAMP_MIGRATION_DATABASE_URL:-}" ]] && docker inspect "$postgres_container" >/dev/null 2>&1; then
+  postgres_password="$(
+    docker inspect "$postgres_container" \
+      --format '{{range .Config.Env}}{{println .}}{{end}}' |
+      awk -F= '$1 == "POSTGRES_PASSWORD" { print substr($0, length($1) + 2) }'
+  )"
+  BOSS_KAMP_MIGRATION_DATABASE_URL="postgresql://${postgres_owner}:${postgres_password}@127.0.0.1:5432/${postgres_database}"
+fi
+docker compose run --rm \
+  -e DATABASE_URL="${BOSS_KAMP_MIGRATION_DATABASE_URL:-$DATABASE_URL}" \
+  "$service" node scripts/migrate.mjs
 
 wait_for_health() {
   for _attempt in $(seq 1 "$health_attempts"); do

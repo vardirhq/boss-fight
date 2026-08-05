@@ -28,6 +28,7 @@ async function fixture(healthMode) {
 set -euo pipefail
 printf '%s|docker %s\\n' "\${BOSS_KAMP_API_IMAGE:-}" "$*" >> "${log}"
 if [[ "$1 $2 $3" == "compose ps -q" ]]; then echo container-1; exit 0; fi
+if [[ "$1 $2" == "image inspect" ]]; then exit 1; fi
 if [[ "$1" == "inspect" ]]; then echo "${previousImage}"; exit 0; fi
 if [[ "$1 $2" == "compose up" ]]; then
   count=0; [[ -f "${upCount}" ]] && count="$(<"${upCount}")"
@@ -107,10 +108,15 @@ test('CI promotes a scanned digest and never rebuilds on the production host', a
 
 test('the production image excludes npm and invokes runtime entrypoints with Node', async () => {
   const dockerfile = await readFile(new URL('../server/Dockerfile', import.meta.url), 'utf8');
+  const compose = await readFile(new URL('../server/docker-compose.yml', import.meta.url), 'utf8');
   const deploy = await readFile(deployScript, 'utf8');
   assert.match(dockerfile, /rm -rf \/usr\/local\/lib\/node_modules\/npm/);
-  assert.match(dockerfile, /node scripts\/migrate\.mjs && node dist\/index\.js/);
+  assert.match(dockerfile, /CMD \["node", "dist\/index\.js"\]/);
   assert.doesNotMatch(dockerfile, /CMD .*npm/);
-  assert.match(deploy, /docker compose run --rm "\$service" node scripts\/migrate\.mjs/);
+  assert.match(compose, /command: \["node", "dist\/index\.js"\]/);
+  assert.match(deploy, /docker exec "\$postgres_container" pg_dump/);
+  assert.match(deploy, /BOSS_KAMP_MIGRATION_DATABASE_URL/);
+  assert.match(deploy, /docker compose run --rm/);
+  assert.match(deploy, /"\$service" node scripts\/migrate\.mjs/);
   assert.doesNotMatch(deploy, /docker compose run .*npm run migrate/);
 });

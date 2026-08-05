@@ -17,4 +17,4 @@ COPY schema.sql ./schema.sql
 COPY migrations ./migrations
 COPY scripts/migrate.mjs scripts/migration-lib.mjs ./scripts/
 EXPOSE 3002
-CMD ["sh", "-c", "node scripts/migrate.mjs && node dist/index.js"]
+CMD ["node", "dist/index.js"]
