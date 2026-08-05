@@ -86,7 +86,7 @@ test('event projection uses only the current reset, ignores voided attacks, and 
       ],
       boss_victories: [{ boss_id: 'boss-1', cycle_key: 'cycle-1', reset_seq: 1, rare: 1 }],
       wallet_transactions: [{ fighter_id: 'fighter-1', amount: 4 }, { fighter_id: 'fighter-1', amount: -1 }, { fighter_id: null, amount: 6 }],
-      reward_redemptions: [{ id: 'reward-1', icon: '🍫', title: 'Treat', cost: 3, created_at: '2026-08-05T12:00:00Z', fighter_id: 'fighter-1', status: 'used' }],
+      reward_redemptions: [{ id: 'reward-1', reward_id: 'p_snack', icon: '🍫', title: 'Treat', cost: 3, created_at: '2026-08-05T12:00:00Z', fighter_id: 'fighter-1', status: 'used' }],
     },
   };
   const result = serverSyncToGameState(sync, game());
@@ -99,5 +99,5 @@ test('event projection uses only the current reset, ignores voided attacks, and 
   assert.equal(result.victories, 6);
   assert.equal(result.goldenRevealed, true);
   assert.deepEqual(result.log.map(({ attack }) => attack), ['First']);
-  assert.deepEqual(result.redemptions[0], { vid: 'reward-1', icon: '🍫', title: 'Treat', cost: 3, at: '2026-08-05', who: 'Ada', used: true });
+  assert.deepEqual(result.redemptions[0], { vid: 'reward-1', rewardId: 'p_snack', icon: '🍫', title: 'Candy at the store', cost: 3, at: '2026-08-05', who: 'Ada', used: true });
 });

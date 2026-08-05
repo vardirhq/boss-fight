@@ -126,7 +126,7 @@ landed but the recommendation is not yet satisfied in full.
 | BF-014 | Remediated | Android workflows install locked project dependencies, use Deploid 2.1.1 from the repository, standardize on Node 22, pin third-party actions by commit SHA, and require signed builds to run from the immutable release tag; workflow regression tests enforce the contract. |
 | BF-015 | Remediated | CI builds and scans a commit-versioned API image, deployment promotes its immutable digest without rebuilding, and the tested deploy helper retains and automatically restores the previous image when readiness fails. |
 | BF-016 | Open | Accessibility remediation remains. |
-| BF-017 | Open | Remaining Norwegian strings in English mode remain. |
+| BF-017 | Remediated | Language-key parity and English regression tests cover generated labels; reward definitions, voucher and transfer copy, shared attribution, fallback names, level titles, and weekdays now follow the active language across local and synchronized state. |
 | BF-018 | Open | Persistent user-visible save-failure handling remains. |
 | BF-019 | Open | Backend route/service decomposition remains. |
 | BF-020 | Open | Centralized strict request/response schemas remain. |
@@ -515,6 +515,14 @@ level-title, weekday, and shared-attribution paths.
 
 **Recommendation:** Move all user-facing strings into the translation catalog and
 add a test that scans or renders both supported languages.
+
+**Remediation:** Completed. Product-generated labels now come from the bilingual
+catalog, reward definitions are selected by language while retaining stable reward
+IDs, and synchronized redemption records carry those IDs so historical titles can
+be rendered in the active language. Language parity and focused English-mode tests
+cover generated labels, level titles, weekdays, reward catalogs, and synchronized
+redemptions. Household-configured boss, chore, fighter, and household names remain
+user content and are intentionally displayed as authored.
 
 ### BF-018 — Persistence failure can be silent to the user
 

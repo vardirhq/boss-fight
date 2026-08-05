@@ -1,5 +1,5 @@
 import type { Boss, Chore, Lang } from './types';
-import { DAY_LONG } from './i18n';
+import { DAY_LONG, DAY_SHORT, STRINGS } from './i18n';
 
 export type BossStatus = 'aktiv' | 'beseiret' | 'planlagt';
 
@@ -148,17 +148,17 @@ export interface LevelInfo {
   pct: number;
 }
 
-export function levelInfo(xp: number): LevelInfo {
+export function levelInfo(xp: number, lang: Lang = 'no'): LevelInfo {
   const per = 120;
   const level = Math.floor(xp / per) + 1;
   const into = xp % per;
-  const titles = ['Væpner', 'Ridder', 'Kriger', 'Helt', 'Mester'];
+  const titles = STRINGS[lang].levelTitles;
   const title = titles[Math.min(titles.length - 1, Math.floor((level - 1) / 2))];
   return { level, title, into, per, pct: (into / per) * 100 };
 }
 
-export function todayShort(now = new Date()): string {
-  return ['søn', 'man', 'tir', 'ons', 'tor', 'fre', 'lør'][now.getDay()];
+export function todayShort(now = new Date(), lang: Lang = 'no'): string {
+  return DAY_SHORT[lang][now.getDay()].toLowerCase();
 }
 
 export function hexA(hex: string, a: number): string {

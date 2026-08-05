@@ -79,6 +79,7 @@ export interface LogEntry {
 /** A redeemed reward voucher, held until "used". */
 export interface Redemption {
   vid: string;
+  rewardId?: string;
   icon: string;
   title: string;
   cost: number;

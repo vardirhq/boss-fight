@@ -9,6 +9,7 @@ import {
   extraSeedBosses,
   remapBossName,
   remapSprite,
+  rewardsFor,
   seedBosses,
   sumDamage,
 } from './seed.ts';
@@ -43,4 +44,13 @@ test('reward catalogs have unique ids and positive integer prices', () => {
   const rewards = [...REWARDS_PERSONAL, ...REWARDS_GROUP];
   assert.equal(new Set(rewards.map(({ id }) => id)).size, rewards.length);
   for (const reward of rewards) assert.ok(Number.isInteger(reward.cost) && reward.cost > 0);
+});
+
+test('English reward catalogs preserve ids and prices without Norwegian copy', () => {
+  const norwegian = [...rewardsFor('no').personal, ...rewardsFor('no').group];
+  const english = [...rewardsFor('en').personal, ...rewardsFor('en').group];
+  assert.deepEqual(english.map(({ id, cost }) => ({ id, cost })), norwegian.map(({ id, cost }) => ({ id, cost })));
+  for (const reward of english) {
+    assert.doesNotMatch(`${reward.title} ${reward.desc}`, /[æøåÆØÅ]|\b(og|familien|velg|bruk|kveld)\b/i);
+  }
 });

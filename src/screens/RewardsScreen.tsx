@@ -1,7 +1,7 @@
 import { useGame } from '../store/GameContext';
 import { useT, Avatar, initialOf, GOLD } from '../ui/common';
 import { hexA } from '../game/logic';
-import { REWARDS_PERSONAL, REWARDS_GROUP } from '../game/seed';
+import { localizedRewardTitle, rewardsFor } from '../game/seed';
 import type { RewardDef } from '../game/types';
 import { mayActAsFighter, useOnline } from '../online/OnlineContext';
 
@@ -15,6 +15,7 @@ export function RewardsScreen() {
   const active = g.fighters.find((f) => f.id === g.activeFighterId);
   const myCoins = active?.coins ?? 0;
   const colorByName = new Map(g.fighters.map((f) => [f.name, f.color]));
+  const rewards = rewardsFor(g.settings.lang);
 
   return (
     <div style={{ maxWidth: 560, margin: '0 auto', width: '100%', padding: '24px 18px 20px' }}>
@@ -58,7 +59,7 @@ export function RewardsScreen() {
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={() => actions.transfer(10)} disabled={myCoins <= 0} style={{ padding: '11px 12px', border: '1px solid rgba(91,155,232,.5)', borderRadius: 11, background: 'rgba(91,155,232,.16)', color: '#8fc0ff', fontFamily: PS, fontSize: 8, letterSpacing: .5, cursor: 'pointer' }}>+10 →</button>
-              <button onClick={() => actions.transfer('all')} disabled={myCoins <= 0} style={{ padding: '11px 12px', border: '1px solid #333c50', borderRadius: 11, background: '#232c3e', color: '#A8B0BF', fontFamily: PS, fontSize: 8, letterSpacing: .5, cursor: 'pointer' }}>ALT →</button>
+              <button onClick={() => actions.transfer('all')} disabled={myCoins <= 0} style={{ padding: '11px 12px', border: '1px solid #333c50', borderRadius: 11, background: '#232c3e', color: '#A8B0BF', fontFamily: PS, fontSize: 8, letterSpacing: .5, cursor: 'pointer' }}>{t.transferAll}</button>
             </div>
           </div>
         </>
@@ -66,12 +67,12 @@ export function RewardsScreen() {
 
       <div style={label}>{t.myRewards}</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {REWARDS_PERSONAL.map((r) => <RewardCard key={r.id} r={r} balance={myCoins} kind="personal" />)}
+        {rewards.personal.map((r) => <RewardCard key={r.id} r={r} balance={myCoins} kind="personal" />)}
       </div>
 
       <div style={label}>{t.groupRewards}</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {REWARDS_GROUP.map((r) => <RewardCard key={r.id} r={r} balance={g.pool} kind="group" allowed={online.state.mode !== 'fighter-account'} />)}
+        {rewards.group.map((r) => <RewardCard key={r.id} r={r} balance={g.pool} kind="group" allowed={online.state.mode !== 'fighter-account'} />)}
       </div>
 
       {g.redemptions.length > 0 && (
@@ -83,7 +84,7 @@ export function RewardsScreen() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <div style={{ width: 8, height: 8, borderRadius: '50%', background: colorByName.get(e.who) || '#8fc0ff' }} />
                   <div>
-                    <div style={{ fontSize: 14, color: '#F6EBDD', fontWeight: 600 }}>{e.title}</div>
+                    <div style={{ fontSize: 14, color: '#F6EBDD', fontWeight: 600 }}>{localizedRewardTitle(e.rewardId, e.title, g.settings.lang)}</div>
                     <div style={{ fontSize: 11, color: '#6C7486', marginTop: 2 }}>{e.who}</div>
                   </div>
                 </div>

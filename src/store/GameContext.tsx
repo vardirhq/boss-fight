@@ -559,7 +559,7 @@ export function GameProvider({ db, initial, children }: { db: Db; initial: GameS
         patchGame((g) => {
           const id = `account-${userId}`;
           const existing = g.fighters.find((fighter) => fighter.userId === userId || fighter.id === id);
-          const name = displayName.trim() || existing?.name || 'Spiller';
+          const name = displayName.trim() || existing?.name || STRINGS[g.settings.lang].fighterFallback;
           if (existing) {
             const fighters = g.fighters.map((fighter) => fighter.id === existing.id
               ? { ...fighter, name, userId, userKind: 'adult' as const, accountStatus: 'active' as const }
@@ -655,9 +655,10 @@ export function GameProvider({ db, initial, children }: { db: Db; initial: GameS
       addBoss: () =>
         patchGame((g) => {
           const id = 'b' + Date.now();
-          const chore: Chore = { id: id + '-0', title: 'Nytt gjøremål', damage: 20, repeatable: false };
+          const copy = STRINGS[g.settings.lang];
+          const chore: Chore = { id: id + '-0', title: copy.newChore, damage: 20, repeatable: false };
           const boss: Boss = {
-            id, name: 'Ny boss', sprite: SPRITE_POOL[0], frames: 0, rare: false,
+            id, name: copy.newBoss, sprite: SPRITE_POOL[0], frames: 0, rare: false,
             trigger: { type: 'daglig', note: '' }, chores: [chore], hp: 20, clearedCycle: '', usedChores: [],
             dormant: false, unlockAt: 0,
           };
@@ -722,6 +723,7 @@ export function GameProvider({ db, initial, children }: { db: Db; initial: GameS
 
       redeemPersonal: (r) => {
         const s = stateRef.current;
+        const copy = STRINGS[s.game.settings.lang];
         const id = s.game.activeFighterId;
         const fighter = s.game.fighters.find((f) => f.id === id);
         if (!fighter || fighter.coins < r.cost) return;
@@ -734,14 +736,15 @@ export function GameProvider({ db, initial, children }: { db: Db; initial: GameS
           ...g,
           fighters: g.fighters.map((f) => (f.id === id ? { ...f, coins: f.coins - r.cost } : f)),
           redemptions: [
-            { vid: String(Date.now() + Math.random()), icon: r.icon, title: r.title, cost: r.cost, at: todayShort(), who: fighter.name, used: false },
+            { vid: String(Date.now() + Math.random()), rewardId: r.id, icon: r.icon, title: r.title, cost: r.cost, at: todayShort(new Date(), g.settings.lang), who: fighter.name, used: false },
             ...g.redemptions,
           ].slice(0, 12),
         }));
-        flash(fighter.name + ' løste inn: ' + r.title);
+        flash(copy.redeemedFlash.replace('{name}', fighter.name).replace('{reward}', r.title));
       },
       redeemGroup: (r) => {
         const s = stateRef.current;
+        const copy = STRINGS[s.game.settings.lang];
         if (s.game.pool < r.cost) return;
         queueMutation('reward_redemption', {
           rewardId: r.id,
@@ -752,11 +755,11 @@ export function GameProvider({ db, initial, children }: { db: Db; initial: GameS
           ...g,
           pool: g.pool - r.cost,
           redemptions: [
-            { vid: String(Date.now() + Math.random()), icon: r.icon, title: r.title, cost: r.cost, at: todayShort(), who: 'Felles', used: false },
+            { vid: String(Date.now() + Math.random()), rewardId: r.id, icon: r.icon, title: r.title, cost: r.cost, at: todayShort(new Date(), g.settings.lang), who: copy.sharedWho, used: false },
             ...g.redemptions,
           ].slice(0, 12),
         }));
-        flash('Fellesbelønning: ' + r.title);
+        flash(copy.sharedRewardFlash.replace('{reward}', r.title));
       },
       transfer: (amount) => {
         const s = stateRef.current;
@@ -777,7 +780,8 @@ export function GameProvider({ db, initial, children }: { db: Db; initial: GameS
           pool: g.pool + give,
           fighters: g.fighters.map((f) => (f.id === id ? { ...f, coins: f.coins - give } : f)),
         }));
-        flash(fighter.name + ' ga ' + give + ' til fellespotten');
+        const copy = STRINGS[s.game.settings.lang];
+        flash(copy.transferFlash.replace('{name}', fighter.name).replace('{amount}', String(give)));
       },
       useVoucher: (vid) => {
         const s = stateRef.current;

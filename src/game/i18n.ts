@@ -41,6 +41,9 @@ export interface Strings {
   resetSub: string; resetConfirmTitle: string;
   resetConfirmSub: string;
   cancel: string; resetYes: string; about: string; done: string;
+  levelTitles: string[]; newChore: string; newBoss: string; sharedWho: string;
+  redeemedFlash: string; sharedRewardFlash: string; transferFlash: string;
+  transferAll: string; householdFallback: string; fighterFallback: string;
 }
 
 export const STRINGS: Record<Lang, Strings> = {
@@ -89,6 +92,9 @@ export const STRINGS: Record<Lang, Strings> = {
     resetSub: 'Sletter alle bosser, kjempere og mynter', resetConfirmTitle: 'Sikker?',
     resetConfirmSub: 'Alt av bosser, kjempere, mynter og fremgang slettes for godt. Dette kan ikke angres.',
     cancel: 'Avbryt', resetYes: 'Slett alt', about: 'Boss Kamp · v1.0', done: 'FERDIG',
+    levelTitles: ['Væpner', 'Ridder', 'Kriger', 'Helt', 'Mester'], newChore: 'Nytt gjøremål', newBoss: 'Ny boss', sharedWho: 'Felles',
+    redeemedFlash: '{name} løste inn: {reward}', sharedRewardFlash: 'Fellesbelønning: {reward}', transferFlash: '{name} ga {amount} til fellespotten',
+    transferAll: 'ALT →', householdFallback: 'Familien', fighterFallback: 'Spiller',
   },
   en: {
     tagline: 'Make the chores lose HP.', statBosses: 'Bosses beaten', statStreak: 'Day streak', statPool: 'Shared pool', hpLeft: 'HP left',
@@ -135,6 +141,9 @@ export const STRINGS: Record<Lang, Strings> = {
     resetSub: 'Deletes all bosses, fighters and coins', resetConfirmTitle: 'Are you sure?',
     resetConfirmSub: 'All bosses, fighters, coins and progress will be deleted for good. This cannot be undone.',
     cancel: 'Cancel', resetYes: 'Delete all', about: 'Boss Kamp · v1.0', done: 'DONE',
+    levelTitles: ['Squire', 'Knight', 'Warrior', 'Hero', 'Champion'], newChore: 'New chore', newBoss: 'New boss', sharedWho: 'Shared',
+    redeemedFlash: '{name} redeemed: {reward}', sharedRewardFlash: 'Shared reward: {reward}', transferFlash: '{name} gave {amount} to the shared pool',
+    transferAll: 'ALL →', householdFallback: 'The family', fighterFallback: 'Fighter',
   },
 };
 

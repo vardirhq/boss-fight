@@ -28,7 +28,7 @@ export function PartyScreen() {
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
         <div>
           <div style={{ fontFamily: PS, fontSize: 15, color: GOLD, lineHeight: 1.4 }}>{t.team}</div>
-          <div style={{ fontSize: 13, color: '#6C7486', marginTop: 8, fontWeight: 500 }}>Madsen-husholdningen · {t.teamSub.replace('{n}', String(g.fighters.length))}</div>
+          <div style={{ fontSize: 13, color: '#6C7486', marginTop: 8, fontWeight: 500 }}>{online.state.householdName || t.householdFallback} · {t.teamSub.replace('{n}', String(g.fighters.length))}</div>
         </div>
         {mayManageHousehold(online.state) && <button onClick={actions.openPartyManager} title={t.partyMgrTitle} style={{ flex: 'none', width: 40, height: 40, borderRadius: 13, background: '#1b2130', border: '1px solid #333c50', color: '#A8B0BF', cursor: 'pointer', display: 'grid', placeItems: 'center' }}><EditIcon size={16} /></button>}
       </div>
@@ -45,7 +45,7 @@ export function PartyScreen() {
           <div style={sectionLabel}>{t.thisBattle.replace('{boss}', boss.name)}</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {g.fighters.map((f) => {
-              const li = levelInfo(f.careerXp);
+              const li = levelInfo(f.careerXp, g.settings.lang);
               const isMvp = f.id === mvpId && maxTotal > 0;
               return (
                 <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 14, background: '#1b2130', border: '1px solid #2b3346', borderRadius: 16, padding: 14 }}>

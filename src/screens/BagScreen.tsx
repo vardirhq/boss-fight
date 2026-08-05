@@ -1,6 +1,7 @@
 import { useGame } from '../store/GameContext';
 import { mayManageHousehold, useOnline } from '../online/OnlineContext';
 import { useT, GOLD } from '../ui/common';
+import { localizedRewardTitle } from '../game/seed';
 
 const PS = "'Press Start 2P'";
 
@@ -25,7 +26,7 @@ export function BagScreen() {
               <div key={v.vid} style={{ display: 'flex', alignItems: 'center', gap: 14, background: '#1b2130', border: '1px solid #2b3346', borderRadius: 16, padding: 14 }}>
                 <div style={{ width: 46, height: 46, borderRadius: 13, background: '#141a26', border: '1px solid #2b3346', display: 'grid', placeItems: 'center', fontSize: 22 }}>{v.icon || '🎁'}</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: '#F6EBDD', lineHeight: 1.2 }}>{v.title}</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: '#F6EBDD', lineHeight: 1.2 }}>{localizedRewardTitle(v.rewardId, v.title, g.settings.lang)}</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 5 }}>
                     <div style={{ width: 8, height: 8, borderRadius: '50%', background: colorByName.get(v.who) || '#8fc0ff' }} />
                     <span style={{ fontSize: 11, color: '#6C7486', fontWeight: 500 }}>{v.who}</span>
