@@ -124,7 +124,7 @@ landed but the recommendation is not yet satisfied in full.
 | BF-012 | Remediated | Invalid pairing PIN attempts commit before the route returns 401, the eighth failure starts the database lockout, and both child-authentication routes have explicit per-IP limits and regression tests. |
 | BF-013 | Open | Authentication and API hardening work remains. |
 | BF-014 | Remediated | Android workflows install locked project dependencies, use Deploid 2.1.1 from the repository, standardize on Node 22, pin third-party actions by commit SHA, and require signed builds to run from the immutable release tag; workflow regression tests enforce the contract. |
-| BF-015 | Open | Deployment rollback, artifact promotion, and recovery automation remain. |
+| BF-015 | Remediated | CI builds and scans a commit-versioned API image, deployment promotes its immutable digest without rebuilding, and the tested deploy helper retains and automatically restores the previous image when readiness fails. |
 | BF-016 | Open | Accessibility remediation remains. |
 | BF-017 | Open | Remaining Norwegian strings in English mode remain. |
 | BF-018 | Open | Persistent user-visible save-failure handling remains. |

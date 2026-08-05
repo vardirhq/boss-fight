@@ -7,6 +7,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   checks:
     name: Quality Checks
@@ -58,11 +61,71 @@ jobs:
         working-directory: server
         run: npm audit --audit-level=high
 
+  image:
+    name: Build and Scan API Image
+    runs-on: ubuntu-latest
+    needs: checks
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image_ref: ${{ steps.image.outputs.image_ref }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Resolve image tag
+        id: registry
+        run: echo "image_tag=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/boss-fight-api:sha-$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Build and push immutable API image
+        id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: server
+          load: ${{ github.event_name == 'pull_request' }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.registry.outputs.image_tag }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+
+      - name: Resolve immutable image reference
+        id: image
+        if: github.event_name != 'pull_request'
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: echo "image_ref=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/boss-fight-api@$DIGEST" >> "$GITHUB_OUTPUT"
+
+      - name: Scan immutable API image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.image.outputs.image_ref || steps.registry.outputs.image_tag }}
+          version: v0.73.0
+          format: table
+          exit-code: '1'
+          ignore-unfixed: true
+          severity: HIGH,CRITICAL
+
   deploy:
     name: Deploy Production
     runs-on: ubuntu-latest
-    needs: checks
+    needs: [checks, image]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: read
     concurrency:
       group: boss-kamp-production
       cancel-in-progress: false
@@ -74,29 +137,31 @@ jobs:
           chmod 600 ~/.ssh/boss_kamp_deploy
           ssh-keyscan -H "${{ secrets.BOSS_KAMP_DEPLOY_HOST }}" >> ~/.ssh/known_hosts
 
-      - name: Deploy over SSH
+      - name: Authenticate production host to image registry
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+        run: |
+          printf '%s' "$GHCR_TOKEN" | ssh -i ~/.ssh/boss_kamp_deploy \
+            "${{ secrets.BOSS_KAMP_DEPLOY_USER }}@${{ secrets.BOSS_KAMP_DEPLOY_HOST }}" \
+            "docker login ghcr.io --username '${{ github.actor }}' --password-stdin"
+
+      - name: Deploy immutable image over SSH
+        env:
+          IMAGE_REF: ${{ needs.image.outputs.image_ref }}
         run: |
           ssh -i ~/.ssh/boss_kamp_deploy \
             "${{ secrets.BOSS_KAMP_DEPLOY_USER }}@${{ secrets.BOSS_KAMP_DEPLOY_HOST }}" \
-            'set -euo pipefail
-             cd /opt/boss-fight
-             git fetch origin main
-             git reset --hard origin/main
-             cd server
-             docker compose build
-             set -a
-             . ./.env.production
-             set +a
-             install -d -m 700 /opt/boss-fight/backups
-             pg_dump --format=custom --file="/opt/boss-fight/backups/pre-deploy-$(date -u +%Y%m%dT%H%M%SZ).dump" "$DATABASE_URL"
-             docker compose run --rm boss-kamp-api npm run migrate
-             docker compose up -d --no-build
-             for attempt in $(seq 1 30); do
-               if curl -fsS http://127.0.0.1:3002/health; then
-                 exit 0
-               fi
-               sleep 1
-             done
-             docker compose ps
-             docker compose logs --tail=80 boss-kamp-api
-             exit 1'
+            "DEPLOY_SHA='$GITHUB_SHA' IMAGE_REF='$IMAGE_REF' bash -s" <<'REMOTE'
+          set -euo pipefail
+          cd /opt/boss-fight
+          git fetch origin "$DEPLOY_SHA"
+          git reset --hard "$DEPLOY_SHA"
+          bash scripts/deploy-production.sh "$IMAGE_REF"
+          REMOTE
+
+      - name: Log production host out of image registry
+        if: always()
+        run: |
+          ssh -i ~/.ssh/boss_kamp_deploy \
+            "${{ secrets.BOSS_KAMP_DEPLOY_USER }}@${{ secrets.BOSS_KAMP_DEPLOY_HOST }}" \
+            'docker logout ghcr.io || true'
