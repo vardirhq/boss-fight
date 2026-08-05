@@ -24,6 +24,20 @@ npm run migrate
 npm start
 ```
 
+## Tests
+
+The normal test suite runs without external services. PostgreSQL lifecycle
+integration coverage is enabled when `TEST_DATABASE_URL` is set:
+
+```bash
+TEST_DATABASE_URL=postgresql://boss_kamp_test:boss_kamp_test@127.0.0.1:5432/postgres npm test
+```
+
+The integration suite creates and drops an isolated database, applies the
+bootstrap schema and every ordered migration, and exercises the child,
+household, and adult-account erasure routes. CI provides PostgreSQL and runs
+this coverage on every change.
+
 ## Required Environment
 
 Create `.env.production` on the server:
