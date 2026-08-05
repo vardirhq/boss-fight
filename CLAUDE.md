@@ -34,7 +34,7 @@ npm run dev       # Vite dev server (service worker DISABLED in dev)
 npm run build     # tsc -b (type-check via project refs) + vite build
 npm run preview   # serve the production build — the only way to exercise the PWA/SW
 npm run lint      # tsc --noEmit (type-check only — there is no ESLint/Prettier config)
-npm test          # focused client sync-queue tests
+npm test          # focused client game-rule, sync, and credential tests
 ```
 
 There is no linter binary; "lint" is a TypeScript type-check. Before committing,

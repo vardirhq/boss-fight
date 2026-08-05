@@ -21,6 +21,9 @@ increasing Android version codes for install/update compatibility.
 - Android Keystore-backed encrypted storage for session and household-device
   credentials, including migration from legacy browser storage and a restrictive
   application Content Security Policy.
+- Product-critical regression tests for battle schedules and cycles, elite and
+  rare encounters, progression, seed integrity, bootstrap validation, and server
+  event-to-game-state projection.
 
 ### Fixed
 
