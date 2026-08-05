@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.1",
   "type": "module",
-  "description": "Boss Kamp — turn household chores into epic co-op battles. An offline-first PWA arcade-RPG for the whole family.",
+  "description": "Boss Kamp — an offline-first native Android arcade-RPG for household chores.",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -31,7 +31,6 @@
     "@vitejs/plugin-react": "^4.3.4",
     "tsx": "^4.23.7",
     "typescript": "^5.6.3",
-    "vite": "^5.4.11",
-    "vite-plugin-pwa": "^0.21.1"
+    "vite": "^5.4.11"
   }
 }

@@ -1,6 +1,5 @@
 import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { registerSW } from 'virtual:pwa-register';
 import './styles.css';
 import { App } from './App';
 import { Db } from './db/sqlite';
@@ -8,8 +7,6 @@ import { loadState } from './db/repository';
 import { GameProvider } from './store/GameContext';
 import { OnlineProvider } from './online/OnlineContext';
 import type { GameState } from './game/types';
-
-registerSW({ immediate: true });
 
 const capacitor = (window as Window & {
   Capacitor?: { isNativePlatform?: () => boolean };

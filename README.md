@@ -6,7 +6,7 @@
 
 **Turn household chores into epic co-op boss battles.**
 
-An offline-first PWA arcade-RPG for the whole family — every chore is an attack,
+An offline-first native Android arcade-RPG for the whole family — every chore is an attack,
 every finished task deals damage, and the recurring mess of daily life becomes
 a roster of bosses you defeat together instead of another beige checklist.
 
@@ -14,7 +14,7 @@ a roster of bosses you defeat together instead of another beige checklist.
 [![TypeScript strict](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white&labelColor=20232a)](https://www.typescriptlang.org)
 [![Vite 5](https://img.shields.io/badge/Vite-5-646CFF?logo=vite&logoColor=white&labelColor=20232a)](https://vitejs.dev)
 [![SQLite WASM](https://img.shields.io/badge/SQLite-WebAssembly-003B57?logo=sqlite&logoColor=white&labelColor=20232a)](https://sqlite.org/wasm)
-[![PWA](https://img.shields.io/badge/PWA-offline--first-F4B942?labelColor=20232a)](https://vite-pwa-org.netlify.app)
+[![Android](https://img.shields.io/badge/Android-native-3DDC84?logo=android&logoColor=white&labelColor=20232a)](docs/android-release.md)
 
 *Norsk 🇳🇴 first, English 🇬🇧 built in · offline-first by default · optional synced household backend*
 
@@ -93,7 +93,7 @@ No frameworks-of-frameworks here. The stack is deliberately small:
 | State | A single React context store — no state library |
 | Styling | Inline styles + a handful of CSS `@keyframes` — no CSS framework |
 | Persistence | [`@sqlite.org/sqlite-wasm`](https://sqlite.org/wasm) — a **real SQLite database in the browser** |
-| PWA | `vite-plugin-pwa` (Workbox) — installable, fully offline |
+| Native shell | Capacitor 8, packaged and signed for Android |
 | Audio | Hand-rolled WebAudio synth for SFX |
 
 Runtime dependencies: **three** (`react`, `react-dom`, `sqlite-wasm`). That's it.
@@ -145,16 +145,15 @@ src/
 
 ```bash
 npm install
-npm run dev       # dev server (note: service worker disabled in dev)
+npm run dev       # Vite development server for the embedded web bundle
 npm run build     # type-check + production build
-npm run preview   # serve the production build — required to test PWA/offline
+npm run preview   # inspect the production web bundle locally
 npm run lint      # type-check only (there is no ESLint — TS strict is the linter)
 ```
 
 > [!IMPORTANT]
-> The service worker only registers in the **production build**. Anything
-> involving offline mode, caching, or installability must be verified with
-> `npm run build && npm run preview`, never `npm run dev`.
+> The browser preview is a development aid. The shipped product is the signed
+> native Android package, and lifecycle behavior must be verified in that app.
 
 There's no server to set up and no `.env` — clone, install, run.
 
@@ -168,7 +167,7 @@ code, chores are *gjøremål*, coins are *mynter*, the shared pool is the
 
 ## 🔄 Sync Backend
 
-Boss Kamp started as a local-only offline PWA. The repository now also includes
+Boss Kamp started as a local-only prototype. The native Android app now includes
 the synced household backend in [`server/`](server/):
 
 - adult account registration and bearer sessions
