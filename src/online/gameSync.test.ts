@@ -74,8 +74,8 @@ test('event projection uses only the current reset, ignores voided attacks, and 
   const sync: ServerSyncState = {
     serverTime: '2026-08-05T12:00:00Z', configurationRevision: 4,
     mutable: {
-      households: [config.household], household_members: [], devices: [], fighters: config.fighters,
-      fighter_avatars: config.fighterAvatars, bosses: config.bosses, chores: config.chores, rewards: [],
+      households: [config.household], fighters: config.fighters,
+      fighter_avatars: config.fighterAvatars, bosses: config.bosses, chores: config.chores,
     },
     events: {
       boss_resets: [{ boss_id: 'boss-1', cycle_key: 'cycle-1', reset_seq: 1 }],

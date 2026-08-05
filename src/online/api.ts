@@ -127,13 +127,10 @@ export interface ServerSyncState {
   configurationRevision: number;
   mutable: {
     households: Array<Record<string, unknown>>;
-    household_members: Array<Record<string, unknown>>;
-    devices: Array<Record<string, unknown>>;
     fighters: Array<Record<string, unknown>>;
     fighter_avatars: Array<Record<string, unknown>>;
     bosses: Array<Record<string, unknown>>;
     chores: Array<Record<string, unknown>>;
-    rewards: Array<Record<string, unknown>>;
   };
   events: {
     chore_completions: Array<Record<string, unknown>>;
