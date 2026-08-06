@@ -23,6 +23,9 @@ increasing Android version codes for install/update compatibility.
   dedicated route modules with explicit principal and domain dependencies.
 - Extract authentication, credential hashing, session lifecycle, account profile,
   and adult erasure into independently tested security boundaries.
+- Extract household bootstrap, configuration, privacy export/erasure, child
+  lifecycle, membership governance, access policy, IDs, and boss scheduling from
+  the server composition root.
 - Upgrade Vite and its React plugin, refresh vulnerable transitive build tools,
   split account/management screens from the initial bundle, and enforce a High
   severity audit gate for dependencies shipped in the app.

@@ -50,6 +50,9 @@ bounded projection and mutation endpoints.
 Authentication contracts cover the complete adult/child login, verification,
 recovery, session, profile, and account-erasure surface; credential tests verify
 password and PIN hashing round trips and rejection behavior.
+Household contracts cover bootstrap, configuration, privacy lifecycle, fighter and
+child administration, and access-controlled governance registration. Stable entity
+ID and server calendar tests protect the extracted domain utilities.
 CI audits shipped application dependencies at High severity separately from the
 complete development toolchain at Critical severity, keeping upstream Android
 packaging findings visible while preventing them from being mistaken for APK
