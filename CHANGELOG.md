@@ -9,6 +9,8 @@ increasing Android version codes for install/update compatibility.
 
 ### Added
 
+- Avoid retransmitting unchanged household, fighter, boss, and chore
+  configuration by reusing a durable cache keyed to the server revision.
 - Stop retransmitting unchanged avatar bytes by exchanging per-fighter content
   hashes and retaining only locally cached payloads that match the server hash.
 - Persist synchronized gameplay events per household and send independent

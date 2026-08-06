@@ -120,6 +120,16 @@ test('PostgreSQL lifecycle erasure preserves only the documented records', {
     const cachedAvatarPull = await call('GET', `/api/sync/pull?${avatarQuery}`, first.token);
     assert.equal(cachedAvatarPull.status, 200);
     assert.equal(cachedAvatarPull.body.mutable.fighter_avatars.length, 0);
+    const unchangedConfigurationPull = await call(
+      'GET',
+      `/api/sync/pull?household_id=${firstHousehold}&known_configuration_revision=${fullAvatarPull.body.configurationRevision}`,
+      first.token,
+    );
+    assert.equal(unchangedConfigurationPull.status, 200);
+    assert.equal(unchangedConfigurationPull.body.configurationUnchanged, true);
+    assert.deepEqual(unchangedConfigurationPull.body.mutable, {
+      households: [], fighters: [], fighter_avatars: [], bosses: [], chores: [],
+    });
     const [childDevice] = await database`
       insert into devices (household_id, user_id, kind, name, platform, token_hash)
       values (${firstHousehold}, ${childUserId}, 'personal', 'Child tablet', 'android', 'device-hash')

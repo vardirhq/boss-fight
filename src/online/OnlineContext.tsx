@@ -30,6 +30,7 @@ import {
 import type { Fighter } from '../game/types';
 import { clearSyncEventCache, loadSyncEventCache, mergeSyncEvents, saveSyncEventCache, syncCursors } from './syncCache';
 import { clearAvatarCache, knownAvatarHashes, loadAvatarCache, mergeAvatarCache, saveAvatarCache } from './avatarCache';
+import { clearConfigurationCache, loadConfigurationCache, mergeConfigurationCache, saveConfigurationCache } from './configurationCache';
 
 const STORAGE_KEY = 'boss-kamp-online-state-v2';
 const MUTATIONS_KEY = 'boss-kamp-pending-mutations-v1';
@@ -496,11 +497,14 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
           }
           const cachedEvents = loadSyncEventCache(householdId);
           const cachedAvatars = loadAvatarCache(householdId);
-          latest = await pullSyncState(token, householdId, syncCursors(cachedEvents), knownAvatarHashes(cachedAvatars), householdDeviceToken);
+          const cachedConfiguration = loadConfigurationCache(householdId);
+          latest = await pullSyncState(token, householdId, syncCursors(cachedEvents), knownAvatarHashes(cachedAvatars), cachedConfiguration?.revision ?? null, householdDeviceToken);
           latest = { ...latest, events: mergeSyncEvents(cachedEvents, latest.events) };
+          latest = mergeConfigurationCache(latest, cachedConfiguration);
           latest.mutable.fighter_avatars = mergeAvatarCache(latest.mutable.fighters, cachedAvatars, latest.mutable.fighter_avatars);
           saveSyncEventCache(householdId, latest.events);
           saveAvatarCache(householdId, latest.mutable.fighter_avatars);
+          saveConfigurationCache(householdId, latest);
           const syncedAt = new Date().toISOString();
           const revision = latest.configurationRevision;
           setState((current) => {
@@ -560,6 +564,7 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
         if (state.householdId) {
           clearSyncEventCache(state.householdId);
           clearAvatarCache(state.householdId);
+          clearConfigurationCache(state.householdId);
         }
         await clearNativeCredentials().catch(() => undefined);
         replaceState(localState);
@@ -568,6 +573,7 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
     forgetHousehold: (householdId) => {
       clearSyncEventCache(householdId);
       clearAvatarCache(householdId);
+      clearConfigurationCache(householdId);
       const retained = loadPendingMutations().filter((mutation) => mutation.householdId !== householdId);
       persistPendingMutations(retained);
       setPendingMutations(retained);
