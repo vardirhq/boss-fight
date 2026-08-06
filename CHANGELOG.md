@@ -9,6 +9,8 @@ increasing Android version codes for install/update compatibility.
 
 ### Added
 
+- Verify every pre-deploy database dump, automatically expire backups after a
+  bounded retention window, and document isolated restore/erasure drills.
 - Add privacy-safe, bounded in-app diagnostics export, API request correlation,
   authenticated Prometheus metrics, and documented operational alert thresholds.
 - Extract the public API error policy and operational endpoints from the server

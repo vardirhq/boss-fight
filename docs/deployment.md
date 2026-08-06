@@ -127,7 +127,13 @@ captured with `pg_dump` inside the existing Postgres container
 (`BOSS_KAMP_POSTGRES_CONTAINER`, default `friskr_postgres`), and migrations run
 with the database-owner connection derived from that container. The live API
 continues to use the limited app role from `server/.env.production`. Migration
-failure leaves the existing application container running.
+failure leaves the existing application container running. Each dump must pass
+`pg_restore --list` before migration begins. Pre-deploy dumps older than
+`BOSS_KAMP_BACKUP_RETENTION_DAYS` (30 by default) are deleted automatically;
+invalid or unbounded retention values stop deployment before any backup or
+container change. The same guarded pruning script runs daily at 03:17 UTC through
+the `Enforce Backup Retention` workflow, so expiry does not depend on release
+frequency.
 
 ## Database Migrations
 
@@ -144,6 +150,26 @@ an immutable, ordered SQL file in `server/migrations/` named
 Before opening a migration PR, test both a fresh bootstrap and an upgrade from a
 recent production backup in a disposable database. Prefer additive and backward-
 compatible changes so the previous application image remains usable during rollback.
+
+### Quarterly restore and erasure drill
+
+At least quarterly, select the newest verified dump and restore it into a new,
+isolated database whose name starts with `boss_kamp_restore_drill_`. Never point a
+running API or public ingress at the drill database. Apply pending migrations, run
+the PostgreSQL lifecycle-erasure integration suite against it, and record:
+
+- dump timestamp and SHA-256 (not the dump itself);
+- restore start/end time and schema migration result;
+- household, child, and adult erasure test results;
+- operator and ticket/reference;
+- destruction time for the isolated database.
+
+Drop the isolated database with `WITH (FORCE)` immediately after the checks. A
+production restore from a dump that predates an erasure request must not be placed
+into service until every deletion received after that dump was replayed and
+verified. The deletion-request register and restore authorization live outside the
+application database so they survive a database restore; choosing and operating
+that register is an organization-specific responsibility.
 
 ## Rollback
 

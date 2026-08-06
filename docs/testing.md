@@ -45,6 +45,10 @@ CI audits shipped application dependencies at High severity separately from the
 complete development toolchain at Critical severity, keeping upstream Android
 packaging findings visible while preventing them from being mistaken for APK
 runtime dependencies.
+Deployment tests verify that custom-format backups are checked before migration,
+only expired named dumps are pruned, and invalid retention settings fail before
+deployment changes. The operational restore drill then reruns the PostgreSQL
+lifecycle-erasure suite against an isolated restored database.
 
 Tests use explicit local midday dates where calendar behavior matters. This
 avoids midnight and UTC-offset ambiguity while still exercising the same local

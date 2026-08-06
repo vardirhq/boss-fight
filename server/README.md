@@ -49,6 +49,7 @@ CORS_ORIGIN=https://boss-kamp.vardir.no,http://localhost,https://localhost,capac
 TRUST_PROXY=true
 LOG_LEVEL=info
 METRICS_TOKEN=<long-random-monitoring-secret>
+BOSS_KAMP_BACKUP_RETENTION_DAYS=30
 SESSION_DAYS=90
 SESSION_IDLE_DAYS=30
 RETENTION_INVITES_DAYS=30
