@@ -45,6 +45,7 @@ export interface Strings {
   redeemedFlash: string; sharedRewardFlash: string; transferFlash: string;
   voucherUsed: string; voucherUsedFlash: string;
   updateAvailable: string; updateDownload: string; updateDismiss: string; appVersion: string;
+  playOffline: string; playOfflineBody: string; offlineHousehold: string; connectAccount: string;
   transferAll: string; householdFallback: string; fighterFallback: string;
   persistenceFallback: string; persistenceRestoreFailed: string; persistenceWriteFailed: string;
   downloadBackup: string; retrySave: string;
@@ -100,6 +101,7 @@ export const STRINGS: Record<Lang, Strings> = {
     redeemedFlash: '{name} løste inn: {reward}', sharedRewardFlash: 'Fellesbelønning: {reward}', transferFlash: '{name} ga {amount} til fellespotten',
     voucherUsed: 'Brukt', voucherUsedFlash: 'Brukt: {reward}',
     updateAvailable: 'Ny versjon {version} er klar', updateDownload: 'Last ned', updateDismiss: 'Ikke nå', appVersion: 'Boss Kamp · Versjon {version}',
+    playOffline: 'Spill uten konto', playOfflineBody: 'Alt lagres bare på denne enheten. Du kan koble til en konto senere for å spille sammen på flere enheter.', offlineHousehold: 'Spiller offline · kun denne enheten', connectAccount: 'Koble til konto',
     transferAll: 'ALT →', householdFallback: 'Familien', fighterFallback: 'Spiller',
     persistenceFallback: 'Begrenset lagring: spillet bruker en lokal nettleserkopi. Last ned en sikkerhetskopi for ekstra trygghet.',
     persistenceRestoreFailed: 'Den lokale sikkerhetskopien kunne ikke leses. Nye endringer lagres separat; last ned en kopi for gjenoppretting.',
@@ -155,6 +157,7 @@ export const STRINGS: Record<Lang, Strings> = {
     redeemedFlash: '{name} redeemed: {reward}', sharedRewardFlash: 'Shared reward: {reward}', transferFlash: '{name} gave {amount} to the shared pool',
     voucherUsed: 'Used', voucherUsedFlash: 'Used: {reward}',
     updateAvailable: 'Version {version} is ready', updateDownload: 'Download', updateDismiss: 'Not now', appVersion: 'Boss Kamp · Version {version}',
+    playOffline: 'Play without an account', playOfflineBody: 'Everything stays on this device. You can connect an account later to play together across devices.', offlineHousehold: 'Playing offline · this device only', connectAccount: 'Connect an account',
     transferAll: 'ALL →', householdFallback: 'The family', fighterFallback: 'Fighter',
     persistenceFallback: 'Limited storage: the game is using a local browser copy. Download a backup for extra safety.',
     persistenceRestoreFailed: 'The local backup could not be read. New changes use a separate copy; download it for recovery.',

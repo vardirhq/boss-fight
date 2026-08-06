@@ -18,6 +18,7 @@ import {
 import { GOLD, useT } from './ui/common';
 import { DialogSurface } from './ui/a11y';
 import { shouldShowPersistenceWarning } from './db/persistenceWarning';
+import { householdConnected, playable, showAccountGate } from './online/accountGate';
 
 const PS = "'Press Start 2P'";
 const LEGACY_NEW_FIGHTER_NAME = 'Ny kjemper';
@@ -44,15 +45,20 @@ export function App() {
   const [accountOpen, setAccountOpen] = useState(false);
   const [update, setUpdate] = useState<AvailableUpdate | null>(null);
   const currentBoss = game.bosses.find((boss) => boss.id === game.currentBossId) ?? game.bosses[0];
-  const householdReady = Boolean(online.state.householdId && online.state.configurationConnectedAt);
-  const showBattleIntro = ui.phase === 'app' && householdReady && ui.tab === 'battle' && ui.intro && currentBoss;
-  const showAccountSetup = ui.phase === 'app' && !householdReady;
+  const householdReady = householdConnected(online.state);
+  // Playing locally is a first-class mode, not a degraded one: the game is entirely
+  // local-first, so an account is only needed to share a household across devices.
+  const canPlay = playable(online.state, game.localPlay);
+  const showBattleIntro = ui.phase === 'app' && canPlay && ui.tab === 'battle' && ui.intro && currentBoss;
+  const showAccountSetup = ui.phase === 'app' && showAccountGate(online.state, game.localPlay);
   const accountCopy = game.settings.lang === 'en'
     ? { title: 'Account & household', back: 'Back', connected: 'Connected household', shared: 'Shared household device' }
     : { title: 'Konto og husholdning', back: 'Tilbake', connected: 'Tilkoblet husholdning', shared: 'Delt familieenhet' };
   const accountSubtitle = online.state.mode === 'household-device'
     ? `${accountCopy.shared}${online.state.householdName ? ` · ${online.state.householdName}` : ''}`
-    : [online.state.account?.displayName, online.state.householdName || accountCopy.connected].filter(Boolean).join(' · ');
+    : householdReady
+      ? [online.state.account?.displayName, online.state.householdName || accountCopy.connected].filter(Boolean).join(' · ')
+      : t.offlineHousehold;
 
   useEffect(() => {
     for (const fighter of game.fighters) {
@@ -193,7 +199,7 @@ export function App() {
             <div style={{ fontFamily: PS, fontSize: 13, color: GOLD }}>BOSS KAMP</div>
           </div>
           <div className="scr" style={{ flex: 1, overflowY: 'auto', padding: '8px 18px calc(24px + env(safe-area-inset-bottom))' }}>
-            <Suspense fallback={null}><AccountSettings lang={game.settings.lang} setup /></Suspense>
+            <Suspense fallback={null}><AccountSettings lang={game.settings.lang} setup onPlayLocally={actions.playLocally} /></Suspense>
           </div>
         </div>
       )}

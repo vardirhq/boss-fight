@@ -103,6 +103,7 @@ export interface GameActions {
   obPrev(): void;
   finishOnboarding(): void;
   replayOnboarding(): void;
+  playLocally(): void;
   openSettings(): void;
   closeSettings(): void;
   setSetting<K extends keyof Settings>(key: K, val: Settings[K]): void;
@@ -552,6 +553,9 @@ export function GameProvider({ db, initial, children }: { db: Db; initial: GameS
       finishOnboarding: () =>
         setState((s) => ({ game: { ...s.game, onboarded: true }, ui: { ...s.ui, phase: 'app' } })),
       replayOnboarding: () => patchUi((u) => ({ ...u, phase: 'onboarding', obStep: 0 })),
+      // Play on this device with no account. Gameplay never depended on one — only the
+      // setup gate did — so this simply records the choice.
+      playLocally: () => patchGame((g) => (g.localPlay ? g : { ...g, localPlay: true })),
 
       openSettings: () => patchUi((u) => ({ ...u, settingsOpen: true })),
       closeSettings: () => patchUi((u) => ({ ...u, settingsOpen: false, confirmReset: false })),

@@ -33,11 +33,13 @@ npm install
 npm run dev       # Vite development server for the embedded web bundle
 npm run build     # tsc -b (type-check via project refs) + vite build
 npm run preview   # serve the production web bundle for local inspection
-npm run lint      # tsc --noEmit (type-check only — there is no ESLint/Prettier config)
+npm run lint      # tsc -b (type-check only — there is no ESLint/Prettier config)
 npm test          # focused client game-rule, sync, and credential tests
 ```
 
-There is no linter binary; "lint" is a TypeScript type-check. Before committing,
+There is no linter binary; "lint" is a TypeScript type-check. It must run `tsc -b`,
+not `tsc --noEmit`: the root `tsconfig.json` is solution-style (`"files": []`), so
+`--noEmit` finds no files and silently passes on any error. Before committing,
 run `npm test` and `npm run build` (or at minimum `npm run lint`) to confirm the
 strict compiler is happy — unused locals/params are hard errors. Server tests run
 with `npm test` from `server/`.
@@ -87,6 +89,11 @@ React state as `AppState = { game, ui }` → components read via `useGame()` and
 mutate only through `actions` → an effect debounces (250 ms) and calls
 `saveState()` back to SQLite.
 
+- **Local play is a supported mode.** `game.localPlay` records that the household
+  chose to play on this device without an account; `src/online/accountGate.ts` decides
+  whether the account setup screen is shown. Gameplay never requires a household —
+  `queueMutation` is a no-op while disconnected — so an account only adds multi-device
+  sync. Keep it that way: never gate a game action on `online.state`.
 - **`game`** is the *durable* slice (persisted). **`ui`** is *ephemeral*
   (never persisted): current tab, animation flags, combo counter, open editors,
   onboarding step, transient damage numbers/toasts.

@@ -5,6 +5,7 @@ import { useOnline, type OnlineError } from './OnlineContext';
 import { createBootstrapSnapshot, serverConfigToGameState, serverSyncToGameState } from './gameSync';
 import { acceptHouseholdInvite, ApiError, confirmEmailVerification, confirmPasswordReset, createHouseholdDevicePairing, eraseAdultAccount, eraseHousehold, getAccountSessions, getHouseholdExport, inviteParent, requestPasswordReset, resendEmailVerification, revokeAccountSession, type AccountSession } from './api';
 import { clearDiagnostics, diagnosticExport } from './diagnostics';
+import { STRINGS } from '../game/i18n';
 
 const field: React.CSSProperties = {
   width: '100%', boxSizing: 'border-box', background: '#0f1420', border: '1px solid #333c50', borderRadius: 12,
@@ -98,8 +99,14 @@ const COPY = {
 
 type FamilyMode = 'pick' | 'create' | 'join';
 
-export function AccountSettings({ lang, setup = false }: { lang: Lang; setup?: boolean }) {
+export function AccountSettings({ lang, setup = false, onPlayLocally }: {
+  lang: Lang;
+  setup?: boolean;
+  /** Offered only on the setup gate; leaves the player on a fully local household. */
+  onPlayLocally?: () => void;
+}) {
   const copy = COPY[lang];
+  const strings = STRINGS[lang];
   const { state, actions } = useOnline();
   const { state: gameState, actions: gameActions } = useGame();
   const [formMode, setFormMode] = useState<'login' | 'register' | 'invite' | 'child' | 'shared'>('register');
@@ -525,6 +532,13 @@ export function AccountSettings({ lang, setup = false }: { lang: Lang; setup?: b
             </div>
           </details>
         </section>
+
+        {setup && onPlayLocally && (
+          <section style={{ ...card, textAlign: 'center' }}>
+            <p style={{ margin: '0 0 12px', color: '#A8B0BF', fontSize: 13, lineHeight: 1.55 }}>{strings.playOfflineBody}</p>
+            <button onClick={onPlayLocally} style={secondary}>{strings.playOffline}</button>
+          </section>
+        )}
       </div>
     );
   }

@@ -21,6 +21,7 @@
 | BK-006 | Remediated | The voucher toast reads from the bilingual catalogue (`voucherUsed`, `voucherUsedFlash`). A source guard asserts no `flash()` call takes a string literal, and fails if one is reintroduced. |
 | BK-008 | Remediated | Both families are bundled as unmodified latin/latin-ext subsets under `public/fonts` with their SIL OFL 1.1 licences, declared with `@font-face`, and the CSP no longer admits any font or style origin. Verified in a real browser with every non-bundle request blocked: both families load, no external request is attempted, and no CSP violation is raised. |
 | BK-004 | Partly remediated | Login and registration now carry route limits, and adult passwords have the failed-attempt lockout child PINs already had (migration `0008`), cleared by a password reset so guessing cannot hold an owner out. A locked account, an unknown address, and a wrong password are reported identically. **Registration still returns 409 for a duplicate address**, so account existence remains observable; closing that needs an onboarding change (registration stops returning a session, confirmation moves to email) and is a product decision, not a security fix. |
+| BK-014 | Remediated | Found while remediating: `npm run lint` type-checked **nothing**. The root `tsconfig.json` is solution-style (`"files": []`), so `tsc --noEmit` had no files and exited 0 on any error — a documented quality gate that always passed. Now `tsc -b`, verified to fail on an introduced type error. CI ran `npm run build` so nothing shipped broken, but local runs and the contributor guide both gave false assurance. |
 | BK-005, BK-007, BK-009 – BK-013 | Open | See the individual findings below. |
 
 ## 1. Executive summary
@@ -619,3 +620,30 @@ Fixing BK-001 and BK-002, and extending the projection tests to cover state evol
 is the highest-value next step. Nothing found in this review argues against the
 architecture; the local-first SQLite model, the event-sourced backend, and the
 per-mutation transaction boundary remain sound foundations.
+
+## 9. Addendum — BK-014, discovered during remediation
+
+### BK-014 — The documented type-check gate checked nothing
+
+**Severity:** Medium
+**Areas:** Build tooling, quality gates
+
+`package.json` defined `"lint": "tsc --noEmit"`, and both `CLAUDE.md` and the
+contributor workflow present it as the type-check to run before committing. The root
+`tsconfig.json` is solution-style:
+
+```json
+{ "files": [], "references": [{ "path": "./tsconfig.app.json" }, { "path": "./tsconfig.node.json" }] }
+```
+
+`tsc --noEmit` against that project has no files to check, so it exited 0 regardless
+of the state of the code. This was found by accident: a reference to an undefined
+identifier passed `npm run lint` and was caught only by `npm run build`.
+
+CI runs `npm run build`, which uses `tsc -b` and does traverse the references, so no
+broken code could reach `main`. The cost was local: a gate that always passed, and a
+contributor guide that recommended it as the cheap check.
+
+**Remediation:** Completed. `lint` now runs `tsc -b`, verified to fail on an
+introduced type error, and `CLAUDE.md` records why `--noEmit` cannot be used against
+a solution-style root.

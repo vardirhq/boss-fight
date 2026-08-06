@@ -119,4 +119,10 @@ export interface GameState {
   victories: number;
   goldenRevealed: boolean;
   onboarded: boolean;
+  /**
+   * The household chose to play on this device without an account. Kept durable so
+   * the choice survives restarts, and independent of the online session so logging
+   * out returns to local play rather than back to the setup gate.
+   */
+  localPlay: boolean;
 }

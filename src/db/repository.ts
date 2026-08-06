@@ -143,6 +143,7 @@ export function loadState(db: Db): GameState {
     victories: parseNum(meta(db, 'victories'), 0),
     goldenRevealed: parseBool(meta(db, 'goldenRevealed'), false),
     onboarded: parseBool(meta(db, 'onboarded'), false),
+    localPlay: parseBool(meta(db, 'localPlay'), false),
   };
 }
 
@@ -216,6 +217,7 @@ export function saveState(db: Db, state: GameState): SaveResult {
       ['victories', String(state.victories)],
       ['goldenRevealed', state.goldenRevealed ? '1' : '0'],
       ['onboarded', state.onboarded ? '1' : '0'],
+      ['localPlay', state.localPlay ? '1' : '0'],
     ];
     for (const [k, v] of metaPairs) {
       db.run('INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', [k, v]);
@@ -285,6 +287,7 @@ function freshState(): GameState {
     victories: 0,
     goldenRevealed: false,
     onboarded: false,
+    localPlay: false,
   };
 }
 
