@@ -22,7 +22,7 @@ import { apiSecurityHeaders, configuredCorsOrigins, normalizedEmail, trustProxyE
 import { sessionExpiry, sessionIdleCutoff, sessionPolicy } from './sessionPolicy.js';
 import {
   optionalBoolean, optionalBooleanOrNull, optionalNumber, optionalNumberOrNull,
-  queryInteger, requireObjectArray,
+  optionalString, queryInteger, requiredString, requireObjectArray, stringValue,
 } from './requestValidation.js';
 import { validatedAvatar } from './avatarValidation.js';
 
@@ -55,16 +55,7 @@ const mutableTables = [
   'rewards'
 ] as const;
 
-function requireString(value: unknown, field: string): string {
-  if (typeof value !== 'string' || value.trim() === '') {
-    throw new Error(`${field} is required`);
-  }
-  return value.trim();
-}
-
-function optionalString(value: unknown): string | null {
-  return typeof value === 'string' && value.trim() !== '' ? value.trim() : null;
-}
+const requireString = requiredString;
 
 function requireObject(body: unknown): JsonObject {
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
@@ -75,11 +66,6 @@ function requireObject(body: unknown): JsonObject {
 
 function requireObjects(value: unknown, field: string): JsonObject[] {
   return requireObjectArray(value, field);
-}
-
-function stringValue(value: unknown, field: string): string {
-  if (typeof value !== 'string') throw new Error(`${field} must be a string`);
-  return value;
 }
 
 function publicId(row: JsonObject) {
@@ -370,6 +356,7 @@ export async function buildApp() {
     const validationMessages = [
       'is required', 'must be an array', 'must be a string', 'must contain at most', 'Expected JSON object',
       'Expected numeric value', 'Expected boolean value',
+      'Expected string value', 'must contain at most', 'Numeric value is outside',
       'Avatar must be an object', 'Avatar MIME type must be', 'Avatar bytes must be',
       'Avatar exceeds the', 'Avatar bytes do not match', 'Avatar hash must be',
       'must be a non-negative integer',

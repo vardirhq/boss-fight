@@ -129,7 +129,7 @@ landed but the recommendation is not yet satisfied in full.
 | BF-017 | Remediated | Language-key parity and English regression tests cover generated labels; reward definitions, voucher and transfer copy, shared attribution, fallback names, level titles, and weekdays now follow the active language across local and synchronized state. |
 | BF-018 | Remediated | Database writes return explicit results; fallback, corrupt-restore, and failed-write states remain visibly announced with retry and SQLite backup actions, with quota and corruption regression tests. |
 | BF-019 | Open | Backend route/service decomposition remains. |
-| BF-020 | In progress | Shared validators reject boolean and numeric coercion, require canonical non-negative integer sync queries, and cap configuration and mutation arrays at 200 objects. Avatar uploads require supported MIME signatures, canonical base64, matching SHA-256, and at most 512 KiB decoded. Route-level schemas plus consistent field-specific string and numeric ranges remain. |
+| BF-020 | In progress | Shared validators reject boolean and numeric coercion, require canonical non-negative integer sync queries, cap configuration and mutation arrays, bound request strings by field class, and reject extreme numeric values. Avatar uploads require supported MIME signatures, canonical base64, matching SHA-256, and at most 512 KiB decoded. Formal route-level schemas and tighter domain-specific numeric ranges remain. |
 | BF-021 | Open | Client and operational observability remain. |
 | BF-022 | Open | Planned build-dependency upgrades remain. |
 

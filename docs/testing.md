@@ -28,6 +28,8 @@ verification. Request-validation tests cover strict booleans, object-only arrays
 request fan-out limits, and bounded avatar encoding, MIME signatures, and hashes.
 Numeric coverage distinguishes strict JSON numbers from canonical integer query
 parameters and rejects negative, fractional, and padded sync positions.
+Field-bound coverage verifies trimmed names, email/name limits, bounded optional
+text, and rejection of extreme numeric values.
 
 Tests use explicit local midday dates where calendar behavior matters. This
 avoids midnight and UTC-offset ambiguity while still exercising the same local

@@ -9,6 +9,8 @@ increasing Android version codes for install/update compatibility.
 
 ### Added
 
+- Bound names, emails, credentials, identifiers, notes, descriptions, and other
+  request strings by field class, and reject extreme numeric values.
 - Reject coerced JSON numbers and require canonical non-negative integer query
   cursors, revisions, and event limits.
 - Validate avatar MIME signatures, canonical base64, SHA-256 hashes, and a
