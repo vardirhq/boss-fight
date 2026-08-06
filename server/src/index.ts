@@ -21,6 +21,7 @@ import { runOperationalRetention } from './retention.js';
 import { apiSecurityHeaders, configuredCorsOrigins, normalizedEmail, trustProxyEnabled } from './apiSecurity.js';
 import { sessionExpiry, sessionIdleCutoff, sessionPolicy } from './sessionPolicy.js';
 import { optionalBoolean, optionalBooleanOrNull, requireObjectArray } from './requestValidation.js';
+import { validatedAvatar } from './avatarValidation.js';
 
 type JsonObject = Record<string, unknown>;
 type AuthContext = { userId: string; sessionId: string };
@@ -378,6 +379,8 @@ export async function buildApp() {
     const validationMessages = [
       'is required', 'must be an array', 'must be a string', 'must contain at most', 'Expected JSON object',
       'Expected numeric value', 'Expected boolean value',
+      'Avatar must be an object', 'Avatar MIME type must be', 'Avatar bytes must be',
+      'Avatar exceeds the', 'Avatar bytes do not match', 'Avatar hash must be',
       'Password must be at least', 'PIN must be at least', 'Invalid pairing role', 'Invalid invite role',
       'Unsupported redemption status', 'email must be valid', 'Household name confirmation does not match',
       'Account email confirmation does not match', 'Invalid or expired password reset token',
@@ -904,12 +907,8 @@ export async function buildApp() {
             `;
           }
 
-          if (item.avatar && typeof item.avatar === 'object' && !Array.isArray(item.avatar)) {
-            const avatar = item.avatar as JsonObject;
-            const mime = requireString(avatar.mime, 'avatar.mime');
-            const bytes = Buffer.from(requireString(avatar.bytesBase64, 'avatar.bytesBase64'), 'base64');
-            const hash = requireString(avatar.hash, 'avatar.hash').toLowerCase();
-            if (createHash('sha256').update(bytes).digest('hex') !== hash) throw new Error('Avatar hash does not match bytes');
+          if (item.avatar !== undefined && item.avatar !== null) {
+            const { mime, bytes, hash } = validatedAvatar(item.avatar);
             await tx`
               insert into fighter_avatars (fighter_id, mime, bytes, hash)
               values (${fighterId}, ${mime}, ${bytes}, ${hash})
@@ -2077,14 +2076,11 @@ export async function buildApp() {
                 `;
             const fighterId = publicId(fighter);
             ids.fighters[clientId] = fighterId;
-            if (fighterBody.avatar && typeof fighterBody.avatar === 'object' && !Array.isArray(fighterBody.avatar)) {
-              const avatar = fighterBody.avatar as JsonObject;
-              const bytes = Buffer.from(requireString(avatar.bytesBase64, 'avatar.bytesBase64'), 'base64');
-              const hash = requireString(avatar.hash, 'avatar.hash').toLowerCase();
-              if (createHash('sha256').update(bytes).digest('hex') !== hash) throw new Error('Avatar hash does not match bytes');
+            if (fighterBody.avatar !== undefined && fighterBody.avatar !== null) {
+              const { mime, bytes, hash } = validatedAvatar(fighterBody.avatar);
               await tx`
                 insert into fighter_avatars (fighter_id, mime, bytes, hash)
-                values (${fighterId}, ${requireString(avatar.mime, 'avatar.mime')}, ${bytes}, ${hash})
+                values (${fighterId}, ${mime}, ${bytes}, ${hash})
                 on conflict (fighter_id) do update
                 set mime = excluded.mime, bytes = excluded.bytes, hash = excluded.hash
               `;

@@ -341,8 +341,10 @@ fighters remain unclaimed profiles for people who play through a parent or
 shared household device.
 
 Fighters may include an `avatar` object with `mime`, base64 `bytesBase64`, and
-its SHA-256 `hash`. All nested rows are committed in one database transaction;
-an invalid relationship or avatar rolls back the entire request.
+its SHA-256 `hash`. Avatars must be canonical PNG, JPEG, or WebP payloads no
+larger than 512 KiB decoded; their file signature, declared MIME type, and hash
+must agree. All nested rows are committed in one database transaction; an
+invalid relationship or avatar rolls back the entire request.
 
 Response:
 
