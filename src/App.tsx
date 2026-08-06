@@ -10,9 +10,15 @@ import { BottomNav } from './screens/BottomNav';
 import { SettingsPanel, Splash, Onboarding, Toast } from './screens/overlays';
 import { mayManageHousehold, useOnline } from './online/OnlineContext';
 import { serverSyncToGameState } from './online/gameSync';
+import { fetchAppMeta } from './online/api';
+import {
+  availableUpdate, dismissUpdate, recordUpdateCheck, shouldCheckForUpdate,
+  updateDismissed, type AvailableUpdate,
+} from './online/appUpdate';
 import { GOLD, useT } from './ui/common';
 import { DialogSurface } from './ui/a11y';
 import { shouldShowPersistenceWarning } from './db/persistenceWarning';
+import { householdConnected, playable, showAccountGate } from './online/accountGate';
 
 const PS = "'Press Start 2P'";
 const LEGACY_NEW_FIGHTER_NAME = 'Ny kjemper';
@@ -37,16 +43,22 @@ export function App() {
     Capacitor.isNativePlatform(),
   );
   const [accountOpen, setAccountOpen] = useState(false);
+  const [update, setUpdate] = useState<AvailableUpdate | null>(null);
   const currentBoss = game.bosses.find((boss) => boss.id === game.currentBossId) ?? game.bosses[0];
-  const householdReady = Boolean(online.state.householdId && online.state.configurationConnectedAt);
-  const showBattleIntro = ui.phase === 'app' && householdReady && ui.tab === 'battle' && ui.intro && currentBoss;
-  const showAccountSetup = ui.phase === 'app' && !householdReady;
+  const householdReady = householdConnected(online.state);
+  // Playing locally is a first-class mode, not a degraded one: the game is entirely
+  // local-first, so an account is only needed to share a household across devices.
+  const canPlay = playable(online.state, game.localPlay);
+  const showBattleIntro = ui.phase === 'app' && canPlay && ui.tab === 'battle' && ui.intro && currentBoss;
+  const showAccountSetup = ui.phase === 'app' && showAccountGate(online.state, game.localPlay);
   const accountCopy = game.settings.lang === 'en'
     ? { title: 'Account & household', back: 'Back', connected: 'Connected household', shared: 'Shared household device' }
     : { title: 'Konto og husholdning', back: 'Tilbake', connected: 'Tilkoblet husholdning', shared: 'Delt familieenhet' };
   const accountSubtitle = online.state.mode === 'household-device'
     ? `${accountCopy.shared}${online.state.householdName ? ` · ${online.state.householdName}` : ''}`
-    : [online.state.account?.displayName, online.state.householdName || accountCopy.connected].filter(Boolean).join(' · ');
+    : householdReady
+      ? [online.state.account?.displayName, online.state.householdName || accountCopy.connected].filter(Boolean).join(' · ')
+      : t.offlineHousehold;
 
   useEffect(() => {
     for (const fighter of game.fighters) {
@@ -59,6 +71,20 @@ export function App() {
   useEffect(() => {
     if (!ui.settingsOpen) setAccountOpen(false);
   }, [ui.settingsOpen]);
+
+  // The app is installed as a signed APK from a GitHub release, so nothing else tells
+  // it a newer build exists. Throttled to once a day, and silent when offline.
+  useEffect(() => {
+    if (!shouldCheckForUpdate()) return;
+    let active = true;
+    void fetchAppMeta().then((meta) => {
+      if (!active) return;
+      recordUpdateCheck();
+      const found = availableUpdate(meta);
+      if (found && !updateDismissed(found.version)) setUpdate(found);
+    });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     const { householdId, configurationConnectedAt, status } = online.state;
@@ -117,6 +143,23 @@ export function App() {
           </span>
         </div>
       )}
+      {update && ui.phase === 'app' && (
+        <div role="status" style={{ flex: 'none', padding: '10px 12px', paddingTop: showPersistenceWarning ? 10 : 'calc(10px + env(safe-area-inset-top))', background: '#14261c', borderBottom: '1px solid #2f5a41', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, flexWrap: 'wrap', zIndex: 88 }}>
+          <span style={{ maxWidth: 620, fontSize: 12, lineHeight: 1.45, fontWeight: 650, color: '#dff3e6' }}>
+            {t.updateAvailable.replace('{version}', update.version)}
+          </span>
+          <span style={{ display: 'flex', gap: 8 }}>
+            <a
+              href={update.downloadUrl ?? update.releaseUrl}
+              target="_blank"
+              rel="noreferrer"
+              onClick={() => { dismissUpdate(update.version); setUpdate(null); }}
+              style={{ ...warningButton, textDecoration: 'none', display: 'inline-block' }}
+            >{t.updateDownload}</a>
+            <button type="button" onClick={() => { dismissUpdate(update.version); setUpdate(null); }} style={warningButton}>{t.updateDismiss}</button>
+          </span>
+        </div>
+      )}
       <div className={`scr app-content${ui.tab === 'battle' ? ' battle-scroll' : ''}`} style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', position: 'relative' }}>
         {ui.tab === 'battle' && <BattleScreen />}
         {ui.tab === 'home' && <HomeScreen />}
@@ -156,7 +199,7 @@ export function App() {
             <div style={{ fontFamily: PS, fontSize: 13, color: GOLD }}>BOSS KAMP</div>
           </div>
           <div className="scr" style={{ flex: 1, overflowY: 'auto', padding: '8px 18px calc(24px + env(safe-area-inset-bottom))' }}>
-            <Suspense fallback={null}><AccountSettings lang={game.settings.lang} setup /></Suspense>
+            <Suspense fallback={null}><AccountSettings lang={game.settings.lang} setup onPlayLocally={actions.playLocally} /></Suspense>
           </div>
         </div>
       )}

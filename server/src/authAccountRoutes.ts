@@ -8,6 +8,9 @@ import {
 import { childAuthRateLimit, committedChildPairAuthentication } from './childAuth.js';
 import { sql } from './db.js';
 import { sendPasswordResetEmail } from './email.js';
+import {
+  adultLoginRateLimit, loginLocked, loginLockoutPolicy, loginLockoutUntil, registrationRateLimit,
+} from './loginPolicy.js';
 import { assertAdultErasureConfirmation } from './privacy.js';
 import { optionalString, requiredString } from './requestValidation.js';
 import {
@@ -29,7 +32,7 @@ function publicId(row: JsonObject) {
 }
 
 export function registerAuthAccountRoutes(app: FastifyInstance) {
-  app.post('/api/auth/register', { schema: registerSchema }, async (request) => {
+  app.post('/api/auth/register', { schema: registerSchema, config: { rateLimit: registrationRateLimit } }, async (request) => {
     const body = requireObject(request.body);
     const email = normalizedEmail(body.email);
     const displayName = requireString(body.displayName, 'displayName');
@@ -50,22 +53,39 @@ export function registerAuthAccountRoutes(app: FastifyInstance) {
     return { user: { ...user, emailVerified: false }, session };
   });
 
-  app.post('/api/auth/login', { schema: loginSchema }, async (request) => {
+  app.post('/api/auth/login', { schema: loginSchema, config: { rateLimit: adultLoginRateLimit } }, async (request) => {
     const body = requireObject(request.body);
     const email = normalizedEmail(body.email);
     const password = requireString(body.password, 'password');
 
     const [user] = await sql`
-      select id, email, display_name, password_hash, email_verified_at
+      select id, email, display_name, password_hash, email_verified_at,
+        failed_login_attempts, login_locked_until
       from users
       where lower(email) = ${email}
         and kind = 'adult'
         and deleted_at is null
     `;
-    if (!user || !(await verifyPassword(password, user.password_hash))) {
+    // A locked account, an unknown address, and a wrong password are all reported
+    // identically, so the response cannot be used to tell them apart.
+    if (!user || loginLocked(user.login_locked_until)) throw new Error('Unauthorized');
+
+    if (!(await verifyPassword(password, user.password_hash))) {
+      const attempts = Number(user.failed_login_attempts) + 1;
+      // Written outside any transaction so the counter survives the thrown failure —
+      // the rollback trap that made the child pairing lockout ineffective.
+      await sql`
+        update users
+        set failed_login_attempts = ${attempts},
+            login_locked_until = ${loginLockoutUntil(attempts, new Date(), loginLockoutPolicy())}
+        where id = ${user.id}
+      `;
       throw new Error('Unauthorized');
     }
 
+    if (Number(user.failed_login_attempts) !== 0 || user.login_locked_until) {
+      await sql`update users set failed_login_attempts = 0, login_locked_until = null where id = ${user.id}`;
+    }
     const session = await createSession(publicId(user));
     return { user: { id: user.id, email: user.email, displayName: user.display_name, emailVerified: Boolean(user.email_verified_at) }, session };
   });
@@ -140,7 +160,14 @@ export function registerAuthAccountRoutes(app: FastifyInstance) {
         for update of prt, u
       `;
       if (!record) throw new Error('Invalid or expired password reset token');
-      await tx`update users set password_hash = ${passwordHash}, version = version + 1 where id = ${record.user_id}`;
+      // Proving control of the mailbox clears the lock, so guessing cannot keep a
+      // legitimate owner out of their own household.
+      await tx`
+        update users
+        set password_hash = ${passwordHash}, failed_login_attempts = 0,
+            login_locked_until = null, version = version + 1
+        where id = ${record.user_id}
+      `;
       await tx`update password_reset_tokens set used_at = now() where id = ${record.id}`;
       await tx`update sessions set revoked_at = now() where user_id = ${record.user_id} and revoked_at is null`;
       return { ok: true };

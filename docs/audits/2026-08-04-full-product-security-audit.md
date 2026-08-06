@@ -108,6 +108,13 @@ below remain unchanged so that the audit evidence is preserved. `Remediated` mea
 the reported risk has been addressed and merged; `In progress` means useful work has
 landed but the recommendation is not yet satisfied in full.
 
+> **Follow-up:** an independent review on 2026-08-06 re-verified every `Remediated`
+> entry against the code and confirmed each control is present. It carries BF-005 and
+> BF-006 forward with their remaining work restated, corrects the BF-022 note below
+> (upstream fixes have since shipped; `sharp` is now held back by this repository's
+> own `overrides` entry, not by upstream), and records thirteen new findings. See
+> [`2026-08-06-independent-followup-audit.md`](./2026-08-06-independent-followup-audit.md).
+
 | Finding | Status | Evidence / remaining work |
 | --- | --- | --- |
 | BF-001 | Remediated | Household configuration revisions reject stale snapshots; merged in [PR #36](https://github.com/vardirhq/boss-fight/pull/36) (`c423064`). |

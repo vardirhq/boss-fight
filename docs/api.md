@@ -44,6 +44,30 @@ Response:
 
 The public response intentionally omits database and service internals.
 
+### `GET /api/meta`
+
+Public release metadata for in-app update discovery. Unauthenticated, because a
+household that has not connected an account still needs to learn about a new build.
+
+Response:
+
+```json
+{
+  "latest": {
+    "version": "1.1.0",
+    "releaseUrl": "https://github.com/vardirhq/boss-fight/releases/tag/v1.1.0",
+    "downloadUrl": "https://github.com/vardirhq/boss-fight/releases/download/v1.1.0/boss-kamp-release.apk",
+    "publishedAt": "2026-08-06T10:00:00Z"
+  }
+}
+```
+
+`latest` is `null` when no usable release is known. The API reads the release from
+GitHub server-side and caches it for 30 minutes; the app never contacts GitHub
+itself, so its content security policy stays limited to its own origin. `downloadUrl`
+is `null` when the release has no APK attached. A failing or throttled upstream
+serves the previous answer rather than an error.
+
 Each mutation is committed independently. The response has a `results` entry for
 every submitted mutation with an `outcome` of `accepted`, `duplicate`, `conflict`,
 or `rejected`. A rejected item never rolls back or blocks later items. `accepted`

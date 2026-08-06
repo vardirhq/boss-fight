@@ -112,19 +112,24 @@ export function registerHouseholdRoutes(app: FastifyInstance, dependencies: Hous
           const clientId = requireString(item.clientId, 'fighter.clientId');
           const stableId = entityId(householdId, 'fighter', clientId);
           const name = requireString(item.name, 'fighter.name');
+          // The submitted career XP predates the event stream, so it is recorded as an
+          // immutable baseline as well as the running cache. Completions add to the cache
+          // from here on; clients project baseline + replayed completions.
+          const careerXp = optionalNumber(item.careerXp);
           const [fighter] = await tx`
             insert into fighters (
               id, household_id, user_id, name, color, streak, coins_cached,
-              career_xp_cached, sort, created_by_user_id
+              career_xp_cached, career_xp_baseline, sort, created_by_user_id
             ) values (
               ${stableId}, ${householdId}, ${clientId === ownerFighterClientId ? auth.userId : null}::uuid,
               ${name}, ${requireString(item.color, 'fighter.color')},
               ${optionalNumber(item.streak)}, ${optionalNumber(item.coins)},
-              ${optionalNumber(item.careerXp)}, ${optionalNumber(item.sort, sort)}, ${auth.userId}
+              ${careerXp}, ${careerXp}, ${optionalNumber(item.sort, sort)}, ${auth.userId}
             )
             on conflict (id) do update
             set name = excluded.name, color = excluded.color, streak = excluded.streak,
                 coins_cached = excluded.coins_cached, career_xp_cached = excluded.career_xp_cached,
+                career_xp_baseline = excluded.career_xp_baseline,
                 user_id = coalesce(excluded.user_id, fighters.user_id),
                 sort = excluded.sort, deleted_at = null, version = fighters.version + 1
             where fighters.household_id = excluded.household_id

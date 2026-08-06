@@ -33,11 +33,13 @@ npm install
 npm run dev       # Vite development server for the embedded web bundle
 npm run build     # tsc -b (type-check via project refs) + vite build
 npm run preview   # serve the production web bundle for local inspection
-npm run lint      # tsc --noEmit (type-check only — there is no ESLint/Prettier config)
+npm run lint      # tsc -b (type-check only — there is no ESLint/Prettier config)
 npm test          # focused client game-rule, sync, and credential tests
 ```
 
-There is no linter binary; "lint" is a TypeScript type-check. Before committing,
+There is no linter binary; "lint" is a TypeScript type-check. It must run `tsc -b`,
+not `tsc --noEmit`: the root `tsconfig.json` is solution-style (`"files": []`), so
+`--noEmit` finds no files and silently passes on any error. Before committing,
 run `npm test` and `npm run build` (or at minimum `npm run lint`) to confirm the
 strict compiler is happy — unused locals/params are hard errors. Server tests run
 with `npm test` from `server/`.
@@ -51,7 +53,7 @@ development aid, not an installable browser product.
 src/
   main.tsx            Boot: opens the DB, loads state, mounts <GameProvider><App/>
   App.tsx             Tab router + overlay mounting (all screens live here)
-  styles.css          CSS reset + ALL @keyframes (animations are referenced by name from inline styles)
+  styles.css          @font-face (bundled fonts) + CSS reset + ALL @keyframes (animations are referenced by name from inline styles)
   db/
     sqlite.ts         Db class: sqlite-wasm wrapper, OPFS-or-localStorage persistence
     schema.ts         DDL, table list, SCHEMA_VERSION, version read/write
@@ -87,6 +89,11 @@ React state as `AppState = { game, ui }` → components read via `useGame()` and
 mutate only through `actions` → an effect debounces (250 ms) and calls
 `saveState()` back to SQLite.
 
+- **Local play is a supported mode.** `game.localPlay` records that the household
+  chose to play on this device without an account; `src/online/accountGate.ts` decides
+  whether the account setup screen is shown. Gameplay never requires a household —
+  `queueMutation` is a no-op while disconnected — so an account only adds multi-device
+  sync. Keep it that way: never gate a game action on `online.state`.
 - **`game`** is the *durable* slice (persisted). **`ui`** is *ephemeral*
   (never persisted): current tab, animation flags, combo counter, open editors,
   onboarding step, transient damage numbers/toasts.
@@ -161,6 +168,11 @@ The browser-development fallback remains web storage because native APIs are una
   whether a boss is currently spawned; `statusOf` → `aktiv`/`beseiret`/`planlagt`.
 - **Fighter** — family member; `careerXp` (= lifetime damage) drives the level
   curve (`levelInfo`), `coins` are personal currency, avatars are data-URLs.
+  `streak` is a **cached projection**, not state: the durable record is
+  `GameState.activeDays` (local calendar days each fighter completed a chore on), and
+  `streakFrom`/`householdStreak` in `game/logic.ts` derive from it. Deriving rather
+  than incrementing keeps the count right when the same day arrives twice — a retry,
+  a second device, or a replayed sync page.
 - **Economy**: winning a battle grants each fighter coins = their damage / 4 and
   adds damage to `careerXp`. Coins are spent on personal `RewardDef`s or
   transferred into a shared `pool` for group rewards; redeeming creates a
@@ -177,6 +189,10 @@ The browser-development fallback remains web storage because native APIs are una
   `#6C7486` (`DIM`), cream text `#F6EBDD`, danger `#E0564A`, success `#67D391`.
   `ui/common.tsx` exports `GOLD`/`DIM`. The `'Press Start 2P'` pixel font (aliased
   `PS` locally in screens) is used for arcade headings; `Space Grotesk` is body.
+  Both are **bundled** in `public/fonts` and declared with `@font-face` in
+  `styles.css` — never load fonts (or anything else) from a remote origin: the app
+  must render offline, and a contract test fails the build if `index.html` gains a
+  third-party URL or the CSP widens.
 - **i18n**: never hardcode user-facing text. Add a key to the `Strings` interface
   and both `no`/`en` tables in `game/i18n.ts`, then read it via `const t = useT()`.
   Some strings contain `{placeholder}` tokens or `<br>` and are interpolated at

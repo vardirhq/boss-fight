@@ -67,7 +67,7 @@ export function registerSyncPullRoutes(app: FastifyInstance, dependencies: SyncP
       : await Promise.all([
         sql`
           select f.id, f.user_id, f.name, f.color, f.avatar_hash, f.streak, f.coins_cached,
-            f.career_xp_cached, f.sort, (f.deleted_at is not null) as deleted,
+            f.career_xp_cached, f.career_xp_baseline, f.sort, (f.deleted_at is not null) as deleted,
             u.kind as user_kind, hm.status as account_status, hm.role as account_role
           from fighters f
           left join users u on u.id = f.user_id
@@ -97,7 +97,7 @@ export function registerSyncPullRoutes(app: FastifyInstance, dependencies: SyncP
 
     const [completions, resets, victories, wallet, redemptions] = await Promise.all([
       sql`select id, boss_id, chore_id, fighter_id, cycle_key, reset_seq,
-        chore_title, damage, voided_at, server_seq from chore_completions
+        chore_title, damage, voided_at, completed_at, server_seq from chore_completions
         where household_id = ${householdId} and server_seq > ${since.chore_completions}
         order by server_seq limit ${eventLimit + 1}`,
       sql`select id, boss_id, cycle_key, reset_seq, server_seq from boss_resets

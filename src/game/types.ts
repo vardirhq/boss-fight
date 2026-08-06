@@ -119,4 +119,15 @@ export interface GameState {
   victories: number;
   goldenRevealed: boolean;
   onboarded: boolean;
+  /**
+   * The household chose to play on this device without an account. Kept durable so
+   * the choice survives restarts, and independent of the online session so logging
+   * out returns to local play rather than back to the setup gate.
+   */
+  localPlay: boolean;
+  /**
+   * Local calendar days each fighter completed a chore on, keyed by fighter id and
+   * bounded to the recent past. The durable record behind `Fighter.streak`.
+   */
+  activeDays: Record<string, string[]>;
 }

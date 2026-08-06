@@ -2,7 +2,8 @@ export const syncPublicFields = {
   households: ['id', 'name', 'timezone', 'victories_baseline'],
   fighters: [
     'id', 'user_id', 'name', 'color', 'streak', 'coins_cached', 'career_xp_cached',
-    'sort', 'deleted', 'avatar_hash', 'user_kind', 'account_status', 'account_role',
+    'career_xp_baseline', 'sort', 'deleted', 'avatar_hash', 'user_kind',
+    'account_status', 'account_role',
   ],
   fighter_avatars: ['fighter_id', 'mime', 'bytes_base64', 'hash'],
   bosses: [
@@ -13,7 +14,7 @@ export const syncPublicFields = {
   chores: ['id', 'boss_id', 'title', 'damage', 'repeatable', 'sort', 'deleted'],
   chore_completions: [
     'id', 'boss_id', 'chore_id', 'fighter_id', 'cycle_key', 'reset_seq',
-    'chore_title', 'damage', 'voided_at', 'server_seq',
+    'chore_title', 'damage', 'voided_at', 'completed_at', 'server_seq',
   ],
   boss_resets: ['id', 'boss_id', 'cycle_key', 'reset_seq', 'server_seq'],
   boss_victories: ['id', 'boss_id', 'cycle_key', 'reset_seq', 'elite', 'rare', 'server_seq'],

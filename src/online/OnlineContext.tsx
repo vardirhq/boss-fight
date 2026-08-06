@@ -28,13 +28,15 @@ import {
   loadNativeCredentials, saveNativeCredentials, usesNativeCredentialStorage,
 } from './credentialStorage';
 import type { Fighter } from '../game/types';
-import { clearSyncEventCache, loadSyncEventCache, mergeSyncEvents, saveSyncEventCache, syncCursors, syncHasMore } from './syncCache';
+import { clearSyncCache, foldSyncCache, loadSyncCache, saveSyncCache, syncCursors, syncHasMore } from './syncCache';
 import { clearAvatarCache, knownAvatarHashes, loadAvatarCache, mergeAvatarCache, saveAvatarCache } from './avatarCache';
 import { clearConfigurationCache, loadConfigurationCache, mergeConfigurationCache, saveConfigurationCache } from './configurationCache';
 import { recordDiagnostic } from './diagnostics';
 
 const STORAGE_KEY = 'boss-kamp-online-state-v2';
 const MUTATIONS_KEY = 'boss-kamp-pending-mutations-v1';
+/** Upper bound on pages drained in one flush; see the pull loop below. */
+const MAX_SYNC_PAGES = 100;
 
 export type OnlineMode = 'local' | 'adult-account' | 'household-device' | 'fighter-account';
 export type OnlineStatus = 'idle' | 'restoring' | 'authenticated' | 'syncing' | 'offline' | 'error';
@@ -502,20 +504,24 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
               return next;
             });
           }
-          let cachedEvents = loadSyncEventCache(householdId);
+          let cache = loadSyncCache(householdId);
           let cachedAvatars = loadAvatarCache(householdId);
           let cachedConfiguration = loadConfigurationCache(householdId);
           let pageHasMore: boolean;
+          // Each page advances the durable cursors, so the drain always terminates on a
+          // well-behaved server. The bound keeps a server-side paging fault from
+          // spinning the client instead of surfacing as a stalled sync.
+          let remainingPages = MAX_SYNC_PAGES;
           do {
-            latest = await pullSyncState(token, householdId, syncCursors(cachedEvents), knownAvatarHashes(cachedAvatars), cachedConfiguration?.revision ?? null, householdDeviceToken);
-            pageHasMore = syncHasMore(latest);
-            latest = { ...latest, events: mergeSyncEvents(cachedEvents, latest.events) };
+            latest = await pullSyncState(token, householdId, syncCursors(cache), knownAvatarHashes(cachedAvatars), cachedConfiguration?.revision ?? null, householdDeviceToken);
+            pageHasMore = syncHasMore(latest) && (remainingPages -= 1) > 0;
+            cache = foldSyncCache(cache, latest.events);
+            latest = { ...latest, events: cache.events, totals: cache.totals };
             latest = mergeConfigurationCache(latest, cachedConfiguration);
             latest.mutable.fighter_avatars = mergeAvatarCache(latest.mutable.fighters, cachedAvatars, latest.mutable.fighter_avatars);
-            cachedEvents = latest.events;
             cachedAvatars = latest.mutable.fighter_avatars;
             cachedConfiguration = { revision: latest.configurationRevision, mutable: latest.mutable };
-            saveSyncEventCache(householdId, cachedEvents);
+            saveSyncCache(householdId, cache);
             saveAvatarCache(householdId, cachedAvatars);
             saveConfigurationCache(householdId, latest);
           } while (pageHasMore);
@@ -582,7 +588,7 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
         // can be revoked from another authenticated device later.
       } finally {
         if (state.householdId) {
-          clearSyncEventCache(state.householdId);
+          clearSyncCache(state.householdId);
           clearAvatarCache(state.householdId);
           clearConfigurationCache(state.householdId);
         }
@@ -591,7 +597,7 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
       }
     },
     forgetHousehold: (householdId) => {
-      clearSyncEventCache(householdId);
+      clearSyncCache(householdId);
       clearAvatarCache(householdId);
       clearConfigurationCache(householdId);
       const retained = loadPendingMutations().filter((mutation) => mutation.householdId !== householdId);

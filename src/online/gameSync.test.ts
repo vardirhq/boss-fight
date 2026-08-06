@@ -101,3 +101,81 @@ test('event projection uses only the current reset, ignores voided attacks, and 
   assert.deepEqual(result.log.map(({ attack }) => attack), ['First']);
   assert.deepEqual(result.redemptions[0], { vid: 'reward-1', rewardId: 'p_snack', icon: '🍫', title: 'Candy at the store', cost: 3, at: '2026-08-05', who: 'Ada', used: true });
 });
+
+function syncWith(fighters: Array<Record<string, unknown>>, events: Partial<ServerSyncState['events']>): ServerSyncState {
+  return {
+    serverTime: '2026-08-05T12:00:00Z', configurationRevision: 1,
+    mutable: {
+      households: [{ victories_baseline: 0 }], fighters,
+      fighter_avatars: [], bosses: [], chores: [],
+    },
+    events: {
+      chore_completions: [], boss_resets: [], boss_victories: [],
+      wallet_transactions: [], reward_redemptions: [], ...events,
+    },
+  };
+}
+
+test('career xp adds replayed damage to the pre-synchronization baseline', () => {
+  const fighters = [{ id: 'f1', name: 'Ada', color: '#fff', sort: 0, career_xp_baseline: 5000, career_xp_cached: 5000 }];
+
+  const beforeAnyChore = serverSyncToGameState(syncWith(fighters, {}), game());
+  assert.equal(beforeAnyChore.fighters[0].careerXp, 5000);
+
+  // The regression this guards: deriving XP from events alone replaced a lifetime of
+  // progress with the damage of the first chore that happened to sync.
+  const afterOneChore = serverSyncToGameState(syncWith(
+    [{ ...fighters[0], career_xp_cached: 5012 }],
+    { chore_completions: [{ id: 'c1', server_seq: 1, fighter_id: 'f1', damage: 12 }] },
+  ), game());
+  assert.equal(afterOneChore.fighters[0].careerXp, 5012);
+});
+
+test('career xp is monotonic across a sequence of syncs and a pruned event tail', () => {
+  const fighters = [{ id: 'f1', name: 'Ada', color: '#fff', sort: 0, career_xp_baseline: 5000, career_xp_cached: 5000 }];
+  let previous = 0;
+  let replayed = 0;
+  for (const damage of [12, 30, 8, 25]) {
+    replayed += damage;
+    // Totals carry the whole history even once the raw rows have aged out of the cache.
+    const sync: ServerSyncState = {
+      ...syncWith([{ ...fighters[0], career_xp_cached: 5000 + replayed }], {}),
+      totals: {
+        cursors: { chore_completions: replayed, boss_resets: 0, boss_victories: 0, wallet_transactions: 0, reward_redemptions: 0 },
+        coins: {}, pool: 0, careerXp: { f1: replayed }, victories: 0, rareVictory: false,
+      },
+    };
+    const careerXp = serverSyncToGameState(sync, game()).fighters[0].careerXp;
+    assert.equal(careerXp, 5000 + replayed);
+    assert.ok(careerXp > previous, 'career xp must never regress between syncs');
+    previous = careerXp;
+  }
+});
+
+test('a server without the baseline column still reports lifetime career xp', () => {
+  // Transitional: the cached total is authoritative but stale, so it acts as a floor.
+  const sync = syncWith(
+    [{ id: 'f1', name: 'Ada', color: '#fff', sort: 0, career_xp_cached: 5000 }],
+    { chore_completions: [{ id: 'c1', server_seq: 1, fighter_id: 'f1', damage: 12 }] },
+  );
+  assert.equal(serverSyncToGameState(sync, game()).fighters[0].careerXp, 5000);
+});
+
+test('supplied totals replace a re-scan of the retained event tail', () => {
+  const sync: ServerSyncState = {
+    ...syncWith([{ id: 'f1', name: 'Ada', color: '#fff', sort: 0, career_xp_baseline: 0, career_xp_cached: 0 }], {
+      // A retained tail that no longer covers the wallet or victory history.
+      chore_completions: [{ id: 'c9', server_seq: 900, fighter_id: 'f1', damage: 5 }],
+    }),
+    totals: {
+      cursors: { chore_completions: 900, boss_resets: 0, boss_victories: 40, wallet_transactions: 700, reward_redemptions: 0 },
+      coins: { f1: 140 }, pool: 66, careerXp: { f1: 980 }, victories: 40, rareVictory: true,
+    },
+  };
+  const result = serverSyncToGameState(sync, game());
+  assert.equal(result.fighters[0].careerXp, 980);
+  assert.equal(result.fighters[0].coins, 140);
+  assert.equal(result.pool, 66);
+  assert.equal(result.victories, 40);
+  assert.equal(result.goldenRevealed, true);
+});

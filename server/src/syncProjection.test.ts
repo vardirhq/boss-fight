@@ -25,3 +25,15 @@ test('the response boundary discards fields outside each public contract', () =>
     created_by_user_id: 'user-1', note: 'internal note', reference_id: 'private',
   }]), [{ id: 'wallet-1', fighter_id: 'fighter-1', amount: 4, server_seq: 9 }]);
 });
+
+test('fighter projections carry the immutable career xp baseline', () => {
+  // Clients project lifetime XP as baseline + replayed completions. Dropping the
+  // baseline from the boundary silently collapses every fighter's level instead.
+  assert.equal(syncPublicFields.fighters.includes('career_xp_baseline'), true);
+  assert.deepEqual(publicSyncRows('fighters', [{
+    id: 'fighter-1', name: 'Ada', color: '#fff', career_xp_cached: 5042,
+    career_xp_baseline: 5000, version: 3, deleted_at: null,
+  }]), [{
+    id: 'fighter-1', name: 'Ada', color: '#fff', career_xp_cached: 5042, career_xp_baseline: 5000,
+  }]);
+});

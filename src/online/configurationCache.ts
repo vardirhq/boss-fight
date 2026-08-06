@@ -1,4 +1,5 @@
 import type { ServerSyncState } from './api';
+import { recordDiagnostic } from './diagnostics';
 
 const PREFIX = 'boss-kamp-sync-configuration-v1:';
 
@@ -31,7 +32,16 @@ export function saveConfigurationCache(householdId: string, sync: ServerSyncStat
       revision: sync.configurationRevision,
       mutable: sync.mutable,
     } satisfies ConfigurationCache));
-  } catch { /* Refetch the complete configuration next time. */ }
+    return true;
+  } catch (error) {
+    // Losing this cache costs a full configuration refetch on every pull, so the
+    // failure is reported rather than absorbed.
+    recordDiagnostic({
+      area: 'storage', operation: 'configuration-cache', outcome: 'error',
+      code: error instanceof Error ? error.name : 'write_failed',
+    });
+    return false;
+  }
 }
 
 export function clearConfigurationCache(householdId: string) {
