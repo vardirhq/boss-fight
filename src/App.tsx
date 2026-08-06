@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { useGame } from './store/GameContext';
 import { BattleScreen } from './screens/BattleScreen';
@@ -7,9 +7,7 @@ import { PartyScreen } from './screens/PartyScreen';
 import { RewardsScreen } from './screens/RewardsScreen';
 import { BagScreen } from './screens/BagScreen';
 import { BottomNav } from './screens/BottomNav';
-import { BossManager, ChoreEditor, PartyManager } from './screens/managers';
 import { SettingsPanel, Splash, Onboarding, Toast } from './screens/overlays';
-import { AccountSettings } from './online/AccountSettings';
 import { mayManageHousehold, useOnline } from './online/OnlineContext';
 import { serverSyncToGameState } from './online/gameSync';
 import { GOLD, useT } from './ui/common';
@@ -18,6 +16,10 @@ import { shouldShowPersistenceWarning } from './db/persistenceWarning';
 
 const PS = "'Press Start 2P'";
 const LEGACY_NEW_FIGHTER_NAME = 'Ny kjemper';
+const AccountSettings = lazy(() => import('./online/AccountSettings').then((module) => ({ default: module.AccountSettings })));
+const BossManager = lazy(() => import('./screens/managers').then((module) => ({ default: module.BossManager })));
+const ChoreEditor = lazy(() => import('./screens/managers').then((module) => ({ default: module.ChoreEditor })));
+const PartyManager = lazy(() => import('./screens/managers').then((module) => ({ default: module.PartyManager })));
 
 export function App() {
   const { state, actions, persistence } = useGame();
@@ -124,9 +126,11 @@ export function App() {
       </div>
 
       <Toast />
-      {ui.editBosses && mayManageHousehold(online.state) && <BossManager />}
-      {ui.editParty && mayManageHousehold(online.state) && <PartyManager />}
-      {ui.editingChores && mayManageHousehold(online.state) && <ChoreEditor />}
+      <Suspense fallback={null}>
+        {ui.editBosses && mayManageHousehold(online.state) && <BossManager />}
+        {ui.editParty && mayManageHousehold(online.state) && <PartyManager />}
+        {ui.editingChores && mayManageHousehold(online.state) && <ChoreEditor />}
+      </Suspense>
       {ui.settingsOpen && !accountOpen && (
         <SettingsPanel
           onOpenAccount={() => setAccountOpen(true)}
@@ -143,7 +147,7 @@ export function App() {
             <div style={{ flex: 1, fontSize: 21, fontWeight: 800, letterSpacing: '-.35px', color: '#f6ebdd' }}>{accountCopy.title}</div>
             <div style={{ width: 42 }} />
           </div>
-          <div className="scr" style={{ flex: 1, overflowY: 'auto', padding: 18 }}><AccountSettings lang={game.settings.lang} /></div>
+          <div className="scr" style={{ flex: 1, overflowY: 'auto', padding: 18 }}><Suspense fallback={null}><AccountSettings lang={game.settings.lang} /></Suspense></div>
         </DialogSurface>
       )}
       {showAccountSetup && (
@@ -152,7 +156,7 @@ export function App() {
             <div style={{ fontFamily: PS, fontSize: 13, color: GOLD }}>BOSS KAMP</div>
           </div>
           <div className="scr" style={{ flex: 1, overflowY: 'auto', padding: '8px 18px calc(24px + env(safe-area-inset-bottom))' }}>
-            <AccountSettings lang={game.settings.lang} setup />
+            <Suspense fallback={null}><AccountSettings lang={game.settings.lang} setup /></Suspense>
           </div>
         </div>
       )}

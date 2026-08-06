@@ -192,6 +192,17 @@ Route alerts to the repository/hosting operator and keep the current escalation
 contact in the private monitoring configuration. The repository cannot choose the
 organization's paging provider or recipients; those remain an operator decision.
 
+## Dependency risk gates
+
+CI rejects High severity findings in dependencies shipped with the application and
+Critical findings anywhere in the full build toolchain. As of the BF-022 upgrade,
+the shipped-dependency audit is clean. Three High advisories remain in development-
+only Capacitor/Deploid trees (`brace-expansion` and `sharp`/libvips); these tools run
+only while generating/building Android sources and are not packaged into the APK.
+Keep them visible in every CI run and remove the exception when fixed upstream
+versions are available. Do not process untrusted archives, paths, or images through
+the packaging job in the meantime.
+
 ## Android Release Flow
 
 Normal feature and fix pull requests add user-facing notes beneath

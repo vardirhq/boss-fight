@@ -131,7 +131,7 @@ landed but the recommendation is not yet satisfied in full.
 | BF-019 | In progress | Schemas, governance, synchronization helpers/projections, privacy, retention, session policy, observability, the public error policy, and operational routes are isolated and independently tested. Authentication/account, household, gameplay, and sync route registration still need extraction from the composition root. |
 | BF-020 | Remediated | Shared validators reject coercion, bound inputs, and validate avatars. Non-coercing closed schemas cover authentication, lifecycle, bootstrap, household administration, invitations/pairing, gameplay configuration, and sync routes; collections and domain-specific numeric values are bounded. |
 | BF-021 | Remediated | The native app retains and exports a bounded privacy-safe sync/API history with correlation IDs. API responses and structured logs share request IDs, an authenticated Prometheus endpoint exposes route-template outcome counters, and deployment documentation defines health, server-error, mail, retention, database, backup, and deploy alert thresholds. Monitoring provider and recipients remain an organization-specific operator choice. |
-| BF-022 | Open | Planned build-dependency upgrades remain. |
+| BF-022 | Remediated | Vite and the React plugin are upgraded to their current Node-22-compatible majors, affected transitive tools are refreshed/overridden, and account/management screens are lazy chunks. CI rejects High shipped-runtime findings and Critical full-toolchain findings. Three High findings remain confined to Capacitor/Deploid development dependency trees pending upstream releases; they are not bundled into the APK runtime. |
 
 ## 6. Detailed findings
 

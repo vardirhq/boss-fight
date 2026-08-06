@@ -13,6 +13,9 @@ increasing Android version codes for install/update compatibility.
   authenticated Prometheus metrics, and documented operational alert thresholds.
 - Extract the public API error policy and operational endpoints from the server
   composition root with independent contract tests.
+- Upgrade Vite and its React plugin, refresh vulnerable transitive build tools,
+  split account/management screens from the initial bundle, and enforce a High
+  severity audit gate for dependencies shipped in the app.
 - Exercise concurrent final-blow submissions against PostgreSQL in CI and verify
   that only one completion, victory, and payout can commit.
 - Apply non-coercing, closed request schemas to adult registration/login and

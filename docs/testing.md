@@ -41,6 +41,10 @@ configured bearer secret.
 The public API error-policy suite verifies framework validation, database
 conflicts, domain rejections, authentication errors, and non-disclosing 500s
 without requiring a running HTTP server.
+CI audits shipped application dependencies at High severity separately from the
+complete development toolchain at Critical severity, keeping upstream Android
+packaging findings visible while preventing them from being mistaken for APK
+runtime dependencies.
 
 Tests use explicit local midday dates where calendar behavior matters. This
 avoids midnight and UTC-offset ambiguity while still exercising the same local

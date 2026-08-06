@@ -58,7 +58,10 @@ jobs:
       - name: Test release tooling
         run: npm run release:test
 
-      - name: Audit app dependencies
+      - name: Audit shipped app dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Audit build toolchain
         run: npm audit --audit-level=critical
 
       - name: Install server dependencies
