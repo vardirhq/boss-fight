@@ -52,7 +52,7 @@ capture_accessibility_tree() {
   if grep -q "System UI isn't responding" "$WINDOW_DUMP"; then
     # The API 29 emulator can briefly ANR System UI while the WebView is
     # starting. Let it recover before judging the app's accessibility tree.
-    tap_matching_node '^Wait$'
+    tap_current_matching_node '^Wait$' || true
     sleep 5
     dump_tree
   fi
@@ -63,6 +63,29 @@ capture_accessibility_tree() {
   fi
   grep -Eq 'clickable="true"' "$WINDOW_DUMP"
   grep -Eq 'content-desc="[^"]+"' "$WINDOW_DUMP"
+}
+
+tap_current_matching_node() {
+  local pattern=$1
+  local coordinates
+  if ! coordinates=$(python3 - "$WINDOW_DUMP" "$pattern" <<'PY'
+import re
+import sys
+import xml.etree.ElementTree as ET
+
+root = ET.parse(sys.argv[1]).getroot()
+pattern = re.compile(sys.argv[2], re.IGNORECASE)
+for node in root.iter('node'):
+    label = ' '.join((node.get('text', ''), node.get('content-desc', '')))
+    match = re.fullmatch(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]', node.get('bounds', ''))
+    if pattern.search(label) and match:
+        left, top, right, bottom = map(int, match.groups())
+        print((left + right) // 2, (top + bottom) // 2)
+        raise SystemExit(0)
+raise SystemExit(1)
+PY
+  ); then return 1; fi
+  adb shell input tap $coordinates
 }
 
 tap_matching_node() {
