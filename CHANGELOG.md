@@ -13,6 +13,8 @@ increasing Android version codes for install/update compatibility.
   synchronization pull/push endpoints.
 - Apply closed schemas to verification, password reset, child authentication,
   session revocation, logout, and adult-account erasure.
+- Apply closed, bounded schemas to bootstrap, household administration, fighter
+  and child governance, invitations and pairing, bosses, chores, and rewards.
 - Bound names, emails, credentials, identifiers, notes, descriptions, and other
   request strings by field class, and reject extreme numeric values.
 - Reject coerced JSON numbers and require canonical non-negative integer query

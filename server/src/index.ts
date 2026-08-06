@@ -26,9 +26,13 @@ import {
 } from './requestValidation.js';
 import { validatedAvatar } from './avatarValidation.js';
 import {
-  childLoginSchema, childPairSchema, emailSchema, emptyBodySchema, eraseAdultSchema,
-  loginSchema, registerSchema, resetConfirmSchema, sessionParamsSchema, syncPullSchema,
-  syncPushSchema, tokenSchema,
+  bootstrapSchema, bossCreateSchema, bossParamsSchema, bossPatchSchema, childCreateSchema,
+  childLoginSchema, childPairSchema, childParamsSchema, choreCreateSchema, choreParamsSchema,
+  chorePatchSchema, claimDeviceSchema, emailSchema, emptyBodySchema, eraseAdultSchema,
+  fighterCreateSchema, fighterParamsSchema, fighterPatchSchema, householdEraseSchema,
+  householdParamsSchema, householdPatchSchema, inviteCreateSchema, loginSchema, pairingCreateSchema,
+  pinSchema, registerSchema, resetConfirmSchema, rewardCreateSchema, rewardParamsSchema,
+  rewardPatchSchema, sessionParamsSchema, suspendSchema, syncPullSchema, syncPushSchema, tokenSchema,
 } from './routeSchemas.js';
 
 type JsonObject = Record<string, unknown>;
@@ -789,7 +793,7 @@ export async function buildApp() {
     });
   });
 
-  app.post('/api/bootstrap', async (request) => {
+  app.post('/api/bootstrap', { schema: bootstrapSchema }, async (request) => {
     const auth = await requireAuth(request);
     const body = requireObject(request.body);
     const householdName = requireString(body.householdName, 'householdName');
@@ -1001,7 +1005,7 @@ export async function buildApp() {
     return result;
   });
 
-  app.get('/api/households/:householdId/config', async (request) => {
+  app.get('/api/households/:householdId/config', { schema: householdParamsSchema }, async (request) => {
     const auth = await requireAuth(request);
     const householdId = (request.params as { householdId: string }).householdId;
     await requireHouseholdMember(auth.userId, householdId);
@@ -1045,7 +1049,7 @@ export async function buildApp() {
     };
   });
 
-  app.get('/api/households/:householdId/export', async (request) => {
+  app.get('/api/households/:householdId/export', { schema: householdParamsSchema }, async (request) => {
     const auth = await requireAuth(request);
     const householdId = (request.params as { householdId: string }).householdId;
     await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
@@ -1116,7 +1120,7 @@ export async function buildApp() {
     };
   });
 
-  app.delete('/api/households/:householdId', async (request) => {
+  app.delete('/api/households/:householdId', { schema: householdEraseSchema }, async (request) => {
     const auth = await requireAuth(request);
     const householdId = (request.params as { householdId: string }).householdId;
     await requireHouseholdRole(auth.userId, householdId, ['owner']);
@@ -1164,7 +1168,7 @@ export async function buildApp() {
     });
   });
 
-  app.patch('/api/households/:householdId', async (request) => {
+  app.patch('/api/households/:householdId', { schema: householdPatchSchema }, async (request) => {
     const auth = await requireAuth(request);
     const householdId = (request.params as { householdId: string }).householdId;
     await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
@@ -1181,7 +1185,7 @@ export async function buildApp() {
     return { household };
   });
 
-  app.post('/api/households/:householdId/fighters', async (request) => {
+  app.post('/api/households/:householdId/fighters', { schema: fighterCreateSchema }, async (request) => {
     const auth = await requireAuth(request);
     const householdId = (request.params as { householdId: string }).householdId;
     await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
@@ -1201,7 +1205,7 @@ export async function buildApp() {
     return { fighter };
   });
 
-  app.patch('/api/households/:householdId/fighters/:fighterId', async (request) => {
+  app.patch('/api/households/:householdId/fighters/:fighterId', { schema: fighterPatchSchema }, async (request) => {
     const auth = await requireAuth(request);
     const { householdId, fighterId } = request.params as { householdId: string; fighterId: string };
     await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
@@ -1221,7 +1225,7 @@ export async function buildApp() {
     return { fighter };
   });
 
-  app.delete('/api/households/:householdId/fighters/:fighterId', async (request) => {
+  app.delete('/api/households/:householdId/fighters/:fighterId', { schema: fighterParamsSchema }, async (request) => {
     const auth = await requireAuth(request);
     const { householdId, fighterId } = request.params as { householdId: string; fighterId: string };
     await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
@@ -1240,7 +1244,7 @@ export async function buildApp() {
     return { ok: true };
   });
 
-  app.post('/api/households/:householdId/children', async (request) => {
+  app.post('/api/households/:householdId/children', { schema: childCreateSchema }, async (request) => {
     const auth = await requireAuth(request);
     const householdId = (request.params as { householdId: string }).householdId;
     await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
@@ -1293,7 +1297,7 @@ export async function buildApp() {
     return result;
   });
 
-  app.post('/api/households/:householdId/fighters/:fighterId/pin', async (request) => {
+  app.post('/api/households/:householdId/fighters/:fighterId/pin', { schema: pinSchema }, async (request) => {
     const auth = await requireAuth(request);
     const { householdId, fighterId } = request.params as { householdId: string; fighterId: string };
     await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
@@ -1315,7 +1319,7 @@ export async function buildApp() {
     return { ok: true };
   });
 
-  app.post('/api/households/:householdId/fighters/:fighterId/suspend', async (request) => {
+  app.post('/api/households/:householdId/fighters/:fighterId/suspend', { schema: suspendSchema }, async (request) => {
     const auth = await requireAuth(request);
     const { householdId, fighterId } = request.params as { householdId: string; fighterId: string };
     const actor = await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
@@ -1357,7 +1361,7 @@ export async function buildApp() {
     return result;
   });
 
-  app.post('/api/households/:householdId/fighters/:fighterId/unlink', async (request) => {
+  app.post('/api/households/:householdId/fighters/:fighterId/unlink', { schema: fighterParamsSchema }, async (request) => {
     const auth = await requireAuth(request);
     const { householdId, fighterId } = request.params as { householdId: string; fighterId: string };
     const actor = await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
@@ -1402,7 +1406,7 @@ export async function buildApp() {
     });
   });
 
-  app.delete('/api/households/:householdId/children/:fighterId', async (request) => {
+  app.delete('/api/households/:householdId/children/:fighterId', { schema: childParamsSchema }, async (request) => {
     const auth = await requireAuth(request);
     const { householdId, fighterId } = request.params as { householdId: string; fighterId: string };
     const actor = await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
@@ -1470,7 +1474,7 @@ export async function buildApp() {
     });
   });
 
-  app.post('/api/households/:householdId/pairings', async (request) => {
+  app.post('/api/households/:householdId/pairings', { schema: pairingCreateSchema }, async (request) => {
     const auth = await requireAuth(request);
     const householdId = (request.params as { householdId: string }).householdId;
     await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
@@ -1495,6 +1499,7 @@ export async function buildApp() {
   });
 
   app.post('/api/households/:householdId/invites', {
+    schema: inviteCreateSchema,
     config: { rateLimit: { max: 10, timeWindow: '1 hour' } },
   }, async (request) => {
     const auth = await requireAuth(request);
@@ -1562,7 +1567,7 @@ export async function buildApp() {
     return { invite, delivered: true };
   });
 
-  app.post('/api/invites/accept', async (request) => {
+  app.post('/api/invites/accept', { schema: tokenSchema }, async (request) => {
     const auth = await requireAuth(request);
     const body = requireObject(request.body);
     const token = requireString(body.token, 'token');
@@ -1650,7 +1655,7 @@ export async function buildApp() {
     return result;
   });
 
-  app.post('/api/pairings/claim-household-device', async (request) => {
+  app.post('/api/pairings/claim-household-device', { schema: claimDeviceSchema }, async (request) => {
     const body = requireObject(request.body);
     const code = requireString(body.code, 'code').toUpperCase();
     const name = optionalString(body.name) ?? '';
@@ -1685,7 +1690,7 @@ export async function buildApp() {
     return result;
   });
 
-  app.post('/api/households/:householdId/bosses', async (request) => {
+  app.post('/api/households/:householdId/bosses', { schema: bossCreateSchema }, async (request) => {
     const auth = await requireAuth(request);
     const householdId = (request.params as { householdId: string }).householdId;
     await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
@@ -1708,7 +1713,7 @@ export async function buildApp() {
     return { boss };
   });
 
-  app.patch('/api/households/:householdId/bosses/:bossId', async (request) => {
+  app.patch('/api/households/:householdId/bosses/:bossId', { schema: bossPatchSchema }, async (request) => {
     const auth = await requireAuth(request);
     const { householdId, bossId } = request.params as { householdId: string; bossId: string };
     await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
@@ -1736,7 +1741,7 @@ export async function buildApp() {
     return { boss };
   });
 
-  app.delete('/api/households/:householdId/bosses/:bossId', async (request) => {
+  app.delete('/api/households/:householdId/bosses/:bossId', { schema: bossParamsSchema }, async (request) => {
     const auth = await requireAuth(request);
     const { householdId, bossId } = request.params as { householdId: string; bossId: string };
     await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
@@ -1749,7 +1754,7 @@ export async function buildApp() {
     return { ok: true };
   });
 
-  app.post('/api/households/:householdId/chores', async (request) => {
+  app.post('/api/households/:householdId/chores', { schema: choreCreateSchema }, async (request) => {
     const auth = await requireAuth(request);
     const householdId = (request.params as { householdId: string }).householdId;
     await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
@@ -1768,7 +1773,7 @@ export async function buildApp() {
     return { chore };
   });
 
-  app.patch('/api/households/:householdId/chores/:choreId', async (request) => {
+  app.patch('/api/households/:householdId/chores/:choreId', { schema: chorePatchSchema }, async (request) => {
     const auth = await requireAuth(request);
     const { householdId, choreId } = request.params as { householdId: string; choreId: string };
     await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
@@ -1790,7 +1795,7 @@ export async function buildApp() {
     return { chore };
   });
 
-  app.delete('/api/households/:householdId/chores/:choreId', async (request) => {
+  app.delete('/api/households/:householdId/chores/:choreId', { schema: choreParamsSchema }, async (request) => {
     const auth = await requireAuth(request);
     const { householdId, choreId } = request.params as { householdId: string; choreId: string };
     await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
@@ -1803,7 +1808,7 @@ export async function buildApp() {
     return { ok: true };
   });
 
-  app.post('/api/households/:householdId/rewards', async (request) => {
+  app.post('/api/households/:householdId/rewards', { schema: rewardCreateSchema }, async (request) => {
     const auth = await requireAuth(request);
     const householdId = (request.params as { householdId: string }).householdId;
     await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
@@ -1821,7 +1826,7 @@ export async function buildApp() {
     return { reward };
   });
 
-  app.patch('/api/households/:householdId/rewards/:rewardId', async (request) => {
+  app.patch('/api/households/:householdId/rewards/:rewardId', { schema: rewardPatchSchema }, async (request) => {
     const auth = await requireAuth(request);
     const { householdId, rewardId } = request.params as { householdId: string; rewardId: string };
     await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);
@@ -1843,7 +1848,7 @@ export async function buildApp() {
     return { reward };
   });
 
-  app.delete('/api/households/:householdId/rewards/:rewardId', async (request) => {
+  app.delete('/api/households/:householdId/rewards/:rewardId', { schema: rewardParamsSchema }, async (request) => {
     const auth = await requireAuth(request);
     const { householdId, rewardId } = request.params as { householdId: string; rewardId: string };
     await requireHouseholdRole(auth.userId, householdId, ['owner', 'parent']);

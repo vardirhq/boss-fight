@@ -31,7 +31,9 @@ parameters and rejects negative, fractional, and padded sync positions.
 Field-bound coverage verifies trimmed names, email/name limits, bounded optional
 text, and rejection of extreme numeric values.
 Schema contract tests cover closed adult-authentication and synchronization inputs,
-including bounded credentials, query maps, and mutation batches.
+including bounded credentials, query maps, and mutation batches. They also cover
+closed bootstrap, household-administration, account-governance, pairing, boss,
+chore, and reward contracts with domain-specific collection and numeric limits.
 
 Tests use explicit local midday dates where calendar behavior matters. This
 avoids midnight and UTC-offset ambiguity while still exercising the same local
