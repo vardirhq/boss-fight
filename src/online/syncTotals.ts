@@ -1,3 +1,4 @@
+import { dayKey, recordActiveDay } from '../game/logic';
 import type { ServerSyncState, SyncCursors, SyncTotals } from './api';
 
 export type SyncEvents = ServerSyncState['events'];
@@ -36,7 +37,7 @@ export const emptySyncCursors = (): SyncCursors => ({
 });
 
 export const emptySyncTotals = (): SyncTotals => ({
-  cursors: emptySyncCursors(), coins: {}, pool: 0, careerXp: {},
+  cursors: emptySyncCursors(), coins: {}, pool: 0, careerXp: {}, activeDays: {},
   victories: 0, rareVictory: false,
 });
 
@@ -62,6 +63,12 @@ function foldRow(totals: SyncTotals, stream: SyncStream, row: Record<string, unk
     if (row.voided_at) return;
     const fighterId = stringValue(row.fighter_id);
     totals.careerXp[fighterId] = (totals.careerXp[fighterId] ?? 0) + numberValue(row.damage);
+    // The day a chore was completed, in this device's local calendar, is what a streak
+    // counts. Folding it here keeps streaks intact once raw rows are pruned.
+    const completedAt = new Date(stringValue(row.completed_at));
+    if (!Number.isNaN(completedAt.getTime())) {
+      totals.activeDays[fighterId] = recordActiveDay(totals.activeDays[fighterId], dayKey(completedAt));
+    }
     return;
   }
   if (stream === 'wallet_transactions') {
@@ -98,6 +105,7 @@ export function accumulateSyncTotals(
     coins: { ...totals.coins },
     pool: totals.pool,
     careerXp: { ...totals.careerXp },
+    activeDays: Object.fromEntries(Object.entries(totals.activeDays ?? {}).map(([id, days]) => [id, [...days]])),
     victories: totals.victories,
     rareVictory: totals.rareVictory,
   };

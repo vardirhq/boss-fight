@@ -168,6 +168,11 @@ The browser-development fallback remains web storage because native APIs are una
   whether a boss is currently spawned; `statusOf` → `aktiv`/`beseiret`/`planlagt`.
 - **Fighter** — family member; `careerXp` (= lifetime damage) drives the level
   curve (`levelInfo`), `coins` are personal currency, avatars are data-URLs.
+  `streak` is a **cached projection**, not state: the durable record is
+  `GameState.activeDays` (local calendar days each fighter completed a chore on), and
+  `streakFrom`/`householdStreak` in `game/logic.ts` derive from it. Deriving rather
+  than incrementing keeps the count right when the same day arrives twice — a retry,
+  a second device, or a replayed sync page.
 - **Economy**: winning a battle grants each fighter coins = their damage / 4 and
   adds damage to `careerXp`. Coins are spent on personal `RewardDef`s or
   transferred into a shared `pool` for group rewards; redeeming creates a

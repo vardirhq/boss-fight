@@ -125,4 +125,9 @@ export interface GameState {
    * out returns to local play rather than back to the setup gate.
    */
   localPlay: boolean;
+  /**
+   * Local calendar days each fighter completed a chore on, keyed by fighter id and
+   * bounded to the recent past. The durable record behind `Fighter.streak`.
+   */
+  activeDays: Record<string, string[]>;
 }

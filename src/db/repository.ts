@@ -1,6 +1,7 @@
 import type { Db, SaveResult } from './sqlite';
 import { ALL_TABLES, SCHEMA_VERSION, ensureSchema, readSchemaVersion, writeSchemaVersion } from './schema';
 import { seedBosses, extraSeedBosses, remapBossName, remapSprite } from '../game/seed';
+import { streakFrom } from '../game/logic';
 import type {
   Boss, Chore, Fighter, GameState, Lang, LogEntry, Redemption, Settings, Trigger, TriggerType,
 } from '../game/types';
@@ -84,6 +85,8 @@ export function loadState(db: Db): GameState {
     };
   });
 
+  const activeDays = parseActiveDays(meta(db, 'activeDays'));
+
   const fighters: Fighter[] = db
     .query('SELECT * FROM fighters ORDER BY sort, rowid')
     .map((r) => ({
@@ -91,7 +94,8 @@ export function loadState(db: Db): GameState {
       name: String(r.name),
       color: String(r.color),
       avatar: r.avatar == null ? undefined : String(r.avatar),
-      streak: Number(r.streak) || 0,
+      // Derived from the durable day record rather than trusted from the row.
+      streak: streakFrom(activeDays[String(r.id)]),
       coins: Number(r.coins) || 0,
       careerXp: Number(r.career_xp) || 0,
       userId: r.user_id == null ? undefined : String(r.user_id),
@@ -144,6 +148,7 @@ export function loadState(db: Db): GameState {
     goldenRevealed: parseBool(meta(db, 'goldenRevealed'), false),
     onboarded: parseBool(meta(db, 'onboarded'), false),
     localPlay: parseBool(meta(db, 'localPlay'), false),
+    activeDays,
   };
 }
 
@@ -218,6 +223,7 @@ export function saveState(db: Db, state: GameState): SaveResult {
       ['goldenRevealed', state.goldenRevealed ? '1' : '0'],
       ['onboarded', state.onboarded ? '1' : '0'],
       ['localPlay', state.localPlay ? '1' : '0'],
+      ['activeDays', JSON.stringify(state.activeDays ?? {})],
     ];
     for (const [k, v] of metaPairs) {
       db.run('INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', [k, v]);
@@ -288,7 +294,22 @@ function freshState(): GameState {
     goldenRevealed: false,
     onboarded: false,
     localPlay: false,
+    activeDays: {},
   };
+}
+
+/** Tolerant read: a missing or corrupt record simply starts the streak over. */
+function parseActiveDays(raw: string | null): Record<string, string[]> {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return Object.fromEntries(Object.entries(parsed as Record<string, unknown>)
+      .filter(([, days]) => Array.isArray(days))
+      .map(([fighterId, days]) => [fighterId, (days as unknown[]).filter((day): day is string => typeof day === 'string')]));
+  } catch {
+    return {};
+  }
 }
 
 function parseBool(v: string | null, dflt: boolean): boolean {

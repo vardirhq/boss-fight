@@ -3,6 +3,11 @@ import test from 'node:test';
 import {
   bossFilter,
   cycleKey,
+  dayKey,
+  householdStreak,
+  mergeActiveDays,
+  recordActiveDay,
+  streakFrom,
   isAwake,
   isDue,
   isElite,
@@ -80,4 +85,61 @@ test('boss status, bilingual schedule copy, levels, and weekday labels cover bou
   assert.equal(todayShort(new Date(2026, 7, 5, 12)), 'ons');
   assert.equal(levelInfo(240, 'en').title, 'Knight');
   assert.equal(todayShort(new Date(2026, 7, 5, 12), 'en'), 'wed');
+});
+
+test('day keys are local calendar days and roll over correctly', () => {
+  assert.equal(dayKey(new Date(2026, 7, 6, 23, 59)), '2026-08-06');
+  assert.equal(dayKey(new Date(2026, 0, 1, 0, 0)), '2026-01-01');
+  assert.equal(dayKey(new Date(2026, 11, 31, 12, 0)), '2026-12-31');
+});
+
+test('an active day is recorded once and the record stays bounded', () => {
+  assert.deepEqual(recordActiveDay([], '2026-08-06'), ['2026-08-06']);
+  // A retry, a second device, or a replayed sync page must not add the day twice.
+  assert.deepEqual(recordActiveDay(['2026-08-06'], '2026-08-06'), ['2026-08-06']);
+  assert.deepEqual(recordActiveDay(['2026-08-06'], '2026-08-05'), ['2026-08-05', '2026-08-06']);
+  const many = Array.from({ length: 200 }, (_, index) => `2026-01-${String((index % 28) + 1).padStart(2, '0')}`);
+  assert.ok(recordActiveDay(many, '2026-08-06', 90).length <= 90);
+});
+
+test('a streak counts consecutive days and survives a day not yet played', () => {
+  const days = ['2026-08-03', '2026-08-04', '2026-08-05', '2026-08-06'];
+  assert.equal(streakFrom(days, '2026-08-06'), 4);
+  // Today has no chore yet: the run is still alive, counted from yesterday.
+  assert.equal(streakFrom(days, '2026-08-07'), 4);
+  // A whole day was missed, so the run is over.
+  assert.equal(streakFrom(days, '2026-08-08'), 0);
+  assert.equal(streakFrom([], '2026-08-06'), 0);
+  assert.equal(streakFrom(undefined, '2026-08-06'), 0);
+});
+
+test('a gap breaks the streak rather than counting total days', () => {
+  const days = ['2026-08-01', '2026-08-02', '2026-08-05', '2026-08-06'];
+  assert.equal(streakFrom(days, '2026-08-06'), 2, 'only the run ending today counts');
+});
+
+test('a streak spans month and year boundaries', () => {
+  assert.equal(streakFrom(['2026-01-30', '2026-01-31', '2026-02-01'], '2026-02-01'), 3);
+  assert.equal(streakFrom(['2025-12-31', '2026-01-01'], '2026-01-01'), 2);
+});
+
+test('the household streak is alive if any fighter kept it going', () => {
+  const activeDays = {
+    ada: ['2026-08-04', '2026-08-06'],
+    bob: ['2026-08-05'],
+  };
+  // Neither fighter has three days alone, but between them the family never missed one.
+  assert.equal(streakFrom(activeDays.ada, '2026-08-06'), 1);
+  assert.equal(householdStreak(activeDays, '2026-08-06'), 3);
+  assert.equal(householdStreak({}, '2026-08-06'), 0);
+  assert.equal(householdStreak(undefined, '2026-08-06'), 0);
+});
+
+test('merging day records from two devices keeps the union without duplicates', () => {
+  const merged = mergeActiveDays(
+    { ada: ['2026-08-05', '2026-08-06'] },
+    { ada: ['2026-08-06', '2026-08-07'], bob: ['2026-08-07'] },
+  );
+  assert.deepEqual(merged.ada, ['2026-08-05', '2026-08-06', '2026-08-07']);
+  assert.deepEqual(merged.bob, ['2026-08-07']);
 });

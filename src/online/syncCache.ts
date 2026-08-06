@@ -35,6 +35,13 @@ function normalizeAmounts(value: unknown): Record<string, number> {
     .filter(([, amount]) => typeof amount === 'number' && Number.isFinite(amount))) as Record<string, number>;
 }
 
+function normalizeDayLists(value: unknown): Record<string, string[]> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(value as Record<string, unknown>)
+    .filter(([, days]) => Array.isArray(days))
+    .map(([id, days]) => [id, (days as unknown[]).filter((day): day is string => typeof day === 'string')]));
+}
+
 function finiteNumber(value: unknown) {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
@@ -54,6 +61,7 @@ function normalizeTotals(value: unknown): SyncTotals | null {
     coins: normalizeAmounts(totals.coins),
     pool: finiteNumber(totals.pool),
     careerXp: normalizeAmounts(totals.careerXp),
+    activeDays: normalizeDayLists(totals.activeDays),
     victories: finiteNumber(totals.victories),
     rareVictory: totals.rareVictory === true,
   };

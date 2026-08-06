@@ -14,7 +14,7 @@ export const syncPublicFields = {
   chores: ['id', 'boss_id', 'title', 'damage', 'repeatable', 'sort', 'deleted'],
   chore_completions: [
     'id', 'boss_id', 'chore_id', 'fighter_id', 'cycle_key', 'reset_seq',
-    'chore_title', 'damage', 'voided_at', 'server_seq',
+    'chore_title', 'damage', 'voided_at', 'completed_at', 'server_seq',
   ],
   boss_resets: ['id', 'boss_id', 'cycle_key', 'reset_seq', 'server_seq'],
   boss_victories: ['id', 'boss_id', 'cycle_key', 'reset_seq', 'elite', 'rare', 'server_seq'],

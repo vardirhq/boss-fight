@@ -1,4 +1,4 @@
-import { maxHpOf } from '../game/logic';
+import { dayKey, maxHpOf, mergeActiveDays, streakFrom } from '../game/logic';
 import { localizedRewardTitle, remapBossName, rewardsFor } from '../game/seed';
 import { STRINGS } from '../game/i18n';
 import type { Boss, Chore, Fighter, GameState, TriggerType } from '../game/types';
@@ -246,12 +246,18 @@ export function serverSyncToGameState(sync: ServerSyncState, current: GameState)
     }))
     .reverse();
   const baseline = numberValue(configuration.household.victories_baseline);
+  const today = dayKey();
+  const activeDays = mergeActiveDays(current.activeDays, totals.activeDays);
 
   return {
     ...base,
     bosses,
+    activeDays,
     fighters: base.fighters.map((fighter) => ({
       ...fighter,
+      // Local days not yet pushed are merged in, so a streak does not dip while a
+      // completion is still queued.
+      streak: streakFrom(activeDays[fighter.id], today),
       coins: totals.coins[fighter.id] ?? 0,
       careerXp: lifetimeCareerXp(
         sync.mutable.fighters.find((row) => stringValue(row.id) === fighter.id),

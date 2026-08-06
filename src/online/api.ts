@@ -150,6 +150,8 @@ export interface SyncTotals {
   pool: number;
   /** Damage dealt since the household went online, per fighter id. */
   careerXp: Record<string, number>;
+  /** Local calendar days each fighter completed a chore on, bounded to the recent past. */
+  activeDays: Record<string, string[]>;
   victories: number;
   rareVictory: boolean;
 }

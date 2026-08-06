@@ -4,7 +4,7 @@ import {
 } from 'react';
 import { Db, type PersistenceStatus } from '../db/sqlite';
 import { resetState, saveState } from '../db/repository';
-import { maxHpOf, cycleKey, statusOf, todayShort, isElite, isAwake, ELITE_COIN_MULT } from '../game/logic';
+import { maxHpOf, cycleKey, statusOf, todayShort, isElite, isAwake, dayKey, recordActiveDay, streakFrom, ELITE_COIN_MULT } from '../game/logic';
 import { FIGHTER_COLORS, SPRITE_POOL, sumDamage } from '../game/seed';
 import { STRINGS } from '../game/i18n';
 import { AudioEngine, buzz } from './audio';
@@ -441,9 +441,17 @@ export function GameProvider({ db, initial, children }: { db: Db; initial: GameS
           completedAt: new Date().toISOString(),
         });
 
-        setState((st) => ({
+        const today = dayKey();
+        setState((st) => {
+          // Completing a chore marks the day for the fighter who did it; the cached
+          // streak is recomputed from that record rather than incremented.
+          const activeDays = { ...st.game.activeDays, [caster]: recordActiveDay(st.game.activeDays[caster], today) };
+          const casterStreak = streakFrom(activeDays[caster], today);
+          return {
           game: {
             ...st.game,
+            activeDays,
+            fighters: st.game.fighters.map((f) => (f.id === caster ? { ...f, streak: casterStreak } : f)),
             activeFighterId: st.game.activeFighterId ?? (caster || null),
             bosses: st.game.bosses.map((b) =>
               b.id === boss.id
@@ -461,7 +469,8 @@ export function GameProvider({ db, initial, children }: { db: Db; initial: GameS
             dmgNums: [...st.ui.dmgNums, { id: dmgId, label, crit, x }],
             ping: { fighterId: caster, id: pingId },
           },
-        }));
+        };
+        });
 
         hitFx(crit);
         audio.hit(crit);

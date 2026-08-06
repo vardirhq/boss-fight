@@ -22,6 +22,71 @@ export function cycleKey(boss: Boss, now = new Date()): string {
   return 'alltid';
 }
 
+/**
+ * Day streaks.
+ *
+ * The durable record is the set of local calendar days each fighter completed a chore
+ * on; `Fighter.streak` is a cached projection of it, the same way the server caches
+ * coins and career XP. Deriving rather than incrementing keeps the count correct when
+ * the same day arrives twice — a retry, a second device, or a replayed sync page.
+ */
+const ACTIVE_DAY_LIMIT = 90;
+
+/** Local calendar day, e.g. `2026-08-06`. Local on purpose: a chore belongs to the day the family did it. */
+export function dayKey(date: Date = new Date()): string {
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function previousDay(day: string): string {
+  const [year, month, date] = day.split('-').map(Number);
+  // Constructing from local parts lets the platform handle month, year and DST rollover.
+  return dayKey(new Date(year, month - 1, date - 1));
+}
+
+export function recordActiveDay(days: string[] | undefined, day: string, limit = ACTIVE_DAY_LIMIT): string[] {
+  if (days?.includes(day)) return days;
+  return [...(days ?? []), day].sort().slice(-limit);
+}
+
+export function mergeActiveDays(
+  current: Record<string, string[]> | undefined,
+  incoming: Record<string, string[]> | undefined,
+  limit = ACTIVE_DAY_LIMIT,
+): Record<string, string[]> {
+  const merged: Record<string, string[]> = {};
+  for (const source of [current ?? {}, incoming ?? {}]) {
+    for (const [fighterId, days] of Object.entries(source)) {
+      merged[fighterId] = [...new Set([...(merged[fighterId] ?? []), ...days])].sort().slice(-limit);
+    }
+  }
+  return merged;
+}
+
+/**
+ * Consecutive days up to and including today.
+ *
+ * A streak counts from yesterday while today's chores have not happened yet, so it
+ * only breaks once a whole day is actually missed rather than every midnight.
+ */
+export function streakFrom(days: string[] | undefined, today: string = dayKey()): number {
+  if (!days?.length) return 0;
+  const active = new Set(days);
+  let cursor = active.has(today) ? today : previousDay(today);
+  if (!active.has(cursor)) return 0;
+  let streak = 0;
+  while (active.has(cursor)) {
+    streak += 1;
+    cursor = previousDay(cursor);
+  }
+  return streak;
+}
+
+/** The family's streak: any fighter's chore keeps the household's run alive. */
+export function householdStreak(activeDays: Record<string, string[]> | undefined, today: string = dayKey()): number {
+  return streakFrom(Object.values(activeDays ?? {}).flat(), today);
+}
+
 /** Small stable string hash (djb2), used for deterministic per-cycle rolls. */
 export function hashStr(s: string): number {
   let h = 5381;

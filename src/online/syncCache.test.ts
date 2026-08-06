@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { emptySyncEventCache, foldSyncCache, emptySyncCache, syncCursors, syncHasMore } from './syncCache';
 import { retainedEvents, syncTotalsFromEvents } from './syncTotals';
+import { dayKey } from '../game/logic.ts';
 
 test('folded pages advance independent cursors and accumulate running totals', () => {
   const first = emptySyncEventCache();
@@ -85,4 +86,26 @@ test('pagination continues while any independent event stream has more rows', ()
   assert.equal(syncHasMore({ eventHasMore } as never), true);
   eventHasMore.boss_victories = false;
   assert.equal(syncHasMore({ eventHasMore } as never), false);
+});
+
+test('completion days fold into totals so streaks outlive the pruned event tail', () => {
+  const page = emptySyncEventCache();
+  page.chore_completions = [
+    { id: 'a', server_seq: 1, fighter_id: 'f1', damage: 10, completed_at: '2026-08-05T09:00:00Z' },
+    { id: 'b', server_seq: 2, fighter_id: 'f1', damage: 10, completed_at: '2026-08-05T18:00:00Z' },
+    { id: 'c', server_seq: 3, fighter_id: 'f2', damage: 10, completed_at: '2026-08-06T08:00:00Z' },
+    { id: 'd', server_seq: 4, fighter_id: 'f1', damage: 10, voided_at: 'now', completed_at: '2026-08-07T08:00:00Z' },
+    { id: 'e', server_seq: 5, fighter_id: 'f1', damage: 10, completed_at: 'not a timestamp' },
+  ];
+  const cache = foldSyncCache(emptySyncCache(), page);
+  // Two chores on one day count as one day; a voided or unparseable row contributes none.
+  assert.deepEqual(cache.totals.activeDays.f1, [dayKey(new Date('2026-08-05T09:00:00Z'))]);
+  assert.deepEqual(cache.totals.activeDays.f2, [dayKey(new Date('2026-08-06T08:00:00Z'))]);
+});
+
+test('a re-delivered page does not extend the day record twice', () => {
+  const page = emptySyncEventCache();
+  page.chore_completions = [{ id: 'a', server_seq: 1, fighter_id: 'f1', damage: 10, completed_at: '2026-08-05T09:00:00Z' }];
+  const twice = foldSyncCache(foldSyncCache(emptySyncCache(), page), page);
+  assert.equal(twice.totals.activeDays.f1.length, 1);
 });

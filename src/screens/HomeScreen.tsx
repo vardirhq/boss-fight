@@ -2,7 +2,7 @@ import { useGame } from '../store/GameContext';
 import { mayManageHousehold, useOnline } from '../online/OnlineContext';
 import { BossSprite, useT, GOLD } from '../ui/common';
 import { EditIcon } from './BattleScreen';
-import { maxHpOf, scheduleLabel, statusOf, whenText, hexA, isAwake, isElite, slumberInfo, bossFilter, type BossStatus } from '../game/logic';
+import { maxHpOf, scheduleLabel, statusOf, whenText, hexA, isAwake, isElite, slumberInfo, bossFilter, householdStreak, type BossStatus } from '../game/logic';
 import { DAY_SHORT } from '../game/i18n';
 import type { Boss } from '../game/types';
 
@@ -45,7 +45,7 @@ export function HomeScreen() {
 
       <div style={{ display: 'flex', gap: 10, marginTop: 22 }}>
         <Stat value={g.victories} label={t.statBosses} color="#F6EBDD" />
-        <Stat value={5} label={t.statStreak} color="#67D391" />
+        <Stat value={householdStreak(g.activeDays)} label={t.statStreak} color="#67D391" />
         <Stat value={g.pool} label={t.statPool} color="#8fc0ff" />
       </div>
 
