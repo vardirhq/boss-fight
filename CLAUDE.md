@@ -51,7 +51,7 @@ development aid, not an installable browser product.
 src/
   main.tsx            Boot: opens the DB, loads state, mounts <GameProvider><App/>
   App.tsx             Tab router + overlay mounting (all screens live here)
-  styles.css          CSS reset + ALL @keyframes (animations are referenced by name from inline styles)
+  styles.css          @font-face (bundled fonts) + CSS reset + ALL @keyframes (animations are referenced by name from inline styles)
   db/
     sqlite.ts         Db class: sqlite-wasm wrapper, OPFS-or-localStorage persistence
     schema.ts         DDL, table list, SCHEMA_VERSION, version read/write
@@ -177,6 +177,10 @@ The browser-development fallback remains web storage because native APIs are una
   `#6C7486` (`DIM`), cream text `#F6EBDD`, danger `#E0564A`, success `#67D391`.
   `ui/common.tsx` exports `GOLD`/`DIM`. The `'Press Start 2P'` pixel font (aliased
   `PS` locally in screens) is used for arcade headings; `Space Grotesk` is body.
+  Both are **bundled** in `public/fonts` and declared with `@font-face` in
+  `styles.css` — never load fonts (or anything else) from a remote origin: the app
+  must render offline, and a contract test fails the build if `index.html` gains a
+  third-party URL or the CSP widens.
 - **i18n**: never hardcode user-facing text. Add a key to the `Strings` interface
   and both `no`/`en` tables in `game/i18n.ts`, then read it via `const t = useT()`.
   Some strings contain `{placeholder}` tokens or `<br>` and are interpolated at
