@@ -30,11 +30,16 @@ launch_app() {
 }
 
 dump_tree() {
-  for _attempt in $(seq 1 5); do
-    if timeout 15s adb shell uiautomator dump /sdcard/boss-kamp-window.xml >/dev/null 2>&1 \
+  # UIAutomator can take longer than the adb shell RPC on a cold, heavily
+  # loaded emulator. Start the dump in the guest and poll for its output so a
+  # slow RPC does not kill the dump process halfway through.
+  timeout 10s adb shell rm -f /sdcard/boss-kamp-window.xml >/dev/null 2>&1 || true
+  timeout 10s adb shell 'uiautomator dump --compressed /sdcard/boss-kamp-window.xml >/dev/null 2>&1 &' >/dev/null 2>&1 || true
+  for _attempt in $(seq 1 30); do
+    if timeout 10s adb shell test -s /sdcard/boss-kamp-window.xml >/dev/null 2>&1 \
       && timeout 10s adb pull /sdcard/boss-kamp-window.xml "$WINDOW_DUMP" >/dev/null 2>&1 \
       && grep -q '<hierarchy' "$WINDOW_DUMP"; then return 0; fi
-    sleep 1
+    sleep 2
   done
   echo "Could not read the native accessibility tree" >&2
   adb shell uiautomator dump /dev/tty || true
