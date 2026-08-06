@@ -17,6 +17,8 @@ increasing Android version codes for install/update compatibility.
   composition root with independent contract tests.
 - Extract boss, chore, and reward CRUD into an explicitly authorized gameplay
   route module with a complete registration contract.
+- Extract invitation delivery/acceptance and personal/shared-device pairing into
+  a dedicated token-lifecycle route module.
 - Upgrade Vite and its React plugin, refresh vulnerable transitive build tools,
   split account/management screens from the initial bundle, and enforce a High
   severity audit gate for dependencies shipped in the app.
