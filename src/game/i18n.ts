@@ -43,6 +43,7 @@ export interface Strings {
   cancel: string; resetYes: string; about: string; done: string;
   levelTitles: string[]; newChore: string; newBoss: string; sharedWho: string;
   redeemedFlash: string; sharedRewardFlash: string; transferFlash: string;
+  voucherUsed: string; voucherUsedFlash: string;
   transferAll: string; householdFallback: string; fighterFallback: string;
   persistenceFallback: string; persistenceRestoreFailed: string; persistenceWriteFailed: string;
   downloadBackup: string; retrySave: string;
@@ -96,6 +97,7 @@ export const STRINGS: Record<Lang, Strings> = {
     cancel: 'Avbryt', resetYes: 'Slett alt', about: 'Boss Kamp · v1.0', done: 'FERDIG',
     levelTitles: ['Væpner', 'Ridder', 'Kriger', 'Helt', 'Mester'], newChore: 'Nytt gjøremål', newBoss: 'Ny boss', sharedWho: 'Felles',
     redeemedFlash: '{name} løste inn: {reward}', sharedRewardFlash: 'Fellesbelønning: {reward}', transferFlash: '{name} ga {amount} til fellespotten',
+    voucherUsed: 'Brukt', voucherUsedFlash: 'Brukt: {reward}',
     transferAll: 'ALT →', householdFallback: 'Familien', fighterFallback: 'Spiller',
     persistenceFallback: 'Begrenset lagring: spillet bruker en lokal nettleserkopi. Last ned en sikkerhetskopi for ekstra trygghet.',
     persistenceRestoreFailed: 'Den lokale sikkerhetskopien kunne ikke leses. Nye endringer lagres separat; last ned en kopi for gjenoppretting.',
@@ -149,6 +151,7 @@ export const STRINGS: Record<Lang, Strings> = {
     cancel: 'Cancel', resetYes: 'Delete all', about: 'Boss Kamp · v1.0', done: 'DONE',
     levelTitles: ['Squire', 'Knight', 'Warrior', 'Hero', 'Champion'], newChore: 'New chore', newBoss: 'New boss', sharedWho: 'Shared',
     redeemedFlash: '{name} redeemed: {reward}', sharedRewardFlash: 'Shared reward: {reward}', transferFlash: '{name} gave {amount} to the shared pool',
+    voucherUsed: 'Used', voucherUsedFlash: 'Used: {reward}',
     transferAll: 'ALL →', householdFallback: 'The family', fighterFallback: 'Fighter',
     persistenceFallback: 'Limited storage: the game is using a local browser copy. Download a backup for extra safety.',
     persistenceRestoreFailed: 'The local backup could not be read. New changes use a separate copy; download it for recovery.',

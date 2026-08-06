@@ -9,6 +9,7 @@ import { FIGHTER_COLORS, SPRITE_POOL, sumDamage } from '../game/seed';
 import { STRINGS } from '../game/i18n';
 import { AudioEngine, buzz } from './audio';
 import { mayActAsFighter, mayManageHousehold, useOnline } from '../online/OnlineContext';
+import { isVoucherId, voucherId } from '../online/syncQueue';
 import { createBootstrapSnapshot, serverSyncToGameState } from '../online/gameSync';
 import type { SyncMutationType } from '../online/api';
 import type {
@@ -259,13 +260,21 @@ export function GameProvider({ db, initial, children }: { db: Db; initial: GameS
 
     const reduce = () => stateRef.current.game.settings.reducedMotion;
 
-    const queueMutation = (type: SyncMutationType, payload: Record<string, unknown>) => {
-      if (!onlineRef.current.state.configurationConnectedAt) return;
+    /**
+     * Returns the queued mutation's id, or null when the household is local-only or
+     * the mutation could not be queued. The server uses that id as the primary key of
+     * the row the mutation creates, so callers that also build an optimistic local
+     * record adopt it as the record's id rather than inventing their own.
+     */
+    const queueMutation = (type: SyncMutationType, payload: Record<string, unknown>): string | null => {
+      if (!onlineRef.current.state.configurationConnectedAt) return null;
       try {
-        onlineRef.current.actions.enqueueMutation(type, payload);
+        const id = onlineRef.current.actions.enqueueMutation(type, payload);
         window.setTimeout(() => void onlineRef.current.actions.flushMutations().catch(() => undefined), 0);
+        return id;
       } catch (error) {
         console.warn('[sync] mutation queue failed', error);
+        return null;
       }
     };
 
@@ -730,16 +739,16 @@ export function GameProvider({ db, initial, children }: { db: Db; initial: GameS
         const id = s.game.activeFighterId;
         const fighter = s.game.fighters.find((f) => f.id === id);
         if (!fighter || fighter.coins < r.cost) return;
-        queueMutation('reward_redemption', {
+        const vid = queueMutation('reward_redemption', {
           rewardId: r.id,
           fighterId: fighter.id,
-        });
+        }) ?? voucherId();
         buzz('crit', s.game.settings.haptics);
         patchGame((g) => ({
           ...g,
           fighters: g.fighters.map((f) => (f.id === id ? { ...f, coins: f.coins - r.cost } : f)),
           redemptions: [
-            { vid: String(Date.now() + Math.random()), rewardId: r.id, icon: r.icon, title: r.title, cost: r.cost, at: todayShort(new Date(), g.settings.lang), who: fighter.name, used: false },
+            { vid, rewardId: r.id, icon: r.icon, title: r.title, cost: r.cost, at: todayShort(new Date(), g.settings.lang), who: fighter.name, used: false },
             ...g.redemptions,
           ].slice(0, 12),
         }));
@@ -749,16 +758,16 @@ export function GameProvider({ db, initial, children }: { db: Db; initial: GameS
         const s = stateRef.current;
         const copy = STRINGS[s.game.settings.lang];
         if (s.game.pool < r.cost) return;
-        queueMutation('reward_redemption', {
+        const vid = queueMutation('reward_redemption', {
           rewardId: r.id,
           fighterId: null,
-        });
+        }) ?? voucherId();
         buzz('win', s.game.settings.haptics);
         patchGame((g) => ({
           ...g,
           pool: g.pool - r.cost,
           redemptions: [
-            { vid: String(Date.now() + Math.random()), rewardId: r.id, icon: r.icon, title: r.title, cost: r.cost, at: todayShort(new Date(), g.settings.lang), who: copy.sharedWho, used: false },
+            { vid, rewardId: r.id, icon: r.icon, title: r.title, cost: r.cost, at: todayShort(new Date(), g.settings.lang), who: copy.sharedWho, used: false },
             ...g.redemptions,
           ].slice(0, 12),
         }));
@@ -789,14 +798,20 @@ export function GameProvider({ db, initial, children }: { db: Db; initial: GameS
       useVoucher: (vid) => {
         const s = stateRef.current;
         if (!mayManageHousehold(onlineRef.current.state)) return;
+        const copy = STRINGS[s.game.settings.lang];
         const entry = s.game.redemptions.find((x) => x.vid === vid);
-        queueMutation('reward_redemption_update', { redemptionId: vid, status: 'used' });
+        // Vouchers issued before redemptions shared an id with their mutation carry a
+        // local-only id the server cannot resolve. Sending one is rejected for good and
+        // shows up as a stuck conflict; those vouchers reconcile on the next pull.
+        if (isVoucherId(vid)) {
+          queueMutation('reward_redemption_update', { redemptionId: vid, status: 'used' });
+        }
         patchGame((g) => ({
           ...g,
           redemptions: g.redemptions.map((x) => (x.vid === vid ? { ...x, used: true } : x)),
         }));
         buzz('win', s.game.settings.haptics);
-        flash('Brukt' + (entry ? ': ' + entry.title : ''));
+        flash(entry ? copy.voucherUsedFlash.replace('{reward}', entry.title) : copy.voucherUsed);
       },
       retrySave: () => {
         const result = saveState(db, stateRef.current.game);
