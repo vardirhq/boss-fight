@@ -37,6 +37,10 @@ export function syncCursors(events: SyncEventCache): SyncCursors {
   };
 }
 
+export function syncHasMore(sync: ServerSyncState) {
+  return streams.some((stream) => sync.eventHasMore?.[stream] === true);
+}
+
 export function saveSyncEventCache(householdId: string, events: SyncEventCache) {
   try { localStorage.setItem(`${PREFIX}${householdId}`, JSON.stringify(events)); } catch { /* Refetch safely next time. */ }
 }

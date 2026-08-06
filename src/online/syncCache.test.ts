@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { emptySyncEventCache, mergeSyncEvents, syncCursors } from './syncCache';
+import { emptySyncEventCache, mergeSyncEvents, syncCursors, syncHasMore } from './syncCache';
 
 test('incremental events merge by identity and advance independent cursors', () => {
   const current = emptySyncEventCache();
@@ -15,4 +15,14 @@ test('incremental events merge by identity and advance independent cursors', () 
   assert.deepEqual(syncCursors(merged), {
     chore_completions: 5, boss_resets: 0, boss_victories: 0, wallet_transactions: 9, reward_redemptions: 7,
   });
+});
+
+test('pagination continues while any independent event stream has more rows', () => {
+  const eventHasMore = {
+    chore_completions: false, boss_resets: false, boss_victories: true,
+    wallet_transactions: false, reward_redemptions: false,
+  };
+  assert.equal(syncHasMore({ eventHasMore } as never), true);
+  eventHasMore.boss_victories = false;
+  assert.equal(syncHasMore({ eventHasMore } as never), false);
 });

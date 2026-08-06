@@ -28,7 +28,7 @@ import {
   loadNativeCredentials, saveNativeCredentials, usesNativeCredentialStorage,
 } from './credentialStorage';
 import type { Fighter } from '../game/types';
-import { clearSyncEventCache, loadSyncEventCache, mergeSyncEvents, saveSyncEventCache, syncCursors } from './syncCache';
+import { clearSyncEventCache, loadSyncEventCache, mergeSyncEvents, saveSyncEventCache, syncCursors, syncHasMore } from './syncCache';
 import { clearAvatarCache, knownAvatarHashes, loadAvatarCache, mergeAvatarCache, saveAvatarCache } from './avatarCache';
 import { clearConfigurationCache, loadConfigurationCache, mergeConfigurationCache, saveConfigurationCache } from './configurationCache';
 
@@ -495,16 +495,23 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
               return next;
             });
           }
-          const cachedEvents = loadSyncEventCache(householdId);
-          const cachedAvatars = loadAvatarCache(householdId);
-          const cachedConfiguration = loadConfigurationCache(householdId);
-          latest = await pullSyncState(token, householdId, syncCursors(cachedEvents), knownAvatarHashes(cachedAvatars), cachedConfiguration?.revision ?? null, householdDeviceToken);
-          latest = { ...latest, events: mergeSyncEvents(cachedEvents, latest.events) };
-          latest = mergeConfigurationCache(latest, cachedConfiguration);
-          latest.mutable.fighter_avatars = mergeAvatarCache(latest.mutable.fighters, cachedAvatars, latest.mutable.fighter_avatars);
-          saveSyncEventCache(householdId, latest.events);
-          saveAvatarCache(householdId, latest.mutable.fighter_avatars);
-          saveConfigurationCache(householdId, latest);
+          let cachedEvents = loadSyncEventCache(householdId);
+          let cachedAvatars = loadAvatarCache(householdId);
+          let cachedConfiguration = loadConfigurationCache(householdId);
+          let pageHasMore: boolean;
+          do {
+            latest = await pullSyncState(token, householdId, syncCursors(cachedEvents), knownAvatarHashes(cachedAvatars), cachedConfiguration?.revision ?? null, householdDeviceToken);
+            pageHasMore = syncHasMore(latest);
+            latest = { ...latest, events: mergeSyncEvents(cachedEvents, latest.events) };
+            latest = mergeConfigurationCache(latest, cachedConfiguration);
+            latest.mutable.fighter_avatars = mergeAvatarCache(latest.mutable.fighters, cachedAvatars, latest.mutable.fighter_avatars);
+            cachedEvents = latest.events;
+            cachedAvatars = latest.mutable.fighter_avatars;
+            cachedConfiguration = { revision: latest.configurationRevision, mutable: latest.mutable };
+            saveSyncEventCache(householdId, cachedEvents);
+            saveAvatarCache(householdId, cachedAvatars);
+            saveConfigurationCache(householdId, latest);
+          } while (pageHasMore);
           const syncedAt = new Date().toISOString();
           const revision = latest.configurationRevision;
           setState((current) => {

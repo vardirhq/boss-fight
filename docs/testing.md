@@ -19,7 +19,8 @@ release validation.
 The client suite covers pure battle rules (HP, recurrence, schedules, status,
 elite and rare behavior), progression boundaries, seed/catalog integrity,
 bootstrap validation, server-state projection, sync queue recovery, avatar cache
-invalidation and hash-gated transfers, revision-gated configuration reuse, and secure
+invalidation and hash-gated transfers, revision-gated configuration reuse,
+bounded event pagination and independent continuation signals, and secure
 credential selection. Incremental event-cache tests cover deduplication and
 independent cursor advancement. The server suite covers synchronization conflicts,
 mutation processing, reward integrity, household governance, and migration
