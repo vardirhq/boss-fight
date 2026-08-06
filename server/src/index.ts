@@ -334,7 +334,11 @@ export async function buildApp() {
 
   app.setErrorHandler((error, request, reply) => {
     const message = error instanceof Error ? error.message : 'Bad request';
-    const errorInfo = error as Error & { code?: string; statusCode?: number };
+    const errorInfo = error as Error & { code?: string; statusCode?: number; validation?: unknown };
+    if (errorInfo.statusCode === 400 || errorInfo.validation) {
+      reply.code(400).send({ error: 'Invalid request data', code: 'invalid_request' });
+      return;
+    }
     if (errorInfo.statusCode === 429) {
       reply.code(429).send({ error: 'Too many requests', code: 'rate_limited' });
       return;
