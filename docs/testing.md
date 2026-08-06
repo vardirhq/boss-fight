@@ -41,6 +41,8 @@ configured bearer secret.
 The public API error-policy suite verifies framework validation, database
 conflicts, domain rejections, authentication errors, and non-disclosing 500s
 without requiring a running HTTP server.
+Route-module contracts assert that the full boss, chore, and reward CRUD surface
+is registered behind explicit authentication and household-role dependencies.
 CI audits shipped application dependencies at High severity separately from the
 complete development toolchain at Critical severity, keeping upstream Android
 packaging findings visible while preventing them from being mistaken for APK

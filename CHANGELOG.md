@@ -15,6 +15,8 @@ increasing Android version codes for install/update compatibility.
   authenticated Prometheus metrics, and documented operational alert thresholds.
 - Extract the public API error policy and operational endpoints from the server
   composition root with independent contract tests.
+- Extract boss, chore, and reward CRUD into an explicitly authorized gameplay
+  route module with a complete registration contract.
 - Upgrade Vite and its React plugin, refresh vulnerable transitive build tools,
   split account/management screens from the initial bundle, and enforce a High
   severity audit gate for dependencies shipped in the app.
