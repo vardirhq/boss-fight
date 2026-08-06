@@ -20,7 +20,10 @@ import { acceptedPrivacyNoticeVersion, assertAdultErasureConfirmation, assertChi
 import { runOperationalRetention } from './retention.js';
 import { apiSecurityHeaders, configuredCorsOrigins, normalizedEmail, trustProxyEnabled } from './apiSecurity.js';
 import { sessionExpiry, sessionIdleCutoff, sessionPolicy } from './sessionPolicy.js';
-import { optionalBoolean, optionalBooleanOrNull, requireObjectArray } from './requestValidation.js';
+import {
+  optionalBoolean, optionalBooleanOrNull, optionalNumber, optionalNumberOrNull,
+  queryInteger, requireObjectArray,
+} from './requestValidation.js';
 import { validatedAvatar } from './avatarValidation.js';
 
 type JsonObject = Record<string, unknown>;
@@ -61,18 +64,6 @@ function requireString(value: unknown, field: string): string {
 
 function optionalString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() !== '' ? value.trim() : null;
-}
-
-function optionalNumber(value: unknown, fallback = 0): number {
-  if (value === undefined || value === null || value === '') return fallback;
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) throw new Error('Expected numeric value');
-  return parsed;
-}
-
-function optionalNumberOrNull(value: unknown): number | null {
-  if (value === undefined || value === null || value === '') return null;
-  return optionalNumber(value);
 }
 
 function requireObject(body: unknown): JsonObject {
@@ -381,6 +372,7 @@ export async function buildApp() {
       'Expected numeric value', 'Expected boolean value',
       'Avatar must be an object', 'Avatar MIME type must be', 'Avatar bytes must be',
       'Avatar exceeds the', 'Avatar bytes do not match', 'Avatar hash must be',
+      'must be a non-negative integer',
       'Password must be at least', 'PIN must be at least', 'Invalid pairing role', 'Invalid invite role',
       'Unsupported redemption status', 'email must be valid', 'Household name confirmation does not match',
       'Account email confirmation does not match', 'Invalid or expired password reset token',
@@ -1875,19 +1867,19 @@ export async function buildApp() {
     await requireHouseholdPrincipal(request, householdId);
 
     const since = {
-      chore_completions: optionalNumber(query.since_chore_completions),
-      boss_resets: optionalNumber(query.since_boss_resets),
-      boss_victories: optionalNumber(query.since_boss_victories),
-      wallet_transactions: optionalNumber(query.since_wallet_transactions),
-      reward_redemptions: optionalNumber(query.since_reward_redemptions)
+      chore_completions: queryInteger(query.since_chore_completions, 'since_chore_completions'),
+      boss_resets: queryInteger(query.since_boss_resets, 'since_boss_resets'),
+      boss_victories: queryInteger(query.since_boss_victories, 'since_boss_victories'),
+      wallet_transactions: queryInteger(query.since_wallet_transactions, 'since_wallet_transactions'),
+      reward_redemptions: queryInteger(query.since_reward_redemptions, 'since_reward_redemptions')
     };
-    const eventLimit = optionalNumber(query.event_limit, 250);
+    const eventLimit = queryInteger(query.event_limit, 'event_limit', 250);
     if (!Number.isSafeInteger(eventLimit) || eventLimit < 1 || eventLimit > 500) {
       throw new Error('event_limit must be an integer between 1 and 500');
     }
     const knownConfigurationRevision = query.known_configuration_revision === undefined
       ? null
-      : optionalNumber(query.known_configuration_revision);
+      : queryInteger(query.known_configuration_revision, 'known_configuration_revision');
     if (knownConfigurationRevision !== null && (!Number.isSafeInteger(knownConfigurationRevision) || knownConfigurationRevision < 0)) {
       throw new Error('known_configuration_revision must be a non-negative integer');
     }

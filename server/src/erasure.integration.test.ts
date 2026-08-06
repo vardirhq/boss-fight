@@ -98,6 +98,11 @@ test('PostgreSQL lifecycle erasure preserves only the documented records', {
     });
     assert.equal(coercedBoolean.status, 400);
     assert.equal(coercedBoolean.body.code, 'invalid_request');
+    const coercedNumber = await call('POST', `/api/households/${firstHousehold}/fighters`, first.token, {
+      name: 'Invalid fighter', color: '#F4B942', sort: '1',
+    });
+    assert.equal(coercedNumber.status, 400);
+    assert.equal(coercedNumber.body.code, 'invalid_request');
     const fighter = await call('POST', `/api/households/${firstHousehold}/fighters`, first.token, {
       name: 'Child Name', color: '#F4B942', sort: 1,
     });
