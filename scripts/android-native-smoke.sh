@@ -49,6 +49,13 @@ dump_tree() {
 
 capture_accessibility_tree() {
   dump_tree
+  if grep -q "System UI isn't responding" "$WINDOW_DUMP"; then
+    # The API 29 emulator can briefly ANR System UI while the WebView is
+    # starting. Let it recover before judging the app's accessibility tree.
+    tap_matching_node '^Wait$'
+    sleep 5
+    dump_tree
+  fi
   if ! grep -Eqi 'BOSS KAMP|Boss Kamp|TRYKK|PRESS|Account|Konto' "$WINDOW_DUMP"; then
     echo "Boss Kamp content was absent from the accessibility tree" >&2
     tr '>' '>\n' < "$WINDOW_DUMP" >&2
