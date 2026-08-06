@@ -14,6 +14,24 @@ export const loginSchema = {
   },
 } as const;
 
+export const emptyBodySchema = { body: { type: 'object', additionalProperties: false, maxProperties: 0 } } as const;
+export const tokenSchema = { body: { type: 'object', additionalProperties: false, required: ['token'], properties: { token: boundedText(512) } } } as const;
+export const emailSchema = { body: { type: 'object', additionalProperties: false, required: ['email'], properties: { email: boundedText(254) } } } as const;
+export const resetConfirmSchema = { body: { type: 'object', additionalProperties: false, required: ['token', 'password'], properties: { token: boundedText(512), password: boundedText(256, 10) } } } as const;
+export const childLoginSchema = {
+  body: { type: 'object', additionalProperties: false, required: ['householdId', 'fighterId', 'pin'], properties: {
+    householdId: boundedText(128), fighterId: boundedText(128), pin: boundedText(32),
+    deviceName: boundedText(120, 0), platform: boundedText(64, 0),
+  } },
+} as const;
+export const childPairSchema = {
+  body: { type: 'object', additionalProperties: false, required: ['code', 'pin'], properties: {
+    code: boundedText(128), pin: boundedText(32), deviceName: boundedText(120, 0), platform: boundedText(64, 0),
+  } },
+} as const;
+export const sessionParamsSchema = { params: { type: 'object', additionalProperties: false, required: ['sessionId'], properties: { sessionId: boundedText(128) } } } as const;
+export const eraseAdultSchema = { body: { type: 'object', additionalProperties: false, required: ['password', 'confirmedEmail'], properties: { password: boundedText(256), confirmedEmail: boundedText(254) } } } as const;
+
 const cursor = { type: 'string', pattern: '^(0|[1-9][0-9]*)$', maxLength: 16 } as const;
 
 export const syncPullSchema = {

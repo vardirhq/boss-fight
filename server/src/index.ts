@@ -25,7 +25,11 @@ import {
   optionalString, queryInteger, requiredString, requireObjectArray, stringValue,
 } from './requestValidation.js';
 import { validatedAvatar } from './avatarValidation.js';
-import { loginSchema, registerSchema, syncPullSchema, syncPushSchema } from './routeSchemas.js';
+import {
+  childLoginSchema, childPairSchema, emailSchema, emptyBodySchema, eraseAdultSchema,
+  loginSchema, registerSchema, resetConfirmSchema, sessionParamsSchema, syncPullSchema,
+  syncPushSchema, tokenSchema,
+} from './routeSchemas.js';
 
 type JsonObject = Record<string, unknown>;
 type AuthContext = { userId: string; sessionId: string };
@@ -442,7 +446,7 @@ export async function buildApp() {
     return { user: { id: user.id, email: user.email, displayName: user.display_name, emailVerified: Boolean(user.email_verified_at) }, session };
   });
 
-  app.post('/api/auth/email-verification/resend', { config: { rateLimit: { max: 5, timeWindow: '1 hour' } } }, async (request) => {
+  app.post('/api/auth/email-verification/resend', { schema: emptyBodySchema, config: { rateLimit: { max: 5, timeWindow: '1 hour' } } }, async (request) => {
     const auth = await requireAuth(request);
     const [user] = await sql`select email, display_name, email_verified_at from users where id = ${auth.userId} and kind = 'adult' and deleted_at is null`;
     if (!user) throw new Error('Not found');
@@ -450,7 +454,7 @@ export async function buildApp() {
     return { accepted: true };
   });
 
-  app.post('/api/auth/email-verification/confirm', async (request) => {
+  app.post('/api/auth/email-verification/confirm', { schema: tokenSchema }, async (request) => {
     const token = requireString(requireObject(request.body).token, 'token');
     return sql.begin(async (tx) => {
       const [record] = await tx`select id, user_id from email_verification_tokens where token_hash = ${tokenHash(token)} and used_at is null and expires_at > now() for update`;
@@ -462,6 +466,7 @@ export async function buildApp() {
   });
 
   app.post('/api/auth/password-reset/request', {
+    schema: emailSchema,
     config: { rateLimit: { max: 5, timeWindow: '1 hour' } },
   }, async (request) => {
     const body = requireObject(request.body);
@@ -494,6 +499,7 @@ export async function buildApp() {
   });
 
   app.post('/api/auth/password-reset/confirm', {
+    schema: resetConfirmSchema,
     config: { rateLimit: { max: 10, timeWindow: '1 hour' } },
   }, async (request) => {
     const body = requireObject(request.body);
@@ -517,7 +523,7 @@ export async function buildApp() {
     });
   });
 
-  app.post('/api/auth/child-login', { config: { rateLimit: childAuthRateLimit } }, async (request) => {
+  app.post('/api/auth/child-login', { schema: childLoginSchema, config: { rateLimit: childAuthRateLimit } }, async (request) => {
     const body = requireObject(request.body);
     const householdId = requireString(body.householdId, 'householdId');
     const fighterId = requireString(body.fighterId, 'fighterId');
@@ -568,7 +574,7 @@ export async function buildApp() {
     };
   });
 
-  app.post('/api/auth/child-pair', { config: { rateLimit: childAuthRateLimit } }, async (request) => {
+  app.post('/api/auth/child-pair', { schema: childPairSchema, config: { rateLimit: childAuthRateLimit } }, async (request) => {
     const body = requireObject(request.body);
     const code = requireString(body.code, 'code').toUpperCase();
     const pin = requireString(body.pin, 'pin');
@@ -628,7 +634,7 @@ export async function buildApp() {
     return { ...result, session };
   });
 
-  app.post('/api/auth/logout', async (request) => {
+  app.post('/api/auth/logout', { schema: emptyBodySchema }, async (request) => {
     const auth = await requireAuth(request);
     await sql`update sessions set revoked_at = now() where id = ${auth.sessionId}`;
     return { ok: true };
@@ -659,7 +665,7 @@ export async function buildApp() {
     })) };
   });
 
-  app.delete('/api/me/sessions/:sessionId', async (request) => {
+  app.delete('/api/me/sessions/:sessionId', { schema: sessionParamsSchema }, async (request) => {
     const auth = await requireAuth(request);
     const sessionId = requireString((request.params as JsonObject).sessionId, 'sessionId');
     const [session] = await sql`
@@ -690,7 +696,7 @@ export async function buildApp() {
     return { user, households };
   });
 
-  app.delete('/api/me', async (request) => {
+  app.delete('/api/me', { schema: eraseAdultSchema }, async (request) => {
     const auth = await requireAuth(request);
     const body = requireObject(request.body);
     const password = requireString(body.password, 'password');

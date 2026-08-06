@@ -129,7 +129,7 @@ landed but the recommendation is not yet satisfied in full.
 | BF-017 | Remediated | Language-key parity and English regression tests cover generated labels; reward definitions, voucher and transfer copy, shared attribution, fallback names, level titles, and weekdays now follow the active language across local and synchronized state. |
 | BF-018 | Remediated | Database writes return explicit results; fallback, corrupt-restore, and failed-write states remain visibly announced with retry and SQLite backup actions, with quota and corruption regression tests. |
 | BF-019 | Open | Backend route/service decomposition remains. |
-| BF-020 | In progress | Shared validators reject coercion, bound arrays and strings, constrain numbers, and validate avatar contents. Non-coercing closed schemas now protect adult registration/login and sync pull/push. Schemas for the remaining account, household-management, and gameplay routes plus tighter domain-specific numeric ranges remain. |
+| BF-020 | In progress | Shared validators reject coercion, bound inputs, and validate avatars. Non-coercing closed schemas protect adult/child authentication, verification, password reset, session/account lifecycle, and sync pull/push. Household-management and gameplay route schemas plus tighter domain-specific numeric ranges remain. |
 | BF-021 | Open | Client and operational observability remain. |
 | BF-022 | Open | Planned build-dependency upgrades remain. |
 
