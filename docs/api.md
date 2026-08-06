@@ -845,6 +845,7 @@ since_boss_victories=0
 since_wallet_transactions=0
 since_reward_redemptions=0
 known_avatar_hashes={"fighter-uuid":"sha256-hex"}
+known_configuration_revision=12
 ```
 
 Clients persist the greatest `server_seq` received for each event stream and
@@ -855,6 +856,10 @@ Clients also send the hashes of locally cached fighter avatars. Fighter rows
 include `avatar_hash`; matching avatar bytes are omitted from the response, and
 clients retain cached bytes only when that hash still matches. A changed hash
 returns the replacement payload, while a missing hash removes the cached avatar.
+When `known_configuration_revision` matches the current household revision, the
+response sets `configurationUnchanged` to `true` and returns empty mutable
+collections. Clients must reuse a complete cache for that exact revision; clients
+without one omit the parameter and receive the full mutable configuration.
 
 Response:
 
@@ -862,6 +867,7 @@ Response:
 {
   "serverTime": "2026-08-03T17:17:20.067Z",
   "configurationRevision": 12,
+  "configurationUnchanged": false,
   "mutable": {
     "households": [],
     "fighters": [],

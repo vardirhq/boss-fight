@@ -390,7 +390,8 @@ export async function buildApp() {
       'Password must be at least', 'PIN must be at least', 'Invalid pairing role', 'Invalid invite role',
       'Unsupported redemption status', 'email must be valid', 'Household name confirmation does not match',
       'Account email confirmation does not match', 'Invalid or expired password reset token',
-      'Invalid or expired email verification token', 'known_avatar_hashes must be valid'
+      'Invalid or expired email verification token', 'known_avatar_hashes must be valid',
+      'known_configuration_revision must be a non-negative integer'
     ];
     if (validationMessages.some((part) => message.includes(part))) {
       reply.code(400).send({ error: message, code: 'invalid_request' });
@@ -1889,6 +1890,12 @@ export async function buildApp() {
       wallet_transactions: optionalNumber(query.since_wallet_transactions),
       reward_redemptions: optionalNumber(query.since_reward_redemptions)
     };
+    const knownConfigurationRevision = query.known_configuration_revision === undefined
+      ? null
+      : optionalNumber(query.known_configuration_revision);
+    if (knownConfigurationRevision !== null && (!Number.isSafeInteger(knownConfigurationRevision) || knownConfigurationRevision < 0)) {
+      throw new Error('known_configuration_revision must be a non-negative integer');
+    }
     let knownAvatarHashes: Record<string, string> = {};
     if (query.known_avatar_hashes) {
       try {
@@ -1898,12 +1905,16 @@ export async function buildApp() {
         if (Object.keys(knownAvatarHashes).length !== Object.keys(parsed).length) throw new Error();
       } catch { throw new Error('known_avatar_hashes must be valid'); }
     }
-    const [households, fighters, avatars, bosses, chores] = await Promise.all([
-      sql`
-        select id, name, timezone, victories_baseline, configuration_revision
-        from households where id = ${householdId} and deleted_at is null
-      `,
-      sql`
+    const households = await sql`
+      select id, name, timezone, victories_baseline, configuration_revision
+      from households where id = ${householdId} and deleted_at is null
+    `;
+    const configurationRevision = Number(households[0]?.configuration_revision ?? 0);
+    const configurationUnchanged = knownConfigurationRevision === configurationRevision;
+    const [fighters, avatars, bosses, chores] = configurationUnchanged
+      ? [[], [], [], []]
+      : await Promise.all([
+        sql`
         select f.id, f.user_id, f.name, f.color, f.avatar_hash, f.streak, f.coins_cached,
           f.career_xp_cached, f.sort, (f.deleted_at is not null) as deleted,
           u.kind as user_kind, hm.status as account_status, hm.role as account_role
@@ -1912,27 +1923,27 @@ export async function buildApp() {
         left join household_members hm on hm.household_id = f.household_id and hm.user_id = f.user_id
         where f.household_id = ${householdId}
         order by f.sort, f.created_at, f.id
-      `,
-      sql`
+        `,
+        sql`
         select fa.fighter_id, fa.mime, encode(fa.bytes, 'base64') as bytes_base64, fa.hash
         from fighter_avatars fa
         join fighters f on f.id = fa.fighter_id
         where f.household_id = ${householdId}
-      `,
-      sql`
+        `,
+        sql`
         select id, name, sprite, frames, rare, hue, trigger_type, trigger_day,
           trigger_date, trigger_note, dormant, unlock_at, sort,
           (deleted_at is not null) as deleted
         from bosses where household_id = ${householdId}
         order by sort, created_at, id
-      `,
-      sql`
+        `,
+        sql`
         select id, boss_id, title, damage, repeatable, sort,
           (deleted_at is not null) as deleted
         from chores where household_id = ${householdId}
         order by boss_id, sort, created_at, id
-      `
-    ]);
+        `
+      ]);
 
     const [completions, resets, victories, wallet, redemptions] = await Promise.all([
       sql`
@@ -1966,9 +1977,10 @@ export async function buildApp() {
     const timezone = requireString(households[0]?.timezone, 'timezone');
     return {
       serverTime: new Date().toISOString(),
-      configurationRevision: Number(households[0]?.configuration_revision ?? 0),
+      configurationRevision,
+      configurationUnchanged,
       mutable: {
-        households: publicSyncRows('households', households),
+        households: configurationUnchanged ? [] : publicSyncRows('households', households),
         fighters: publicSyncRows('fighters', fighters),
         fighter_avatars: publicSyncRows('fighter_avatars', avatars.filter((avatar) => (
           knownAvatarHashes[String(avatar.fighter_id)] !== avatar.hash

@@ -136,6 +136,7 @@ export interface SyncMutationResult {
 export interface ServerSyncState {
   serverTime: string;
   configurationRevision: number;
+  configurationUnchanged?: boolean;
   mutable: {
     households: Array<Record<string, unknown>>;
     fighters: Array<Record<string, unknown>>;
@@ -454,7 +455,7 @@ export async function pushSyncMutations(token: string | null, householdId: strin
   }, token, householdDeviceToken);
 }
 
-export async function pullSyncState(token: string | null, householdId: string, cursors: SyncCursors, avatarHashes: Record<string, string>, householdDeviceToken?: string | null) {
+export async function pullSyncState(token: string | null, householdId: string, cursors: SyncCursors, avatarHashes: Record<string, string>, configurationRevision: number | null, householdDeviceToken?: string | null) {
   const query = new URLSearchParams({
     household_id: householdId,
     since_chore_completions: String(cursors.chore_completions),
@@ -464,13 +465,13 @@ export async function pullSyncState(token: string | null, householdId: string, c
     since_reward_redemptions: String(cursors.reward_redemptions),
     known_avatar_hashes: JSON.stringify(avatarHashes),
   });
+  if (configurationRevision !== null) query.set('known_configuration_revision', String(configurationRevision));
   const result = await request<Partial<ServerSyncState>>(`/api/sync/pull?${query}`, {}, token, householdDeviceToken);
   if (!result.mutable || !result.events || typeof result.serverTime !== 'string') {
     throw new ApiError('Invalid API response: sync state', 'server');
   }
-  const household = result.mutable.households[0];
-  const revision = household?.configuration_revision;
-  return { ...result, configurationRevision: typeof revision === 'number' ? revision : Number(revision ?? 0) } as ServerSyncState;
+  const revision = Number(result.configurationRevision ?? result.mutable.households[0]?.configuration_revision ?? 0);
+  return { ...result, configurationRevision: revision, configurationUnchanged: result.configurationUnchanged === true } as ServerSyncState;
 }
 
 export async function createHouseholdDevicePairing(token: string, householdId: string) {
