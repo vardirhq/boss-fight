@@ -19,6 +19,8 @@ increasing Android version codes for install/update compatibility.
   route module with a complete registration contract.
 - Extract invitation delivery/acceptance and personal/shared-device pairing into
   a dedicated token-lifecycle route module.
+- Extract bounded synchronization reads and independently committed writes into
+  dedicated route modules with explicit principal and domain dependencies.
 - Upgrade Vite and its React plugin, refresh vulnerable transitive build tools,
   split account/management screens from the initial bundle, and enforce a High
   severity audit gate for dependencies shipped in the app.
