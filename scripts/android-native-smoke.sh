@@ -14,8 +14,13 @@ trap restore_network EXIT
 
 launch_app() {
   adb shell am force-stop "$PACKAGE_NAME"
-  adb shell monkey -p "$PACKAGE_NAME" -c android.intent.category.LAUNCHER 1 >/dev/null
-  for _attempt in $(seq 1 30); do
+  local component
+  component=$(adb shell cmd package resolve-activity --brief \
+    -a android.intent.action.MAIN -c android.intent.category.LAUNCHER "$PACKAGE_NAME" \
+    | tail -n 1 | tr -d '\r')
+  test -n "$component"
+  adb shell am start -W -n "$component" >/dev/null
+  for _attempt in $(seq 1 90); do
     if adb shell pidof "$PACKAGE_NAME" >/dev/null 2>&1; then return 0; fi
     sleep 1
   done
@@ -70,6 +75,8 @@ PY
 }
 
 adb wait-for-device
+adb shell input keyevent 82
+adb shell cmd activity wait-for-broadcast-idle || true
 adb install "$BASELINE_APK"
 adb shell dumpsys package "$PACKAGE_NAME" | grep -Eq 'versionCode=1([[:space:]]|$)'
 
@@ -118,7 +125,7 @@ tap_matching_node 'PRESS TO START|TRYKK FOR Å STARTE'
 capture_accessibility_tree
 grep -Eq 'Account|Konto|household|husholdning' "$WINDOW_DUMP"
 
-if adb logcat -d -t 1000 | grep -Eq 'FATAL EXCEPTION|Process no\.vardir\.bosskamp\.dev .* has died'; then
+if adb logcat -d -s AndroidRuntime:E | grep -A20 'FATAL EXCEPTION' | grep -q "$PACKAGE_NAME"; then
   echo "Native lifecycle produced a fatal application error" >&2
   exit 1
 fi
