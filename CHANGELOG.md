@@ -7,6 +7,8 @@ increasing Android version codes for install/update compatibility.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-08-06
+
 ### Added
 
 - Split native Android validation so pull requests build the debug APK quickly;
@@ -165,3 +167,4 @@ increasing Android version codes for install/update compatibility.
 - Server-backed household sync with adult accounts, child PIN login, household
   device pairing, synced game configuration, and append-only gameplay events.
 - Offline-first PWA gameplay with local SQLite persistence.
+
