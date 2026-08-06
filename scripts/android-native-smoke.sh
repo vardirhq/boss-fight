@@ -50,7 +50,7 @@ dump_tree() {
 capture_accessibility_tree() {
   dump_tree
   if grep -q "System UI isn't responding" "$WINDOW_DUMP"; then
-    # The API 29 emulator can briefly ANR System UI while the WebView is
+    # The legacy emulator can briefly ANR System UI while the WebView is
     # starting. Let it recover before judging the app's accessibility tree.
     tap_current_matching_node '^Wait$' || true
     sleep 5
