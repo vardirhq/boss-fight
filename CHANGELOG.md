@@ -9,6 +9,8 @@ increasing Android version codes for install/update compatibility.
 
 ### Added
 
+- Split native Android validation so pull requests build the debug APK quickly;
+  the slow emulator lifecycle/accessibility journey is dispatched separately.
 - Verify every pre-deploy database dump, automatically expire backups after a
   bounded retention window, and document isolated restore/erasure drills.
 - Add privacy-safe, bounded in-app diagnostics export, API request correlation,
@@ -26,6 +28,9 @@ increasing Android version codes for install/update compatibility.
 - Extract household bootstrap, configuration, privacy export/erasure, child
   lifecycle, membership governance, access policy, IDs, and boss scheduling from
   the server composition root.
+- Exercise the generated native debug APK on an Android emulator across first
+  launch/onboarding, accessibility-tree exposure, offline relaunch, process
+  restart, and a version-code upgrade that must retain application data.
 - Upgrade Vite and its React plugin, refresh vulnerable transitive build tools,
   split account/management screens from the initial bundle, and enforce a High
   severity audit gate for dependencies shipped in the app.

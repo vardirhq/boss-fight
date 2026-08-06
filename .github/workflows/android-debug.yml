@@ -11,6 +11,7 @@ on:
       - 'vite.config.ts'
       - 'deploid.config.mjs'
       - 'capacitor.config.json'
+      - 'scripts/android-native-smoke.sh'
       - '.github/workflows/android-debug.yml'
   push:
     branches: [main]
@@ -22,6 +23,7 @@ on:
       - 'vite.config.ts'
       - 'deploid.config.mjs'
       - 'capacitor.config.json'
+      - 'scripts/android-native-smoke.sh'
       - '.github/workflows/android-debug.yml'
 
 permissions:
@@ -30,7 +32,7 @@ permissions:
 jobs:
   build-debug-apk:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     steps:
       - name: Checkout
@@ -169,6 +171,18 @@ jobs:
           </resources>
           EOF
 
+      - name: Build installable version-1 baseline
+        shell: bash
+        run: |
+          sed -i -E '0,/versionCode [0-9]+/s//versionCode 1/' android/app/build.gradle
+          grep -Eq 'versionCode 1([[:space:]]|$)' android/app/build.gradle
+          (cd android && ./gradlew assembleDebug)
+          BASELINE_APK="$(find android/app/build/outputs/apk -type f -name '*debug*.apk' | head -n 1)"
+          test -n "$BASELINE_APK"
+          cp "$BASELINE_APK" boss-kamp-debug-v1.apk
+          sed -i -E '0,/versionCode 1/s//versionCode 2/' android/app/build.gradle
+          grep -Eq 'versionCode 2([[:space:]]|$)' android/app/build.gradle
+
       - name: Build debug APK with Deploid
         run: ./node_modules/.bin/deploid build
 
@@ -191,6 +205,16 @@ jobs:
           "$AAPT" dump badging "$APK_PATH" | grep -Fq "application-label:'Boss Kamp Dev'"
           echo "path=$APK_PATH" >> "$GITHUB_OUTPUT"
           cp "$APK_PATH" boss-kamp-debug.apk
+
+      - name: Exercise native offline, restart, upgrade, and accessibility journey
+        if: github.event_name == 'workflow_dispatch'
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: 28
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          script: bash scripts/android-native-smoke.sh boss-kamp-debug-v1.apk boss-kamp-debug.apk
 
       - name: Upload debug APK
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
