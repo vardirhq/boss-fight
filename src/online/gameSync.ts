@@ -3,6 +3,7 @@ import { localizedRewardTitle, remapBossName, rewardsFor } from '../game/seed';
 import { STRINGS } from '../game/i18n';
 import type { Boss, Chore, Fighter, GameState, TriggerType } from '../game/types';
 import type { BootstrapSnapshot, ServerHouseholdConfig, ServerSyncState } from './api';
+import { syncTotalsFromEvents } from './syncTotals';
 
 function numberValue(value: unknown, fallback = 0) {
   const number = Number(value);
@@ -172,6 +173,23 @@ export function serverConfigToGameState(config: ServerHouseholdConfig, current: 
   };
 }
 
+/**
+ * Lifetime career XP.
+ *
+ * `career_xp_baseline` holds the XP a fighter brought with them when the household
+ * went online; the event stream can only replay what happened after that, so the two
+ * are added. The stale-cache floor keeps XP monotonic while a client is still talking
+ * to a server that predates the baseline column, or is reading a configuration cached
+ * from before it existed.
+ */
+function lifetimeCareerXp(row: Record<string, unknown> | undefined, replayed: number) {
+  const cached = numberValue(row?.career_xp_cached);
+  const baseline = row?.career_xp_baseline == null
+    ? Math.max(0, cached - replayed)
+    : numberValue(row.career_xp_baseline);
+  return Math.max(baseline + replayed, cached);
+}
+
 export function serverSyncToGameState(sync: ServerSyncState, current: GameState): GameState {
   const configuration: ServerHouseholdConfig = {
     household: sync.mutable.households[0] ?? {},
@@ -186,18 +204,9 @@ export function serverSyncToGameState(sync: ServerSyncState, current: GameState)
   const resets = sync.events.boss_resets;
   const completions = sync.events.chore_completions.filter((row) => !row.voided_at);
   const victories = sync.events.boss_victories;
-  const wallet = sync.events.wallet_transactions;
-
-  const balances = new Map<string | null, number>();
-  for (const row of wallet) {
-    const fighterId = row.fighter_id == null ? null : stringValue(row.fighter_id);
-    balances.set(fighterId, (balances.get(fighterId) ?? 0) + numberValue(row.amount));
-  }
-  const careerXp = new Map<string, number>();
-  for (const row of completions) {
-    const fighterId = stringValue(row.fighter_id);
-    careerXp.set(fighterId, (careerXp.get(fighterId) ?? 0) + numberValue(row.damage));
-  }
+  // Totals span the whole history; the retained rows below only cover the recent tail
+  // that the current-cycle projection needs.
+  const totals = sync.totals ?? syncTotalsFromEvents(sync.events);
 
   const bosses = base.bosses.map((boss) => {
     const currentCycle = boss.currentCycleKey ?? cycleKeyForBoss(boss);
@@ -243,9 +252,10 @@ export function serverSyncToGameState(sync: ServerSyncState, current: GameState)
     bosses,
     fighters: base.fighters.map((fighter) => ({
       ...fighter,
-      coins: balances.get(fighter.id) ?? 0,
-      careerXp: careerXp.get(fighter.id) ?? numberValue(
-        sync.mutable.fighters.find((row) => stringValue(row.id) === fighter.id)?.career_xp_cached,
+      coins: totals.coins[fighter.id] ?? 0,
+      careerXp: lifetimeCareerXp(
+        sync.mutable.fighters.find((row) => stringValue(row.id) === fighter.id),
+        totals.careerXp[fighter.id] ?? 0,
       ),
     })),
     log,
@@ -261,9 +271,9 @@ export function serverSyncToGameState(sync: ServerSyncState, current: GameState)
         : base.fighters.find((fighter) => fighter.id === stringValue(row.fighter_id))?.name ?? '',
       used: row.status === 'used',
     })),
-    pool: balances.get(null) ?? 0,
-    victories: baseline + victories.length,
-    goldenRevealed: victories.some((row) => booleanValue(row.rare)),
+    pool: totals.pool,
+    victories: baseline + totals.victories,
+    goldenRevealed: totals.rareVictory,
   };
 }
 

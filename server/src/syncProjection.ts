@@ -2,7 +2,8 @@ export const syncPublicFields = {
   households: ['id', 'name', 'timezone', 'victories_baseline'],
   fighters: [
     'id', 'user_id', 'name', 'color', 'streak', 'coins_cached', 'career_xp_cached',
-    'sort', 'deleted', 'avatar_hash', 'user_kind', 'account_status', 'account_role',
+    'career_xp_baseline', 'sort', 'deleted', 'avatar_hash', 'user_kind',
+    'account_status', 'account_role',
   ],
   fighter_avatars: ['fighter_id', 'mime', 'bytes_base64', 'hash'],
   bosses: [

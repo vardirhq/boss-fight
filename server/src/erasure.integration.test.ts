@@ -93,6 +93,27 @@ test('PostgreSQL lifecycle erasure preserves only the documented records', {
     assert.equal((await call('GET', '/api/me', idleToken)).status, 401);
 
     const firstHousehold = await bootstrap(first.token, 'First Family');
+
+    // Career XP carried in from local play predates the event stream, so bootstrap
+    // records it as an immutable baseline and the pull exposes it. Without this the
+    // client's `baseline + replayed completions` projection loses the whole history.
+    const carriedProgress = await call('POST', '/api/bootstrap', first.token, {
+      householdName: 'First Family', timezone: 'Europe/Oslo',
+      fighters: [{ clientId: 'veteran', name: 'Veteran', color: '#F4B942', careerXp: 5000 }],
+      bosses: [], chores: [], rewards: [],
+    });
+    assert.equal(carriedProgress.status, 200);
+    const veteranId = String(carriedProgress.body.ids.fighters.veteran);
+    const [veteran] = await database`
+      select career_xp_cached, career_xp_baseline from fighters where id = ${veteranId}
+    `;
+    assert.equal(Number(veteran.career_xp_baseline), 5000);
+    assert.equal(Number(veteran.career_xp_cached), 5000);
+    const baselinePull = await call('GET', `/api/sync/pull?household_id=${firstHousehold}`, first.token);
+    assert.equal(baselinePull.status, 200);
+    const veteranRow = baselinePull.body.mutable.fighters.find((row: Record<string, unknown>) => row.id === veteranId);
+    assert.equal(Number(veteranRow.career_xp_baseline), 5000);
+
     const coercedBoolean = await call('POST', `/api/households/${firstHousehold}/bosses`, first.token, {
       name: 'Invalid boss', sprite: 'invalid.webp', rare: 'false',
     });

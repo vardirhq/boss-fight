@@ -1,3 +1,5 @@
+import { recordDiagnostic } from './diagnostics';
+
 const PREFIX = 'boss-kamp-sync-avatars-v1:';
 
 export type AvatarRow = Record<string, unknown>;
@@ -32,7 +34,19 @@ export function mergeAvatarCache(fighters: AvatarRow[], current: AvatarRow[], in
 }
 
 export function saveAvatarCache(householdId: string, rows: AvatarRow[]) {
-  try { localStorage.setItem(`${PREFIX}${householdId}`, JSON.stringify(rows)); } catch { /* Refetch safely. */ }
+  try {
+    localStorage.setItem(`${PREFIX}${householdId}`, JSON.stringify(rows));
+    return true;
+  } catch (error) {
+    // Avatar bytes are the largest thing this origin stores, so a quota failure here
+    // is the first symptom of storage pressure. Report it instead of silently
+    // refetching every avatar on every pull.
+    recordDiagnostic({
+      area: 'storage', operation: 'avatar-cache', outcome: 'error',
+      code: error instanceof Error ? error.name : 'write_failed',
+    });
+    return false;
+  }
 }
 
 export function clearAvatarCache(householdId: string) {

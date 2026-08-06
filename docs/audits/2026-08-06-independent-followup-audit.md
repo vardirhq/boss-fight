@@ -11,6 +11,14 @@
 | Relationship to prior work | Independent second opinion; also re-verifies the tracker in [`2026-08-04-full-product-security-audit.md`](./2026-08-04-full-product-security-audit.md) |
 | Report status | Final |
 
+### Remediation tracker
+
+| Finding | Status | Evidence |
+| --- | --- | --- |
+| BK-001 | Remediated | `fighters.career_xp_baseline` (migration `0007`) is written once at bootstrap and never incremented; the client projects `baseline + replayed completions` with the cached total as a monotonic floor. Verified end to end: 5 000 XP + a 12-damage chore now reports 5 012, and the backfill recovers the baseline for existing households on a real PostgreSQL upgrade. |
+| BK-002 | Remediated | The durable cache now folds each page into running totals and retains only a bounded recent tail. A simulated year of play (7 300 completions) holds at 84 KB with cursors still advancing, against 1.15 MB and growing before. Cache write failures are reported as storage diagnostics instead of being swallowed. |
+| BK-003 – BK-013 | Open | See the individual findings below. |
+
 ## 1. Executive summary
 
 The remediation programme that followed the 2026-08-04 audit has held up well. Every

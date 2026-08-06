@@ -137,6 +137,10 @@ create table fighters (
   streak             integer not null default 0,
   coins_cached       integer not null default 0,
   career_xp_cached   integer not null default 0,
+  -- Pre-synchronization XP. Written once at bootstrap and never incremented, so
+  -- clients can project `baseline + sum(chore_completions)` from a cached
+  -- configuration without losing the history the event stream cannot replay.
+  career_xp_baseline integer not null default 0,
   sort               integer not null default 0,
   created_by_user_id uuid references users(id),
   created_at         timestamptz not null default now(),

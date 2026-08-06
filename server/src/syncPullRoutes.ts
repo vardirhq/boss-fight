@@ -67,7 +67,7 @@ export function registerSyncPullRoutes(app: FastifyInstance, dependencies: SyncP
       : await Promise.all([
         sql`
           select f.id, f.user_id, f.name, f.color, f.avatar_hash, f.streak, f.coins_cached,
-            f.career_xp_cached, f.sort, (f.deleted_at is not null) as deleted,
+            f.career_xp_cached, f.career_xp_baseline, f.sort, (f.deleted_at is not null) as deleted,
             u.kind as user_kind, hm.status as account_status, hm.role as account_role
           from fighters f
           left join users u on u.id = f.user_id

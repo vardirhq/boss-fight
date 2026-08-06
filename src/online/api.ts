@@ -135,11 +135,32 @@ export interface SyncMutationResult {
   ids?: Record<string, Record<string, string>>;
 }
 
+/**
+ * Running totals over the complete event history, folded client-side as pages arrive.
+ *
+ * The client retains only a bounded tail of raw events, so anything that needs the
+ * whole stream — wallet balances, career XP, victory counts — is accumulated here and
+ * carried across pulls instead of being recomputed from retained rows.
+ */
+export interface SyncTotals {
+  cursors: SyncCursors;
+  /** Wallet balance per fighter id. */
+  coins: Record<string, number>;
+  /** Shared-pool balance (`fighter_id is null`). */
+  pool: number;
+  /** Damage dealt since the household went online, per fighter id. */
+  careerXp: Record<string, number>;
+  victories: number;
+  rareVictory: boolean;
+}
+
 export interface ServerSyncState {
   serverTime: string;
   configurationRevision: number;
   configurationUnchanged?: boolean;
   eventHasMore?: Record<keyof ServerSyncState['events'], boolean>;
+  /** Client-derived, not part of the server response; see {@link SyncTotals}. */
+  totals?: SyncTotals;
   mutable: {
     households: Array<Record<string, unknown>>;
     fighters: Array<Record<string, unknown>>;
