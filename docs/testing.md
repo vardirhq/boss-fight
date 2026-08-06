@@ -47,6 +47,9 @@ Invitation-module contracts cover pairing creation, delivery, acceptance, and
 shared-device claims behind explicit authorization and entity-ID dependencies.
 Synchronization contracts cover independently registered, principal-protected,
 bounded projection and mutation endpoints.
+Authentication contracts cover the complete adult/child login, verification,
+recovery, session, profile, and account-erasure surface; credential tests verify
+password and PIN hashing round trips and rejection behavior.
 CI audits shipped application dependencies at High severity separately from the
 complete development toolchain at Critical severity, keeping upstream Android
 packaging findings visible while preventing them from being mistaken for APK
