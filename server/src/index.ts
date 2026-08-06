@@ -34,7 +34,9 @@ import {
   pinSchema, registerSchema, resetConfirmSchema, rewardCreateSchema, rewardParamsSchema,
   rewardPatchSchema, sessionParamsSchema, suspendSchema, syncPullSchema, syncPushSchema, tokenSchema,
 } from './routeSchemas.js';
-import { metricsAuthorized, recordRequest, renderMetrics } from './observability.js';
+import { recordRequest } from './observability.js';
+import { installApiErrorHandler } from './apiErrors.js';
+import { registerOperationalRoutes } from './operationalRoutes.js';
 
 type JsonObject = Record<string, unknown>;
 type AuthContext = { userId: string; sessionId: string };
@@ -338,94 +340,8 @@ export async function buildApp() {
     timeWindow: process.env.RATE_LIMIT_WINDOW ?? '1 minute'
   });
 
-  app.setErrorHandler((error, request, reply) => {
-    const message = error instanceof Error ? error.message : 'Bad request';
-    const errorInfo = error as Error & { code?: string; statusCode?: number; validation?: unknown };
-    if (errorInfo.statusCode === 400 || errorInfo.validation) {
-      reply.code(400).send({ error: 'Invalid request data', code: 'invalid_request' });
-      return;
-    }
-    if (errorInfo.statusCode === 429) {
-      reply.code(429).send({ error: 'Too many requests', code: 'rate_limited' });
-      return;
-    }
-    if (errorInfo.code === 'mail_delivery_failed') {
-      reply.code(502).send({ error: 'Email could not be delivered', code: 'mail_delivery_failed' });
-      return;
-    }
-    if (message === 'Unauthorized') {
-      reply.code(401).send({ error: 'Unauthorized', code: 'unauthenticated' });
-      return;
-    }
-    if (message === 'Forbidden') {
-      reply.code(403).send({ error: 'Forbidden', code: 'forbidden' });
-      return;
-    }
-    if (message === 'Not found') {
-      reply.code(404).send({ error: 'Not found', code: 'not_found' });
-      return;
-    }
-    if (errorInfo.code === '23505') {
-      reply.code(409).send({ error: 'A conflicting record already exists', code: 'conflict' });
-      return;
-    }
-    if (errorInfo.code?.startsWith('22')) {
-      reply.code(400).send({ error: 'Invalid request data', code: 'invalid_request' });
-      return;
-    }
-    const validationMessages = [
-      'is required', 'must be an array', 'must be a string', 'must contain at most', 'Expected JSON object',
-      'Expected numeric value', 'Expected boolean value',
-      'Expected string value', 'must contain at most', 'Numeric value is outside',
-      'Avatar must be an object', 'Avatar MIME type must be', 'Avatar bytes must be',
-      'Avatar exceeds the', 'Avatar bytes do not match', 'Avatar hash must be',
-      'must be a non-negative integer',
-      'Password must be at least', 'PIN must be at least', 'Invalid pairing role', 'Invalid invite role',
-      'Unsupported redemption status', 'email must be valid', 'Household name confirmation does not match',
-      'Account email confirmation does not match', 'Invalid or expired password reset token',
-      'Invalid or expired email verification token', 'known_avatar_hashes must be valid',
-      'known_configuration_revision must be a non-negative integer',
-      'event_limit must be an integer between 1 and 500'
-    ];
-    if (validationMessages.some((part) => message.includes(part))) {
-      reply.code(400).send({ error: message, code: 'invalid_request' });
-      return;
-    }
-    const domainMessages = [
-      'does not belong to household', 'Chore does not belong to boss',
-      'does not reference a submitted boss', 'Avatar hash does not match bytes',
-      'Fighter belongs to another account',
-      'Chore is already completed for this cycle',
-      'Insufficient wallet balance', 'Reward scope does not match fighter',
-      'Fighter is already claimed or missing',
-      'Cycle key is no longer current', 'Boss is not currently available',
-      'Reset sequence conflict',
-      'Transfer amount must be positive',
-      'Victory payout amount must be positive', 'Unsupported mutation type',
-      'Cannot administer your own membership', 'Parents cannot administer owners or other parents',
-      'Household must retain an active owner', 'Claimed fighters require explicit account governance',
-      'Transfer or erase owned households before deleting the account'
-    ];
-    if (domainMessages.some((part) => message.includes(part))) {
-      reply.code(422).send({ error: message, code: 'domain_rule' });
-      return;
-    }
-    request.log.error({ err: error }, 'Unhandled API error');
-    reply.code(500).send({ error: 'Internal server error', code: 'internal_error' });
-  });
-
-  app.get('/metrics', async (request, reply) => {
-    if (!metricsAuthorized(process.env.METRICS_TOKEN, request.headers.authorization)) {
-      reply.code(404).send({ error: 'Not found', code: 'not_found' });
-      return;
-    }
-    reply.type('text/plain; version=0.0.4').send(renderMetrics());
-  });
-
-  app.get('/health', async () => {
-    await sql`select 1`;
-    return { ok: true };
-  });
+  installApiErrorHandler(app);
+  registerOperationalRoutes(app);
 
   app.post('/api/auth/register', { schema: registerSchema }, async (request) => {
     const body = requireObject(request.body);

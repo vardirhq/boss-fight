@@ -38,6 +38,9 @@ chore, and reward contracts with domain-specific collection and numeric limits.
 Observability contracts verify that diagnostic history is bounded and strips IDs
 and query strings, while server metrics expose route templates only and require a
 configured bearer secret.
+The public API error-policy suite verifies framework validation, database
+conflicts, domain rejections, authentication errors, and non-disclosing 500s
+without requiring a running HTTP server.
 
 Tests use explicit local midday dates where calendar behavior matters. This
 avoids midnight and UTC-offset ambiguity while still exercising the same local
