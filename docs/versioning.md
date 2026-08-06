@@ -38,3 +38,31 @@ The workflow creates a GitHub Release and attaches:
 
 Manual releases can be run from GitHub Actions with the `release_tag` input.
 The input must still match `v${package.json.version}`.
+
+## In-app update discovery
+
+Because releases are installed as a signed APK rather than through a store, an
+installed copy has no way to learn that a newer build exists. The app therefore
+checks for one itself:
+
+- The build's own version is injected from `package.json` at build time
+  (`__APP_VERSION__`, defined in `vite.config.ts`) and shown at the bottom of
+  Settings.
+- On launch — at most once every 24 hours — the app calls `GET /api/meta` on its own
+  API. The API reads the latest GitHub release server-side and caches it, so the app
+  never contacts GitHub directly and its content security policy stays limited to its
+  own origin.
+- If the release is strictly newer, a banner offers a direct link to the attached
+  APK. Dismissal is remembered per version, so the next release announces itself
+  again.
+
+Two consequences worth knowing:
+
+- **The version must be bumped for the banner to work.** A release whose
+  `package.json.version` was not raised looks identical to the installed build and is
+  never offered. The release workflow already enforces that the tag,
+  `package.json.version`, and `android.version.name` agree.
+- **Android cannot install the update by itself.** The app holds only the `INTERNET`
+  permission, so the link hands off to the browser, which downloads the APK; Android
+  then asks the user to confirm the install. Silent updates would need
+  `REQUEST_INSTALL_PACKAGES` — and would still prompt — or a store listing.

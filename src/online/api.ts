@@ -562,3 +562,15 @@ export async function revokeAccountSession(token: string, sessionId: string) {
     method: 'DELETE',
   }, token);
 }
+
+/**
+ * Public release metadata. Deliberately unauthenticated and failure-tolerant: a
+ * local-only household has no session, and update discovery must never disrupt play.
+ */
+export async function fetchAppMeta(): Promise<unknown> {
+  try {
+    return await request<unknown>('/api/meta');
+  } catch {
+    return null;
+  }
+}

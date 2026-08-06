@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useGame } from '../store/GameContext';
+import { APP_VERSION } from '../online/appUpdate';
 import { useT, GOLD } from '../ui/common';
 import type { Lang } from '../game/types';
 import { DialogSurface } from '../ui/a11y';
@@ -48,12 +49,12 @@ export function SettingsPanel({ onOpenAccount, accountSubtitle, accountConnected
     ? {
         title: 'Settings', account: 'Account & household', accountFallback: 'Manage family, devices and sync',
         general: 'General', language: 'Language', currentLanguage: 'English', experience: 'Experience',
-        data: 'Data', about: 'Boss Kamp · Version 1.0', back: 'Back', close: 'Close settings',
+        data: 'Data', back: 'Back', close: 'Close settings',
       }
     : {
         title: 'Innstillinger', account: 'Konto og husholdning', accountFallback: 'Administrer familie, enheter og synk',
         general: 'Generelt', language: 'Språk', currentLanguage: 'Norsk', experience: 'Opplevelse',
-        data: 'Data', about: 'Boss Kamp · Versjon 1.0', back: 'Tilbake', close: 'Lukk innstillinger',
+        data: 'Data', back: 'Tilbake', close: 'Lukk innstillinger',
       };
 
   const header = (
@@ -103,7 +104,7 @@ export function SettingsPanel({ onOpenAccount, accountSubtitle, accountConnected
             <Section>
               <MenuRow icon={<TrashIcon />} iconColor="#e0564a" title={t.resetProgress} subtitle={t.resetSub} titleColor="#f07b70" onClick={actions.askReset} trailing={<Chevron color="#7b4244" />} />
             </Section>
-            <div style={{ textAlign: 'center', fontSize: 12, color: '#4d5669', fontWeight: 600, marginTop: 28 }}>{copy.about}</div>
+            <div style={{ textAlign: 'center', fontSize: 12, color: '#4d5669', fontWeight: 600, marginTop: 28 }}>{t.appVersion.replace('{version}', APP_VERSION)}</div>
           </div>
         </div>
       ) : (
