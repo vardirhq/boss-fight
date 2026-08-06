@@ -230,6 +230,10 @@ test('PostgreSQL lifecycle erasure preserves only the documented records', {
       select count(*)::int as count from wallet_transactions
       where household_id = ${secondHousehold} and reference_type = 'boss_victory'
     `)[0].count, 1);
+    const [walletBaseline] = await database`
+      select coalesce(max(server_seq), 0)::int as server_seq
+      from wallet_transactions where household_id = ${secondHousehold}
+    `;
     const cursorWallet = await database`
       insert into wallet_transactions (household_id, amount, kind, note)
       values
@@ -238,7 +242,7 @@ test('PostgreSQL lifecycle erasure preserves only the documented records', {
       returning server_seq
     `;
     const firstEventPage = await call(
-      'GET', `/api/sync/pull?household_id=${secondHousehold}&event_limit=1`, second.token,
+      'GET', `/api/sync/pull?household_id=${secondHousehold}&event_limit=1&since_wallet_transactions=${walletBaseline.server_seq}`, second.token,
     );
     assert.equal(firstEventPage.status, 200);
     assert.equal(firstEventPage.body.events.wallet_transactions.length, 1);
