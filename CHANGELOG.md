@@ -9,6 +9,8 @@ increasing Android version codes for install/update compatibility.
 
 ### Added
 
+- Apply non-coercing, closed request schemas to adult registration/login and
+  synchronization pull/push endpoints.
 - Bound names, emails, credentials, identifiers, notes, descriptions, and other
   request strings by field class, and reject extreme numeric values.
 - Reject coerced JSON numbers and require canonical non-negative integer query

@@ -25,6 +25,7 @@ import {
   optionalString, queryInteger, requiredString, requireObjectArray, stringValue,
 } from './requestValidation.js';
 import { validatedAvatar } from './avatarValidation.js';
+import { loginSchema, registerSchema, syncPullSchema, syncPushSchema } from './routeSchemas.js';
 
 type JsonObject = Record<string, unknown>;
 type AuthContext = { userId: string; sessionId: string };
@@ -307,6 +308,7 @@ export async function buildApp() {
   const app = Fastify({
     logger: { level: process.env.LOG_LEVEL ?? 'info' },
     trustProxy: trustProxyEnabled(process.env.TRUST_PROXY),
+    ajv: { customOptions: { coerceTypes: false, removeAdditional: false } },
   });
 
   await app.register(cors, {
@@ -399,7 +401,7 @@ export async function buildApp() {
     return { ok: true };
   });
 
-  app.post('/api/auth/register', async (request) => {
+  app.post('/api/auth/register', { schema: registerSchema }, async (request) => {
     const body = requireObject(request.body);
     const email = normalizedEmail(body.email);
     const displayName = requireString(body.displayName, 'displayName');
@@ -420,7 +422,7 @@ export async function buildApp() {
     return { user: { ...user, emailVerified: false }, session };
   });
 
-  app.post('/api/auth/login', async (request) => {
+  app.post('/api/auth/login', { schema: loginSchema }, async (request) => {
     const body = requireObject(request.body);
     const email = normalizedEmail(body.email);
     const password = requireString(body.password, 'password');
@@ -1848,7 +1850,7 @@ export async function buildApp() {
     return { ok: true };
   });
 
-  app.get('/api/sync/pull', async (request) => {
+  app.get('/api/sync/pull', { schema: syncPullSchema }, async (request) => {
     const query = request.query as Record<string, string | undefined>;
     const householdId = requireString(query.household_id, 'household_id');
     await requireHouseholdPrincipal(request, householdId);
@@ -1986,7 +1988,7 @@ export async function buildApp() {
     };
   });
 
-  app.post('/api/sync/push', async (request) => {
+  app.post('/api/sync/push', { schema: syncPushSchema }, async (request) => {
     const body = requireObject(request.body);
     const householdId = requireString(body.householdId, 'householdId');
     const auth = await requireHouseholdPrincipal(request, householdId);
