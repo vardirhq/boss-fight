@@ -4,7 +4,9 @@ set -euo pipefail
 BASELINE_APK=${1:?baseline APK path is required}
 UPGRADE_APK=${2:?upgrade APK path is required}
 PACKAGE_NAME=no.vardir.bosskamp.dev
+ACTIVITY_NAME=no.vardir.bosskamp.MainActivity
 WINDOW_DUMP=/tmp/boss-kamp-window.xml
+set -x
 
 restore_network() {
   adb shell svc wifi enable >/dev/null 2>&1 || true
@@ -14,13 +16,8 @@ trap restore_network EXIT
 
 launch_app() {
   adb shell am force-stop "$PACKAGE_NAME"
-  local component
-  component=$(adb shell cmd package resolve-activity --brief \
-    -a android.intent.action.MAIN -c android.intent.category.LAUNCHER "$PACKAGE_NAME" \
-    | tail -n 1 | tr -d '\r')
-  test -n "$component"
-  adb shell am start -W -n "$component" >/dev/null
-  for _attempt in $(seq 1 90); do
+  adb shell am start -n "$PACKAGE_NAME/$ACTIVITY_NAME" >/dev/null
+  for _attempt in $(seq 1 120); do
     if adb shell pidof "$PACKAGE_NAME" >/dev/null 2>&1; then return 0; fi
     sleep 1
   done
@@ -75,8 +72,6 @@ PY
 }
 
 adb wait-for-device
-adb shell input keyevent 82
-adb shell cmd activity wait-for-broadcast-idle || true
 adb install "$BASELINE_APK"
 adb shell dumpsys package "$PACKAGE_NAME" | grep -Eq 'versionCode=1([[:space:]]|$)'
 
