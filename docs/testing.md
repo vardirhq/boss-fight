@@ -61,21 +61,17 @@ Deployment tests verify that custom-format backups are checked before migration,
 only expired named dumps are pruned, and invalid retention settings fail before
 deployment changes. The operational restore drill then reruns the PostgreSQL
 lifecycle-erasure suite against an isolated restored database.
+The Android debug workflow builds version-code 1 and 2 APKs from the native
+Capacitor package and runs them on an Android 35 emulator. The smoke journey uses
+the platform accessibility tree to complete first launch and onboarding, verifies
+the resulting SQLite-backed state after process restart and while networking is
+disabled, performs an in-place APK upgrade, and checks that private application
+data and the accessible launch journey survive.
 
 Tests use explicit local midday dates where calendar behavior matters. This
 avoids midnight and UTC-offset ambiguity while still exercising the same local
 calendar functions used by the application. Server-provided recurrence,
 availability, and elite values are tested as authoritative overrides.
 
-## Remaining layers
-
-BF-006 remains in progress until the suite also includes:
-
-- PostgreSQL integration tests for transactions, concurrency, and authorization;
-- SQLite WASM persistence and fallback tests in a browser environment;
-- native Android offline, process-restart, upgrade, and recovery journeys; and
-- end-to-end critical user journeys with accessibility assertions.
-
-Keep this document and the remediation tracker in
-`docs/audits/2026-08-04-full-product-security-audit.md` current as those layers
-land.
+Physical-device and OEM-specific testing remains part of release QA; it complements
+the automated native emulator gate rather than replacing it.

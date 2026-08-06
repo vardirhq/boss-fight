@@ -60,6 +60,18 @@ test('debug APK installs beside release with a distinct identity and label', asy
   assert.doesNotMatch(release, /applicationIdSuffix|bosskamp\.dev|Boss Kamp Dev/);
 });
 
+test('debug workflow exercises native lifecycle and accessibility on an emulator', async () => {
+  const debug = await workflow('.github/workflows/android-debug.yml');
+  const smoke = await readFile(new URL('../scripts/android-native-smoke.sh', import.meta.url), 'utf8');
+  assert.match(debug, /android-emulator-runner@[0-9a-f]{40}/);
+  assert.match(debug, /versionCode 1/);
+  assert.match(debug, /versionCode 2/);
+  assert.match(debug, /android-native-smoke\.sh boss-kamp-debug-v1\.apk boss-kamp-debug\.apk/);
+  for (const behavior of ['am force-stop', 'svc wifi disable', 'adb install -r', 'uiautomator dump', 'content-desc']) {
+    assert.match(smoke, new RegExp(behavior.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  }
+});
+
 test('native-only builds do not generate or register browser PWA artifacts', async () => {
   const packageJson = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
   const viteConfig = await readFile(new URL('../vite.config.ts', import.meta.url), 'utf8');
