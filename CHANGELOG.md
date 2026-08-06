@@ -9,6 +9,8 @@ increasing Android version codes for install/update compatibility.
 
 ### Added
 
+- Validate avatar MIME signatures, canonical base64, SHA-256 hashes, and a
+  512 KiB decoded-size limit before storing image data.
 - Reject coerced boolean request values and cap configuration and mutation arrays
   at 200 objects before processing.
 - Bound each synchronized event stream to 250 rows per response and continue
