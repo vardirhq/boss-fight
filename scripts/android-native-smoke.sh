@@ -18,7 +18,10 @@ launch_app() {
   adb shell am force-stop "$PACKAGE_NAME"
   adb shell am start -n "$PACKAGE_NAME/$ACTIVITY_NAME" >/dev/null
   for _attempt in $(seq 1 120); do
-    if adb shell pidof "$PACKAGE_NAME" >/dev/null 2>&1; then return 0; fi
+    if adb shell pidof "$PACKAGE_NAME" >/dev/null 2>&1; then
+      sleep 5
+      return 0
+    fi
     sleep 1
   done
   echo "Boss Kamp process did not start" >&2
@@ -27,9 +30,9 @@ launch_app() {
 }
 
 dump_tree() {
-  for _attempt in $(seq 1 20); do
-    if adb shell uiautomator dump /sdcard/boss-kamp-window.xml >/dev/null 2>&1 \
-      && adb pull /sdcard/boss-kamp-window.xml "$WINDOW_DUMP" >/dev/null 2>&1 \
+  for _attempt in $(seq 1 5); do
+    if timeout 15s adb shell uiautomator dump /sdcard/boss-kamp-window.xml >/dev/null 2>&1 \
+      && timeout 10s adb pull /sdcard/boss-kamp-window.xml "$WINDOW_DUMP" >/dev/null 2>&1 \
       && grep -q '<hierarchy' "$WINDOW_DUMP"; then return 0; fi
     sleep 1
   done
@@ -41,7 +44,11 @@ dump_tree() {
 
 capture_accessibility_tree() {
   dump_tree
-  grep -Eqi 'BOSS KAMP|Boss Kamp|TRYKK|PRESS|Account|Konto' "$WINDOW_DUMP"
+  if ! grep -Eqi 'BOSS KAMP|Boss Kamp|TRYKK|PRESS|Account|Konto' "$WINDOW_DUMP"; then
+    echo "Boss Kamp content was absent from the accessibility tree" >&2
+    tr '>' '>\n' < "$WINDOW_DUMP" >&2
+    return 1
+  fi
   grep -Eq 'clickable="true"' "$WINDOW_DUMP"
   grep -Eq 'content-desc="[^"]+"' "$WINDOW_DUMP"
 }

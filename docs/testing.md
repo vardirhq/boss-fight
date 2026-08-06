@@ -62,7 +62,7 @@ only expired named dumps are pruned, and invalid retention settings fail before
 deployment changes. The operational restore drill then reruns the PostgreSQL
 lifecycle-erasure suite against an isolated restored database.
 The Android debug workflow builds version-code 1 and 2 APKs from the native
-Capacitor package and runs them on an Android 35 emulator. The smoke journey uses
+Capacitor package and runs them on an Android emulator. The smoke journey uses
 the platform accessibility tree to complete first launch and onboarding, verifies
 the resulting SQLite-backed state after process restart and while networking is
 disabled, performs an in-place APK upgrade, and checks that private application

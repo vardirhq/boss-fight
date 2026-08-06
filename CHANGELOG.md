@@ -26,7 +26,7 @@ increasing Android version codes for install/update compatibility.
 - Extract household bootstrap, configuration, privacy export/erasure, child
   lifecycle, membership governance, access policy, IDs, and boss scheduling from
   the server composition root.
-- Exercise the generated native debug APK on an Android 35 emulator across first
+- Exercise the generated native debug APK on an Android emulator across first
   launch/onboarding, accessibility-tree exposure, offline relaunch, process
   restart, and a version-code upgrade that must retain application data.
 - Upgrade Vite and its React plugin, refresh vulnerable transitive build tools,
