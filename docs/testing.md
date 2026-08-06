@@ -24,7 +24,8 @@ bounded event pagination and independent continuation signals, and secure
 credential selection. Incremental event-cache tests cover deduplication and
 independent cursor advancement. The server suite covers synchronization conflicts,
 mutation processing, reward integrity, household governance, and migration
-verification. Request-validation tests cover strict booleans, object-only arrays,
+verification. PostgreSQL integration coverage serializes simultaneous final blows
+and asserts that only one completion, victory, and payout commits. Request-validation tests cover strict booleans, object-only arrays,
 request fan-out limits, and bounded avatar encoding, MIME signatures, and hashes.
 Numeric coverage distinguishes strict JSON numbers from canonical integer query
 parameters and rejects negative, fractional, and padded sync positions.

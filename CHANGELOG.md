@@ -9,6 +9,8 @@ increasing Android version codes for install/update compatibility.
 
 ### Added
 
+- Exercise concurrent final-blow submissions against PostgreSQL in CI and verify
+  that only one completion, victory, and payout can commit.
 - Apply non-coercing, closed request schemas to adult registration/login and
   synchronization pull/push endpoints.
 - Apply closed schemas to verification, password reset, child authentication,
