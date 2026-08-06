@@ -14,3 +14,7 @@ export function expectedRevision(value: unknown): number {
   }
   return Number(value);
 }
+
+export function boundedRows<T>(rows: T[], limit: number) {
+  return { rows: rows.slice(0, limit), hasMore: rows.length > limit };
+}

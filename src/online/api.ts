@@ -137,6 +137,7 @@ export interface ServerSyncState {
   serverTime: string;
   configurationRevision: number;
   configurationUnchanged?: boolean;
+  eventHasMore?: Record<keyof ServerSyncState['events'], boolean>;
   mutable: {
     households: Array<Record<string, unknown>>;
     fighters: Array<Record<string, unknown>>;

@@ -168,6 +168,29 @@ test('PostgreSQL lifecycle erasure preserves only the documented records', {
 
     const second = await register('second@example.com', 'Second Parent');
     const secondHousehold = await bootstrap(second.token, 'Second Family');
+    const cursorWallet = await database`
+      insert into wallet_transactions (household_id, amount, kind, note)
+      values
+        (${secondHousehold}, 1, 'adjustment', 'page one'),
+        (${secondHousehold}, 2, 'adjustment', 'page two')
+      returning server_seq
+    `;
+    const firstEventPage = await call(
+      'GET', `/api/sync/pull?household_id=${secondHousehold}&event_limit=1`, second.token,
+    );
+    assert.equal(firstEventPage.status, 200);
+    assert.equal(firstEventPage.body.events.wallet_transactions.length, 1);
+    assert.equal(firstEventPage.body.eventHasMore.wallet_transactions, true);
+    assert.equal(Number(firstEventPage.body.events.wallet_transactions[0].server_seq), Number(cursorWallet[0].server_seq));
+    const secondEventPage = await call(
+      'GET',
+      `/api/sync/pull?household_id=${secondHousehold}&event_limit=1&since_wallet_transactions=${cursorWallet[0].server_seq}`,
+      second.token,
+    );
+    assert.equal(secondEventPage.status, 200);
+    assert.equal(secondEventPage.body.events.wallet_transactions.length, 1);
+    assert.equal(secondEventPage.body.eventHasMore.wallet_transactions, false);
+    assert.equal(Number(secondEventPage.body.events.wallet_transactions[0].server_seq), Number(cursorWallet[1].server_seq));
     const [cursorReward] = await database`
       insert into rewards (household_id, scope, icon, title, descr, cost)
       values (${secondHousehold}, 'group', 'test', 'Cursor reward', '', 10)

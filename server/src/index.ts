@@ -7,7 +7,7 @@ import Fastify, { type FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import { sql } from './db.js';
-import { expectedRevision, mutationError } from './sync.js';
+import { boundedRows, expectedRevision, mutationError } from './sync.js';
 import {
   assertRedemptionFunds, assertRedemptionManagerRole, initialRedemption,
   redemptionTransition, requestedRedemptionStatus,
@@ -391,7 +391,8 @@ export async function buildApp() {
       'Unsupported redemption status', 'email must be valid', 'Household name confirmation does not match',
       'Account email confirmation does not match', 'Invalid or expired password reset token',
       'Invalid or expired email verification token', 'known_avatar_hashes must be valid',
-      'known_configuration_revision must be a non-negative integer'
+      'known_configuration_revision must be a non-negative integer',
+      'event_limit must be an integer between 1 and 500'
     ];
     if (validationMessages.some((part) => message.includes(part))) {
       reply.code(400).send({ error: message, code: 'invalid_request' });
@@ -1890,6 +1891,10 @@ export async function buildApp() {
       wallet_transactions: optionalNumber(query.since_wallet_transactions),
       reward_redemptions: optionalNumber(query.since_reward_redemptions)
     };
+    const eventLimit = optionalNumber(query.event_limit, 250);
+    if (!Number.isSafeInteger(eventLimit) || eventLimit < 1 || eventLimit > 500) {
+      throw new Error('event_limit must be an integer between 1 and 500');
+    }
     const knownConfigurationRevision = query.known_configuration_revision === undefined
       ? null
       : optionalNumber(query.known_configuration_revision);
@@ -1951,28 +1956,41 @@ export async function buildApp() {
           chore_title, damage, voided_at, server_seq from chore_completions
         where household_id = ${householdId} and server_seq > ${since.chore_completions}
         order by server_seq
+        limit ${eventLimit + 1}
       `,
       sql`
         select id, boss_id, cycle_key, reset_seq, server_seq from boss_resets
         where household_id = ${householdId} and server_seq > ${since.boss_resets}
         order by server_seq
+        limit ${eventLimit + 1}
       `,
       sql`
         select id, boss_id, cycle_key, reset_seq, elite, rare, server_seq from boss_victories
         where household_id = ${householdId} and server_seq > ${since.boss_victories}
         order by server_seq
+        limit ${eventLimit + 1}
       `,
       sql`
         select id, fighter_id, amount, server_seq from wallet_transactions
         where household_id = ${householdId} and server_seq > ${since.wallet_transactions}
         order by server_seq
+        limit ${eventLimit + 1}
       `,
       sql`
         select id, reward_id, fighter_id, icon, title, cost, status, created_at, server_seq from reward_redemptions
         where household_id = ${householdId} and server_seq > ${since.reward_redemptions}
         order by server_seq
+        limit ${eventLimit + 1}
       `
     ]);
+
+    const eventPages = {
+      chore_completions: boundedRows(completions, eventLimit),
+      boss_resets: boundedRows(resets, eventLimit),
+      boss_victories: boundedRows(victories, eventLimit),
+      wallet_transactions: boundedRows(wallet, eventLimit),
+      reward_redemptions: boundedRows(redemptions, eventLimit),
+    };
 
     const timezone = requireString(households[0]?.timezone, 'timezone');
     return {
@@ -1989,12 +2007,13 @@ export async function buildApp() {
         chores: publicSyncRows('chores', chores)
       },
       events: {
-        chore_completions: publicSyncRows('chore_completions', completions),
-        boss_resets: publicSyncRows('boss_resets', resets),
-        boss_victories: publicSyncRows('boss_victories', victories),
-        wallet_transactions: publicSyncRows('wallet_transactions', wallet),
-        reward_redemptions: publicSyncRows('reward_redemptions', redemptions)
+        chore_completions: publicSyncRows('chore_completions', eventPages.chore_completions.rows),
+        boss_resets: publicSyncRows('boss_resets', eventPages.boss_resets.rows),
+        boss_victories: publicSyncRows('boss_victories', eventPages.boss_victories.rows),
+        wallet_transactions: publicSyncRows('wallet_transactions', eventPages.wallet_transactions.rows),
+        reward_redemptions: publicSyncRows('reward_redemptions', eventPages.reward_redemptions.rows)
       },
+      eventHasMore: Object.fromEntries(Object.entries(eventPages).map(([stream, page]) => [stream, page.hasMore])),
     };
   });
 

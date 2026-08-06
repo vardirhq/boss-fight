@@ -846,6 +846,7 @@ since_wallet_transactions=0
 since_reward_redemptions=0
 known_avatar_hashes={"fighter-uuid":"sha256-hex"}
 known_configuration_revision=12
+event_limit=250
 ```
 
 Clients persist the greatest `server_seq` received for each event stream and
@@ -860,6 +861,10 @@ When `known_configuration_revision` matches the current household revision, the
 response sets `configurationUnchanged` to `true` and returns empty mutable
 collections. Clients must reuse a complete cache for that exact revision; clients
 without one omit the parameter and receive the full mutable configuration.
+Each event stream is independently limited to 250 rows by default. `event_limit`
+may select 1–500 rows. The response's `eventHasMore` map identifies streams with
+another page; clients advance only those streams' durable `server_seq` cursors
+and continue until all values are false.
 
 Response:
 
@@ -868,6 +873,13 @@ Response:
   "serverTime": "2026-08-03T17:17:20.067Z",
   "configurationRevision": 12,
   "configurationUnchanged": false,
+  "eventHasMore": {
+    "chore_completions": false,
+    "boss_resets": false,
+    "boss_victories": false,
+    "wallet_transactions": false,
+    "reward_redemptions": false
+  },
   "mutable": {
     "households": [],
     "fighters": [],

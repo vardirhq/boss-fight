@@ -9,6 +9,8 @@ increasing Android version codes for install/update compatibility.
 
 ### Added
 
+- Bound each synchronized event stream to 250 rows per response and continue
+  through independent cursor pages until the device is caught up.
 - Avoid retransmitting unchanged household, fighter, boss, and chore
   configuration by reusing a durable cache keyed to the server revision.
 - Stop retransmitting unchanged avatar bytes by exchanging per-fighter content
