@@ -48,15 +48,17 @@ The API runs retention cleanup at startup and every 24 hours:
 
 These windows can be shortened or extended with the documented server environment
 variables. Active devices, active configuration, gameplay/economy history, and
-avatars for active fighters are not age-deleted. Database backups follow the
-operational backup procedures, but a tested backup-expiry and erasure runbook
-remains outstanding.
+avatars for active fighters remain while the household uses the service and are
+erased by the self-service child, household, or account flows described above.
+Pre-deploy database backups are integrity-checked and expire after 30 days by
+default. They are never restored directly into service: quarterly drills use an
+isolated database, execute lifecycle-erasure coverage, and destroy the database
+afterward. A production restore must replay and verify every later deletion request
+before traffic is enabled.
 
 ## Remaining Work
 
 - Obtain qualified review of lawful basis, notice language, processors, and
   hosting disclosures.
-- Define and enforce lifecycle rules for active configuration, activity events,
-  and backups.
 - Document processor agreements, storage locations, deletion SLAs, and restoration
   behavior after an erasure request.

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   optionalBoolean, optionalBooleanOrNull, optionalNumber, optionalNumberOrNull,
-  queryInteger, requireObjectArray,
+  optionalString, queryInteger, requiredString, requireObjectArray, stringValue,
 } from './requestValidation.js';
 
 test('boolean input is never coerced from strings or numbers', () => {
@@ -27,8 +27,18 @@ test('JSON numbers are strict while query integers accept canonical digit string
   assert.equal(optionalNumberOrNull(null), null);
   assert.throws(() => optionalNumber('2'), /Expected numeric value/);
   assert.throws(() => optionalNumber(true), /Expected numeric value/);
+  assert.throws(() => optionalNumber(1_000_000_001), /supported range/);
   assert.equal(queryInteger('42', 'cursor'), 42);
   assert.throws(() => queryInteger('-1', 'cursor'), /non-negative integer/);
   assert.throws(() => queryInteger('1.5', 'cursor'), /non-negative integer/);
   assert.throws(() => queryInteger('01', 'cursor'), /non-negative integer/);
+});
+
+test('strings are trimmed and bounded according to their field class', () => {
+  assert.equal(requiredString(' Boss ', 'boss.name'), 'Boss');
+  assert.throws(() => requiredString('x'.repeat(121), 'fighter.name'), /at most 120/);
+  assert.throws(() => requiredString('x'.repeat(255), 'email'), /at most 254/);
+  assert.equal(optionalString(' note '), 'note');
+  assert.throws(() => optionalString('x'.repeat(1_001)), /at most 1000/);
+  assert.throws(() => stringValue('x'.repeat(2_001), 'description'), /at most 2000/);
 });

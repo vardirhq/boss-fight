@@ -70,3 +70,15 @@ test('native-only builds do not generate or register browser PWA artifacts', asy
   assert.doesNotMatch(entrypoint, /registerSW|serviceWorker/);
   assert.doesNotMatch(deploid, /serviceWorker|\bpwa\b/i);
 });
+
+test('large management surfaces are split and dependency audits distinguish shipped code', async () => {
+  const app = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8');
+  const viteConfig = await readFile(new URL('../vite.config.ts', import.meta.url), 'utf8');
+  const ci = await workflow('.github/workflows/ci-deploy.yml');
+  assert.match(app, /lazy\(\(\) => import\('\.\/online\/AccountSettings'\)/);
+  assert.match(app, /lazy\(\(\) => import\('\.\/screens\/managers'\)/);
+  assert.match(viteConfig, /return 'react-vendor'/);
+  assert.match(viteConfig, /return 'sqlite-runtime'/);
+  assert.match(ci, /npm audit --omit=dev --audit-level=high/);
+  assert.match(ci, /npm audit --audit-level=critical/);
+});

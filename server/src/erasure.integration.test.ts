@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
 import type { FastifyInstance } from 'fastify';
 import postgres from 'postgres';
@@ -103,6 +103,11 @@ test('PostgreSQL lifecycle erasure preserves only the documented records', {
     });
     assert.equal(coercedNumber.status, 400);
     assert.equal(coercedNumber.body.code, 'invalid_request');
+    const oversizedName = await call('POST', `/api/households/${firstHousehold}/fighters`, first.token, {
+      name: 'x'.repeat(121), color: '#F4B942', sort: 1,
+    });
+    assert.equal(oversizedName.status, 400);
+    assert.equal(oversizedName.body.code, 'invalid_request');
     const fighter = await call('POST', `/api/households/${firstHousehold}/fighters`, first.token, {
       name: 'Child Name', color: '#F4B942', sort: 1,
     });
@@ -178,6 +183,57 @@ test('PostgreSQL lifecycle erasure preserves only the documented records', {
 
     const second = await register('second@example.com', 'Second Parent');
     const secondHousehold = await bootstrap(second.token, 'Second Family');
+    const [concurrentFighter] = await database`
+      insert into fighters (household_id, name, color, created_by_user_id)
+      values (${secondHousehold}, 'Concurrent fighter', '#F4B942', ${second.userId})
+      returning id
+    `;
+    const [concurrentBoss] = await database`
+      insert into bosses (household_id, name, sprite, trigger_type)
+      values (${secondHousehold}, 'Concurrency boss', 'test.webp', 'alltid')
+      returning id
+    `;
+    const [concurrentChore] = await database`
+      insert into chores (household_id, boss_id, title, damage, repeatable)
+      values (${secondHousehold}, ${concurrentBoss.id}, 'Final blow', 40, false)
+      returning id
+    `;
+    const concurrentConfig = await call('GET', `/api/households/${secondHousehold}/config`, second.token);
+    const concurrentBossView = concurrentConfig.body.bosses.find(
+      (boss: Record<string, unknown>) => boss.id === concurrentBoss.id,
+    );
+    assert.ok(concurrentBossView);
+    const completion = () => ({
+      type: 'chore_completion',
+      payload: {
+        id: randomUUID(), bossId: concurrentBoss.id, choreId: concurrentChore.id,
+        fighterId: concurrentFighter.id, cycleKey: concurrentBossView.current_cycle_key,
+        resetSeq: 0, completedAt: new Date().toISOString(),
+      },
+    });
+    const concurrentResults = await Promise.all([
+      call('POST', '/api/sync/push', second.token, { householdId: secondHousehold, mutations: [completion()] }),
+      call('POST', '/api/sync/push', second.token, { householdId: secondHousehold, mutations: [completion()] }),
+    ]);
+    assert.deepEqual(concurrentResults.map((result) => result.status), [200, 200]);
+    const outcomes = concurrentResults.map((result) => result.body.results[0].outcome).sort();
+    assert.deepEqual(outcomes, ['accepted', 'rejected']);
+    assert.equal((await database`
+      select count(*)::int as count from chore_completions
+      where household_id = ${secondHousehold} and boss_id = ${concurrentBoss.id}
+    `)[0].count, 1);
+    assert.equal((await database`
+      select count(*)::int as count from boss_victories
+      where household_id = ${secondHousehold} and boss_id = ${concurrentBoss.id}
+    `)[0].count, 1);
+    assert.equal((await database`
+      select count(*)::int as count from wallet_transactions
+      where household_id = ${secondHousehold} and reference_type = 'boss_victory'
+    `)[0].count, 1);
+    const [walletBaseline] = await database`
+      select coalesce(max(server_seq), 0)::int as server_seq
+      from wallet_transactions where household_id = ${secondHousehold}
+    `;
     const cursorWallet = await database`
       insert into wallet_transactions (household_id, amount, kind, note)
       values
@@ -186,7 +242,7 @@ test('PostgreSQL lifecycle erasure preserves only the documented records', {
       returning server_seq
     `;
     const firstEventPage = await call(
-      'GET', `/api/sync/pull?household_id=${secondHousehold}&event_limit=1`, second.token,
+      'GET', `/api/sync/pull?household_id=${secondHousehold}&event_limit=1&since_wallet_transactions=${walletBaseline.server_seq}`, second.token,
     );
     assert.equal(firstEventPage.status, 200);
     assert.equal(firstEventPage.body.events.wallet_transactions.length, 1);

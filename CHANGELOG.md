@@ -9,6 +9,27 @@ increasing Android version codes for install/update compatibility.
 
 ### Added
 
+- Verify every pre-deploy database dump, automatically expire backups after a
+  bounded retention window, and document isolated restore/erasure drills.
+- Add privacy-safe, bounded in-app diagnostics export, API request correlation,
+  authenticated Prometheus metrics, and documented operational alert thresholds.
+- Extract the public API error policy and operational endpoints from the server
+  composition root with independent contract tests.
+- Extract boss, chore, and reward CRUD into an explicitly authorized gameplay
+  route module with a complete registration contract.
+- Upgrade Vite and its React plugin, refresh vulnerable transitive build tools,
+  split account/management screens from the initial bundle, and enforce a High
+  severity audit gate for dependencies shipped in the app.
+- Exercise concurrent final-blow submissions against PostgreSQL in CI and verify
+  that only one completion, victory, and payout can commit.
+- Apply non-coercing, closed request schemas to adult registration/login and
+  synchronization pull/push endpoints.
+- Apply closed schemas to verification, password reset, child authentication,
+  session revocation, logout, and adult-account erasure.
+- Apply closed, bounded schemas to bootstrap, household administration, fighter
+  and child governance, invitations and pairing, bosses, chores, and rewards.
+- Bound names, emails, credentials, identifiers, notes, descriptions, and other
+  request strings by field class, and reject extreme numeric values.
 - Reject coerced JSON numbers and require canonical non-negative integer query
   cursors, revisions, and event limits.
 - Validate avatar MIME signatures, canonical base64, SHA-256 hashes, and a

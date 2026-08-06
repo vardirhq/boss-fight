@@ -31,6 +31,7 @@ import type { Fighter } from '../game/types';
 import { clearSyncEventCache, loadSyncEventCache, mergeSyncEvents, saveSyncEventCache, syncCursors, syncHasMore } from './syncCache';
 import { clearAvatarCache, knownAvatarHashes, loadAvatarCache, mergeAvatarCache, saveAvatarCache } from './avatarCache';
 import { clearConfigurationCache, loadConfigurationCache, mergeConfigurationCache, saveConfigurationCache } from './configurationCache';
+import { recordDiagnostic } from './diagnostics';
 
 const STORAGE_KEY = 'boss-kamp-online-state-v2';
 const MUTATIONS_KEY = 'boss-kamp-pending-mutations-v1';
@@ -488,6 +489,12 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
         try {
           if (pending.length > 0) {
             const pushed = await pushSyncMutations(token, householdId, pending, householdDeviceToken);
+            for (const result of pushed.results) {
+              recordDiagnostic({
+                area: 'sync', operation: result.type, outcome: result.outcome === 'rejected' || result.outcome === 'conflict' ? 'rejected' : 'success',
+                code: result.code ?? result.outcome,
+              });
+            }
             const rejectedAt = new Date().toISOString();
             setPendingMutations((current) => {
               const next = applyMutationResults(current, householdId, pushed.results, rejectedAt);
@@ -513,6 +520,7 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
             saveConfigurationCache(householdId, latest);
           } while (pageHasMore);
           const syncedAt = new Date().toISOString();
+          recordDiagnostic({ area: 'sync', operation: 'pull', outcome: 'success' });
           const revision = latest.configurationRevision;
           setState((current) => {
             const next = { ...current, status: 'authenticated' as const, configurationRevision: revision, lastSuccessfulSyncAt: syncedAt, error: null };
@@ -520,6 +528,11 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
             return next;
           });
         } catch (error) {
+          recordDiagnostic({
+            area: 'sync', operation: 'flush',
+            outcome: error instanceof ApiError && error.isTransient ? 'offline' : 'error',
+            code: error instanceof ApiError ? error.code ?? error.kind : 'unknown',
+          });
           setPendingMutations((current) => {
             const next = current.map((mutation) => sentIdsForHousehold(mutation, householdId) && !mutation.rejectedAt
               ? { ...mutation, attempts: mutation.attempts + 1, lastError: error instanceof Error ? error.message : String(error) }

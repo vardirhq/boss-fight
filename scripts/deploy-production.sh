@@ -2,6 +2,7 @@
 set -euo pipefail
 
 readonly image_ref="${1:?usage: deploy-production.sh <image-reference-with-digest>}"
+readonly script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ "$image_ref" != *@sha256:* ]]; then
   echo "Deployment image must be pinned by sha256 digest" >&2
   exit 2
@@ -15,6 +16,12 @@ readonly health_attempts="${BOSS_KAMP_HEALTH_ATTEMPTS:-30}"
 readonly postgres_container="${BOSS_KAMP_POSTGRES_CONTAINER:-friskr_postgres}"
 readonly postgres_database="${BOSS_KAMP_POSTGRES_DATABASE:-boss_kamp}"
 readonly postgres_owner="${BOSS_KAMP_POSTGRES_OWNER:-friskr}"
+readonly backup_retention_days="${BOSS_KAMP_BACKUP_RETENTION_DAYS:-30}"
+
+if [[ ! "$backup_retention_days" =~ ^[1-9][0-9]*$ ]]; then
+  echo "BOSS_KAMP_BACKUP_RETENTION_DAYS must be a positive whole number" >&2
+  exit 2
+fi
 
 cd "$app_root/server"
 export BOSS_KAMP_API_IMAGE="$image_ref"
@@ -42,6 +49,13 @@ if docker inspect "$postgres_container" >/dev/null 2>&1; then
 else
   pg_dump --format=custom --file="$backup_file" "$DATABASE_URL"
 fi
+if docker inspect "$postgres_container" >/dev/null 2>&1; then
+  docker exec -i "$postgres_container" pg_restore --list < "$backup_file" >/dev/null
+else
+  pg_restore --list "$backup_file" >/dev/null
+fi
+BOSS_KAMP_APP_ROOT="$app_root" BOSS_KAMP_BACKUP_RETENTION_DAYS="$backup_retention_days" \
+  bash "$script_dir/prune-backups.sh"
 
 # A migration failure occurs before replacement, leaving the old container live.
 if [[ -z "${BOSS_KAMP_MIGRATION_DATABASE_URL:-}" ]] && docker inspect "$postgres_container" >/dev/null 2>&1; then

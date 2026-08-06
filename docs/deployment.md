@@ -127,7 +127,13 @@ captured with `pg_dump` inside the existing Postgres container
 (`BOSS_KAMP_POSTGRES_CONTAINER`, default `friskr_postgres`), and migrations run
 with the database-owner connection derived from that container. The live API
 continues to use the limited app role from `server/.env.production`. Migration
-failure leaves the existing application container running.
+failure leaves the existing application container running. Each dump must pass
+`pg_restore --list` before migration begins. Pre-deploy dumps older than
+`BOSS_KAMP_BACKUP_RETENTION_DAYS` (30 by default) are deleted automatically;
+invalid or unbounded retention values stop deployment before any backup or
+container change. The same guarded pruning script runs daily at 03:17 UTC through
+the `Enforce Backup Retention` workflow, so expiry does not depend on release
+frequency.
 
 ## Database Migrations
 
@@ -144,6 +150,26 @@ an immutable, ordered SQL file in `server/migrations/` named
 Before opening a migration PR, test both a fresh bootstrap and an upgrade from a
 recent production backup in a disposable database. Prefer additive and backward-
 compatible changes so the previous application image remains usable during rollback.
+
+### Quarterly restore and erasure drill
+
+At least quarterly, select the newest verified dump and restore it into a new,
+isolated database whose name starts with `boss_kamp_restore_drill_`. Never point a
+running API or public ingress at the drill database. Apply pending migrations, run
+the PostgreSQL lifecycle-erasure integration suite against it, and record:
+
+- dump timestamp and SHA-256 (not the dump itself);
+- restore start/end time and schema migration result;
+- household, child, and adult erasure test results;
+- operator and ticket/reference;
+- destruction time for the isolated database.
+
+Drop the isolated database with `WITH (FORCE)` immediately after the checks. A
+production restore from a dump that predates an erasure request must not be placed
+into service until every deletion received after that dump was replayed and
+verified. The deletion-request register and restore authorization live outside the
+application database so they survive a database restore; choosing and operating
+that register is an organization-specific responsibility.
 
 ## Rollback
 
@@ -171,6 +197,37 @@ under the database operator account, then deploy the earlier commit. Restoration
 intentionally not automated: selecting and overwriting a production database
 requires an explicit operator decision. Record periodic restore drills and verify
 row counts plus `/health` and authenticated sync after each drill.
+
+## Monitoring and alerts
+
+Set a unique `METRICS_TOKEN` in `.env.production` and have the private monitoring
+agent scrape `http://127.0.0.1:3002/metrics` with that bearer token. The endpoint
+uses route templates rather than concrete URLs, so household and account IDs do
+not become metric labels. API responses also include `X-Request-Id`; ask users for
+that value or their exported in-app diagnostics when investigating a failure.
+
+Alert on the following signals:
+
+- production `/health` unavailable for two consecutive minutes;
+- any sustained `server_error` rate above 2% for five minutes;
+- any mail-delivery failures or operational-retention failures in structured logs;
+- PostgreSQL connection exhaustion, storage above 80%, or replication/backup failure;
+- a failed GitHub deployment or rollback workflow.
+
+Route alerts to the repository/hosting operator and keep the current escalation
+contact in the private monitoring configuration. The repository cannot choose the
+organization's paging provider or recipients; those remain an operator decision.
+
+## Dependency risk gates
+
+CI rejects High severity findings in dependencies shipped with the application and
+Critical findings anywhere in the full build toolchain. As of the BF-022 upgrade,
+the shipped-dependency audit is clean. Three High advisories remain in development-
+only Capacitor/Deploid trees (`brace-expansion` and `sharp`/libvips); these tools run
+only while generating/building Android sources and are not packaged into the APK.
+Keep them visible in every CI run and remove the exception when fixed upstream
+versions are available. Do not process untrusted archives, paths, or images through
+the packaging job in the meantime.
 
 ## Android Release Flow
 

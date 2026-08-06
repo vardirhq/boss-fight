@@ -1,0 +1,31 @@
+name: Enforce Backup Retention
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: boss-kamp-backup-retention
+  cancel-in-progress: false
+
+jobs:
+  prune:
+    name: Expire old database backups
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install SSH key
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${{ secrets.BOSS_KAMP_DEPLOY_SSH_KEY }}" > ~/.ssh/boss_kamp_deploy
+          chmod 600 ~/.ssh/boss_kamp_deploy
+          ssh-keyscan -H "${{ secrets.BOSS_KAMP_DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Enforce retention on production host
+        run: |
+          ssh -i ~/.ssh/boss_kamp_deploy \
+            "${{ secrets.BOSS_KAMP_DEPLOY_USER }}@${{ secrets.BOSS_KAMP_DEPLOY_HOST }}" \
+            'cd /opt/boss-fight && bash scripts/prune-backups.sh'

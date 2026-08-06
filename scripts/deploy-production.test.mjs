@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { chmod, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, stat, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawn } from 'node:child_process';
@@ -38,6 +38,9 @@ fi
   await executable(join(bin, 'pg_dump'), `#!/usr/bin/env bash
 printf 'pg_dump %s\\n' "$*" >> "${log}"
 `);
+  await executable(join(bin, 'pg_restore'), `#!/usr/bin/env bash
+printf 'pg_restore %s\\n' "$*" >> "${log}"
+`);
   await executable(join(bin, 'curl'), `#!/usr/bin/env bash
 count=0; [[ -f "${upCount}" ]] && count="$(<"${upCount}")"
 if [[ "${healthMode}" == "success" || "$count" -ge 2 ]]; then exit 0; fi
@@ -75,6 +78,31 @@ test('a healthy immutable image becomes current while retaining the previous ref
   assert.match(await readFile(log, 'utf8'), new RegExp(`${nextImage.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\|docker compose run`));
 });
 
+test('deployment verifies the new dump and expires only backups beyond retention', async () => {
+  const { root, log, env } = await fixture('success');
+  const backupDir = join(root, 'backups');
+  await mkdir(backupDir);
+  const expired = join(backupDir, 'pre-deploy-20200101T000000Z.dump');
+  const retained = join(backupDir, 'pre-deploy-20990101T000000Z.dump');
+  await writeFile(expired, 'old');
+  await writeFile(retained, 'recent');
+  const old = new Date('2020-01-01T00:00:00Z');
+  await utimes(expired, old, old);
+  const result = await runDeploy({ ...env, BOSS_KAMP_BACKUP_RETENTION_DAYS: '30' });
+  assert.equal(result.code, 0, result.stderr);
+  await assert.rejects(stat(expired));
+  assert.equal((await stat(retained)).isFile(), true);
+  assert.match(await readFile(log, 'utf8'), /pg_restore --list/);
+});
+
+test('invalid backup retention fails before deployment changes', async () => {
+  const { log, env } = await fixture('success');
+  const result = await runDeploy({ ...env, BOSS_KAMP_BACKUP_RETENTION_DAYS: 'forever' });
+  assert.equal(result.code, 2);
+  assert.match(result.stderr, /positive whole number/);
+  await assert.rejects(readFile(log, 'utf8'));
+});
+
 test('failed readiness restores the previous image and still fails the deployment', async () => {
   const { root, log, env } = await fixture('rollback');
   const result = await runDeploy(env);
@@ -104,6 +132,18 @@ test('CI promotes a scanned digest and never rebuilds on the production host', a
   assert.doesNotMatch(workflow, /docker compose build/);
   assert.match(compose, /BOSS_KAMP_API_IMAGE:\?/);
   assert.doesNotMatch(compose, /^\s*build:/m);
+});
+
+test('backup retention runs daily as well as during deployment', async () => {
+  const workflow = await readFile(new URL('../.github/workflows/backup-retention.yml', import.meta.url), 'utf8');
+  const deploy = await readFile(deployScript, 'utf8');
+  const prune = await readFile(new URL('./prune-backups.sh', import.meta.url), 'utf8');
+  assert.match(workflow, /cron: '17 3 \* \* \*'/);
+  assert.match(workflow, /bash scripts\/prune-backups\.sh/);
+  assert.match(deploy, /bash "\$script_dir\/prune-backups\.sh"/);
+  assert.match(prune, /-mindepth 1 -maxdepth 1 -type f/);
+  assert.match(prune, /pre-deploy-\?\?\?\?\?\?\?\?T\?\?\?\?\?\?Z\.dump/);
+  assert.doesNotMatch(prune, /rm -rf/);
 });
 
 test('the production image is least-privileged and invokes runtime entrypoints with Node', async () => {

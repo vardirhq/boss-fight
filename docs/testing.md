@@ -24,10 +24,33 @@ bounded event pagination and independent continuation signals, and secure
 credential selection. Incremental event-cache tests cover deduplication and
 independent cursor advancement. The server suite covers synchronization conflicts,
 mutation processing, reward integrity, household governance, and migration
-verification. Request-validation tests cover strict booleans, object-only arrays,
+verification. PostgreSQL integration coverage serializes simultaneous final blows
+and asserts that only one completion, victory, and payout commits. Request-validation tests cover strict booleans, object-only arrays,
 request fan-out limits, and bounded avatar encoding, MIME signatures, and hashes.
 Numeric coverage distinguishes strict JSON numbers from canonical integer query
 parameters and rejects negative, fractional, and padded sync positions.
+Field-bound coverage verifies trimmed names, email/name limits, bounded optional
+text, and rejection of extreme numeric values.
+Schema contract tests cover closed adult-authentication and synchronization inputs,
+including bounded credentials, query maps, and mutation batches. They also cover
+closed bootstrap, household-administration, account-governance, pairing, boss,
+chore, and reward contracts with domain-specific collection and numeric limits.
+Observability contracts verify that diagnostic history is bounded and strips IDs
+and query strings, while server metrics expose route templates only and require a
+configured bearer secret.
+The public API error-policy suite verifies framework validation, database
+conflicts, domain rejections, authentication errors, and non-disclosing 500s
+without requiring a running HTTP server.
+Route-module contracts assert that the full boss, chore, and reward CRUD surface
+is registered behind explicit authentication and household-role dependencies.
+CI audits shipped application dependencies at High severity separately from the
+complete development toolchain at Critical severity, keeping upstream Android
+packaging findings visible while preventing them from being mistaken for APK
+runtime dependencies.
+Deployment tests verify that custom-format backups are checked before migration,
+only expired named dumps are pruned, and invalid retention settings fail before
+deployment changes. The operational restore drill then reruns the PostgreSQL
+lifecycle-erasure suite against an isolated restored database.
 
 Tests use explicit local midday dates where calendar behavior matters. This
 avoids midnight and UTC-offset ambiguity while still exercising the same local
