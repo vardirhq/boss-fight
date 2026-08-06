@@ -20,6 +20,7 @@ import { acceptedPrivacyNoticeVersion, assertAdultErasureConfirmation, assertChi
 import { runOperationalRetention } from './retention.js';
 import { apiSecurityHeaders, configuredCorsOrigins, normalizedEmail, trustProxyEnabled } from './apiSecurity.js';
 import { sessionExpiry, sessionIdleCutoff, sessionPolicy } from './sessionPolicy.js';
+import { optionalBoolean, optionalBooleanOrNull, requireObjectArray } from './requestValidation.js';
 
 type JsonObject = Record<string, unknown>;
 type AuthContext = { userId: string; sessionId: string };
@@ -73,16 +74,6 @@ function optionalNumberOrNull(value: unknown): number | null {
   return optionalNumber(value);
 }
 
-function optionalBoolean(value: unknown, fallback = false): boolean {
-  if (value === undefined || value === null) return fallback;
-  return Boolean(value);
-}
-
-function optionalBooleanOrNull(value: unknown): boolean | null {
-  if (value === undefined || value === null) return null;
-  return Boolean(value);
-}
-
 function requireObject(body: unknown): JsonObject {
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     throw new Error('Expected JSON object');
@@ -91,8 +82,7 @@ function requireObject(body: unknown): JsonObject {
 }
 
 function requireObjects(value: unknown, field: string): JsonObject[] {
-  if (!Array.isArray(value)) throw new Error(`${field} must be an array`);
-  return value.map((item) => requireObject(item));
+  return requireObjectArray(value, field);
 }
 
 function stringValue(value: unknown, field: string): string {
@@ -386,7 +376,8 @@ export async function buildApp() {
       return;
     }
     const validationMessages = [
-      'is required', 'must be an array', 'must be a string', 'Expected JSON object', 'Expected numeric value',
+      'is required', 'must be an array', 'must be a string', 'must contain at most', 'Expected JSON object',
+      'Expected numeric value', 'Expected boolean value',
       'Password must be at least', 'PIN must be at least', 'Invalid pairing role', 'Invalid invite role',
       'Unsupported redemption status', 'email must be valid', 'Household name confirmation does not match',
       'Account email confirmation does not match', 'Invalid or expired password reset token',
@@ -2022,7 +2013,7 @@ export async function buildApp() {
     const householdId = requireString(body.householdId, 'householdId');
     const auth = await requireHouseholdPrincipal(request, householdId);
 
-    const mutations = Array.isArray(body.mutations) ? body.mutations : [];
+    const mutations = requireObjectArray(body.mutations, 'mutations');
     const results: JsonObject[] = [];
 
     for (const mutation of mutations) {

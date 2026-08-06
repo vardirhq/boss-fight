@@ -9,6 +9,8 @@ increasing Android version codes for install/update compatibility.
 
 ### Added
 
+- Reject coerced boolean request values and cap configuration and mutation arrays
+  at 200 objects before processing.
 - Bound each synchronized event stream to 250 rows per response and continue
   through independent cursor pages until the device is caught up.
 - Avoid retransmitting unchanged household, fighter, boss, and chore

@@ -24,7 +24,8 @@ bounded event pagination and independent continuation signals, and secure
 credential selection. Incremental event-cache tests cover deduplication and
 independent cursor advancement. The server suite covers synchronization conflicts,
 mutation processing, reward integrity, household governance, and migration
-verification.
+verification. Request-validation tests cover strict booleans, object-only arrays,
+and request fan-out limits.
 
 Tests use explicit local midday dates where calendar behavior matters. This
 avoids midnight and UTC-offset ambiguity while still exercising the same local
