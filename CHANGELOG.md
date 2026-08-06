@@ -21,6 +21,8 @@ increasing Android version codes for install/update compatibility.
   a dedicated token-lifecycle route module.
 - Extract bounded synchronization reads and independently committed writes into
   dedicated route modules with explicit principal and domain dependencies.
+- Extract authentication, credential hashing, session lifecycle, account profile,
+  and adult erasure into independently tested security boundaries.
 - Upgrade Vite and its React plugin, refresh vulnerable transitive build tools,
   split account/management screens from the initial bundle, and enforce a High
   severity audit gate for dependencies shipped in the app.
