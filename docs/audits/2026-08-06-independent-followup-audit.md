@@ -20,7 +20,8 @@
 | BK-003 | Remediated | An optimistic voucher now adopts the id of the mutation that creates its server row, so the later "mark used" addresses a row the server can resolve. Vouchers carrying the pre-fix local id are no longer sent, so they cannot become a permanently quarantined conflict. |
 | BK-006 | Remediated | The voucher toast reads from the bilingual catalogue (`voucherUsed`, `voucherUsedFlash`). A source guard asserts no `flash()` call takes a string literal, and fails if one is reintroduced. |
 | BK-008 | Remediated | Both families are bundled as unmodified latin/latin-ext subsets under `public/fonts` with their SIL OFL 1.1 licences, declared with `@font-face`, and the CSP no longer admits any font or style origin. Verified in a real browser with every non-bundle request blocked: both families load, no external request is attempted, and no CSP violation is raised. |
-| BK-004, BK-005, BK-007, BK-009 – BK-013 | Open | See the individual findings below. |
+| BK-004 | Partly remediated | Login and registration now carry route limits, and adult passwords have the failed-attempt lockout child PINs already had (migration `0008`), cleared by a password reset so guessing cannot hold an owner out. A locked account, an unknown address, and a wrong password are reported identically. **Registration still returns 409 for a duplicate address**, so account existence remains observable; closing that needs an onboarding change (registration stops returning a session, confirmation moves to email) and is a product decision, not a security fix. |
+| BK-005, BK-007, BK-009 – BK-013 | Open | See the individual findings below. |
 
 ## 1. Executive summary
 

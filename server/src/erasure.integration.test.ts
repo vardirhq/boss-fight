@@ -34,6 +34,11 @@ test('PostgreSQL lifecycle erasure preserves only the documented records', {
 
     process.env.DATABASE_URL = databaseUrl.toString();
     process.env.LOG_LEVEL = 'silent';
+    // Every request here shares one source address, so the production per-IP limits
+    // would throttle the suite itself. Route limits are asserted separately against
+    // the registered route options; this run exercises the account-level lockout.
+    process.env.ADULT_LOGIN_RATE_LIMIT_MAX = '500';
+    process.env.REGISTRATION_RATE_LIMIT_MAX = '500';
     const server = await import('./index.js');
     const dbModule = await import('./db.js');
     appSql = dbModule.sql;
@@ -343,6 +348,42 @@ test('PostgreSQL lifecycle erasure preserves only the documented records', {
     assert.equal(retainedAuthorization.authorized_by_user_id, null);
     assert.equal(retainedAuthorization.privacy_notice_version, '2026-08-05.4');
 
+    // Adult passwords now carry the failed-attempt lockout that child PINs have had.
+    const lockout = await register('lockout@example.com', 'Lockout Parent');
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      assert.equal((await call('POST', '/api/auth/login', undefined, {
+        email: 'lockout@example.com', password: 'wrong-password',
+      })).status, 401);
+    }
+    const [locked] = await database`
+      select failed_login_attempts, login_locked_until from users where id = ${lockout.userId}
+    `;
+    assert.equal(Number(locked.failed_login_attempts), 10);
+    assert.ok(locked.login_locked_until, 'reaching the threshold must lock the account');
+
+    // While locked the real password is refused, and refused identically to an address
+    // that does not exist — the lock must not become an account oracle.
+    const duringLock = await call('POST', '/api/auth/login', undefined, {
+      email: 'lockout@example.com', password: 'integration-password',
+    });
+    assert.equal(duringLock.status, 401);
+    const unknownAccount = await call('POST', '/api/auth/login', undefined, {
+      email: 'no-such-parent@example.com', password: 'integration-password',
+    });
+    assert.equal(unknownAccount.status, 401);
+    assert.deepEqual(duringLock.body, unknownAccount.body);
+
+    // The lock is time-bounded, so guessing cannot hold an owner out of their household.
+    await database`update users set login_locked_until = now() - interval '1 minute' where id = ${lockout.userId}`;
+    assert.equal((await call('POST', '/api/auth/login', undefined, {
+      email: 'lockout@example.com', password: 'integration-password',
+    })).status, 200);
+    const [cleared] = await database`
+      select failed_login_attempts, login_locked_until from users where id = ${lockout.userId}
+    `;
+    assert.equal(Number(cleared.failed_login_attempts), 0);
+    assert.equal(cleared.login_locked_until, null);
+
     const recovery = await register('recovery@example.com', 'Recovery Parent');
     const recoverySecondLogin = await call('POST', '/api/auth/login', undefined, {
       email: 'recovery@example.com', password: 'integration-password',
@@ -358,10 +399,21 @@ test('PostgreSQL lifecycle erasure preserves only the documented records', {
       insert into password_reset_tokens (user_id, token_hash, expires_at)
       values (${recovery.userId}, ${createHash('sha256').update(resetToken).digest('hex')}, now() + interval '30 minutes')
     `;
+    // Proving control of the mailbox must clear a lock, so an account someone else
+    // locked by guessing is recoverable without waiting it out.
+    await database`
+      update users set failed_login_attempts = 10, login_locked_until = now() + interval '1 hour'
+      where id = ${recovery.userId}
+    `;
     const reset = await call('POST', '/api/auth/password-reset/confirm', undefined, {
       token: resetToken, password: 'new-integration-password',
     });
     assert.equal(reset.status, 200);
+    const [recovered] = await database`
+      select failed_login_attempts, login_locked_until from users where id = ${recovery.userId}
+    `;
+    assert.equal(Number(recovered.failed_login_attempts), 0);
+    assert.equal(recovered.login_locked_until, null);
     assert.equal((await call('GET', '/api/me', recovery.token)).status, 401);
     assert.equal((await call('GET', '/api/me', String(recoverySecondLogin.body.session.token))).status, 401);
     assert.equal((await call('POST', '/api/auth/login', undefined, {

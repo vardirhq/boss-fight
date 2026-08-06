@@ -21,6 +21,10 @@ create table users (
   updated_at        timestamptz not null default now(),
   deleted_at        timestamptz,
   version           integer not null default 1,
+  -- Consecutive password failures and the short lock they trigger, mirroring the
+  -- child PIN policy in fighter_credentials.
+  failed_login_attempts integer not null default 0,
+  login_locked_until    timestamptz,
 
   constraint users_adult_has_email
     check (kind <> 'adult' or email is not null),
