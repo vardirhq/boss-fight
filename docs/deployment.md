@@ -172,6 +172,26 @@ intentionally not automated: selecting and overwriting a production database
 requires an explicit operator decision. Record periodic restore drills and verify
 row counts plus `/health` and authenticated sync after each drill.
 
+## Monitoring and alerts
+
+Set a unique `METRICS_TOKEN` in `.env.production` and have the private monitoring
+agent scrape `http://127.0.0.1:3002/metrics` with that bearer token. The endpoint
+uses route templates rather than concrete URLs, so household and account IDs do
+not become metric labels. API responses also include `X-Request-Id`; ask users for
+that value or their exported in-app diagnostics when investigating a failure.
+
+Alert on the following signals:
+
+- production `/health` unavailable for two consecutive minutes;
+- any sustained `server_error` rate above 2% for five minutes;
+- any mail-delivery failures or operational-retention failures in structured logs;
+- PostgreSQL connection exhaustion, storage above 80%, or replication/backup failure;
+- a failed GitHub deployment or rollback workflow.
+
+Route alerts to the repository/hosting operator and keep the current escalation
+contact in the private monitoring configuration. The repository cannot choose the
+organization's paging provider or recipients; those remain an operator decision.
+
 ## Android Release Flow
 
 Normal feature and fix pull requests add user-facing notes beneath

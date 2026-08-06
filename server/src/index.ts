@@ -34,6 +34,7 @@ import {
   pinSchema, registerSchema, resetConfirmSchema, rewardCreateSchema, rewardParamsSchema,
   rewardPatchSchema, sessionParamsSchema, suspendSchema, syncPullSchema, syncPushSchema, tokenSchema,
 } from './routeSchemas.js';
+import { metricsAuthorized, recordRequest, renderMetrics } from './observability.js';
 
 type JsonObject = Record<string, unknown>;
 type AuthContext = { userId: string; sessionId: string };
@@ -323,8 +324,13 @@ export async function buildApp() {
     origin: configuredCorsOrigins(process.env.CORS_ORIGIN, production),
   });
 
-  app.addHook('onSend', async (_request, reply) => {
+  app.addHook('onSend', async (request, reply) => {
     for (const [name, value] of Object.entries(apiSecurityHeaders)) reply.header(name, value);
+    reply.header('x-request-id', request.id);
+  });
+
+  app.addHook('onResponse', async (request, reply) => {
+    recordRequest(request.method, request.routeOptions.url ?? 'unmatched', reply.statusCode);
   });
 
   await app.register(rateLimit, {
@@ -406,6 +412,14 @@ export async function buildApp() {
     }
     request.log.error({ err: error }, 'Unhandled API error');
     reply.code(500).send({ error: 'Internal server error', code: 'internal_error' });
+  });
+
+  app.get('/metrics', async (request, reply) => {
+    if (!metricsAuthorized(process.env.METRICS_TOKEN, request.headers.authorization)) {
+      reply.code(404).send({ error: 'Not found', code: 'not_found' });
+      return;
+    }
+    reply.type('text/plain; version=0.0.4').send(renderMetrics());
   });
 
   app.get('/health', async () => {

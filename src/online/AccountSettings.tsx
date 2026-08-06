@@ -4,6 +4,7 @@ import { useGame } from '../store/GameContext';
 import { useOnline, type OnlineError } from './OnlineContext';
 import { createBootstrapSnapshot, serverConfigToGameState, serverSyncToGameState } from './gameSync';
 import { acceptHouseholdInvite, ApiError, confirmEmailVerification, confirmPasswordReset, createHouseholdDevicePairing, eraseAdultAccount, eraseHousehold, getAccountSessions, getHouseholdExport, inviteParent, requestPasswordReset, resendEmailVerification, revokeAccountSession, type AccountSession } from './api';
+import { clearDiagnostics, diagnosticExport } from './diagnostics';
 
 const field: React.CSSProperties = {
   width: '100%', boxSizing: 'border-box', background: '#0f1420', border: '1px solid #333c50', borderRadius: 12,
@@ -51,7 +52,7 @@ const COPY = {
     eraseAccount: 'Slett voksenkontoen permanent', eraseAccountBody: 'Sletter e-post, navn, innlogging, enheter, medlemskap og spilleridentitet. Du må først slette familien eller gi eierrollen til en annen eier. Dette kan ikke angres.', confirmEmail: 'Skriv e-postadressen nøyaktig', eraseAccountButton: 'Slett voksenkontoen', erasingAccount: 'Sletter konto…', eraseAccountFailed: 'Kontoen kunne ikke slettes. Kontroller e-post og passord, og sørg for at alle familier har en annen eier.',
     sessions: 'Innloggede enheter', sessionsBody: 'Se aktive innlogginger og avslutt dem du ikke kjenner igjen.', currentSession: 'Denne enheten', sessionFallback: 'Nettleser eller ukjent enhet', lastUsed: 'Sist brukt', sessionExpires: 'Utløper', revokeSession: 'Logg ut enheten', loadingSessions: 'Henter innlogginger…', sessionsFailed: 'Innloggingene kunne ikke hentes.',
     joinHousehold: 'Bytt eller bli med i en annen familie', logout: 'Logg ut',
-    advanced: 'Teknisk informasjon', pending: 'endringer venter', rejected: 'avviste endringer krever oppfølging', revision: 'Konfigurasjonsversjon', lastSync: 'Sist lagret', syncNow: 'Synkroniser nå', role: 'Tilgang',
+    advanced: 'Teknisk informasjon', pending: 'endringer venter', rejected: 'avviste endringer krever oppfølging', revision: 'Konfigurasjonsversjon', lastSync: 'Sist lagret', syncNow: 'Synkroniser nå', role: 'Tilgang', downloadDiagnostics: 'Last ned diagnostikk', clearDiagnostics: 'Tøm diagnostikk', diagnosticsNote: 'Inneholder tidspunkt, feilkoder og forespørsels-ID-er, men ikke navn, e-post, innhold eller innlogging.',
     fighterNameRequired: 'Gi alle spillerne et navn før familien opprettes.', joinFailed: 'Invitasjonen kunne ikke godtas.',
     errors: {
       'invalid-credentials': 'E-post eller passord er feil.', 'account-exists': 'Det finnes allerede en konto med denne e-postadressen.',
@@ -85,7 +86,7 @@ const COPY = {
     eraseAccount: 'Permanently erase adult account', eraseAccountBody: 'Deletes your email, name, login, devices, memberships, and fighter identity. You must first erase the family or transfer ownership to another owner. This cannot be undone.', confirmEmail: 'Enter the exact email address', eraseAccountButton: 'Erase adult account', erasingAccount: 'Erasing account…', eraseAccountFailed: 'The account could not be erased. Check the email and password, and ensure every family has another owner.',
     sessions: 'Signed-in devices', sessionsBody: 'Review active sign-ins and end any you do not recognize.', currentSession: 'This device', sessionFallback: 'Browser or unknown device', lastUsed: 'Last used', sessionExpires: 'Expires', revokeSession: 'Sign out device', loadingSessions: 'Loading sign-ins…', sessionsFailed: 'Sign-ins could not be loaded.',
     joinHousehold: 'Switch or join another family', logout: 'Sign out',
-    advanced: 'Technical information', pending: 'changes waiting', rejected: 'rejected changes need attention', revision: 'Configuration revision', lastSync: 'Last saved', syncNow: 'Sync now', role: 'Access',
+    advanced: 'Technical information', pending: 'changes waiting', rejected: 'rejected changes need attention', revision: 'Configuration revision', lastSync: 'Last saved', syncNow: 'Sync now', role: 'Access', downloadDiagnostics: 'Download diagnostics', clearDiagnostics: 'Clear diagnostics', diagnosticsNote: 'Contains timestamps, error codes, and request IDs, but no names, email, content, or credentials.',
     fighterNameRequired: 'Name every fighter before creating the family.', joinFailed: 'The invitation could not be accepted.',
     errors: {
       'invalid-credentials': 'The email or password is incorrect.', 'account-exists': 'An account already exists for this email address.',
@@ -345,6 +346,16 @@ export function AccountSettings({ lang, setup = false }: { lang: Lang; setup?: b
     } finally {
       setExportingData(false);
     }
+  }
+
+  function downloadDiagnostics() {
+    const blob = new Blob([`${JSON.stringify(diagnosticExport(), null, 2)}\n`], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `boss-kamp-diagnostics-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
   }
 
   async function eraseFamilyData() {
@@ -644,6 +655,9 @@ export function AccountSettings({ lang, setup = false }: { lang: Lang; setup?: b
           {state.role && <>{copy.role}: {state.role}</>}
         </div>
         <button disabled={busy} onClick={() => void synchronize()} style={{ ...secondary, marginTop: 10 }}>{copy.syncNow}</button>
+        <p style={{ color: '#7D8698', fontSize: 11.5, lineHeight: 1.5, margin: '12px 0 0' }}>{copy.diagnosticsNote}</p>
+        <button onClick={downloadDiagnostics} style={{ ...secondary, marginTop: 8 }}>{copy.downloadDiagnostics}</button>
+        <button onClick={clearDiagnostics} style={{ ...secondary, marginTop: 8 }}>{copy.clearDiagnostics}</button>
       </details>
 
       {isParent && <details style={{ ...card, ...details }}>

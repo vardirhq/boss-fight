@@ -130,7 +130,7 @@ landed but the recommendation is not yet satisfied in full.
 | BF-018 | Remediated | Database writes return explicit results; fallback, corrupt-restore, and failed-write states remain visibly announced with retry and SQLite backup actions, with quota and corruption regression tests. |
 | BF-019 | Open | Backend route/service decomposition remains. |
 | BF-020 | Remediated | Shared validators reject coercion, bound inputs, and validate avatars. Non-coercing closed schemas cover authentication, lifecycle, bootstrap, household administration, invitations/pairing, gameplay configuration, and sync routes; collections and domain-specific numeric values are bounded. |
-| BF-021 | Open | Client and operational observability remain. |
+| BF-021 | Remediated | The native app retains and exports a bounded privacy-safe sync/API history with correlation IDs. API responses and structured logs share request IDs, an authenticated Prometheus endpoint exposes route-template outcome counters, and deployment documentation defines health, server-error, mail, retention, database, backup, and deploy alert thresholds. Monitoring provider and recipients remain an organization-specific operator choice. |
 | BF-022 | Open | Planned build-dependency upgrades remain. |
 
 ## 6. Detailed findings

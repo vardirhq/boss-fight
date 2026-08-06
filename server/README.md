@@ -48,6 +48,7 @@ DATABASE_URL=postgresql://boss_kamp_app:<password>@127.0.0.1:5432/boss_kamp
 CORS_ORIGIN=https://boss-kamp.vardir.no,http://localhost,https://localhost,capacitor://localhost
 TRUST_PROXY=true
 LOG_LEVEL=info
+METRICS_TOKEN=<long-random-monitoring-secret>
 SESSION_DAYS=90
 SESSION_IDLE_DAYS=30
 RETENTION_INVITES_DAYS=30
@@ -67,6 +68,11 @@ SMTP_REPLY_TO=chris@vardir.no
 ```
 
 Never commit environment files.
+
+Every API response includes `X-Request-Id`, matching the structured Fastify log
+entry. `GET /metrics` exposes Prometheus text only when called with
+`Authorization: Bearer <METRICS_TOKEN>`; when the token is unset or incorrect the
+endpoint behaves as not found.
 
 Production requires an explicit comma-separated CORS allowlist; wildcard origins
 are rejected. The production Compose file supplies the web and packaged-app

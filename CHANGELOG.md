@@ -9,6 +9,8 @@ increasing Android version codes for install/update compatibility.
 
 ### Added
 
+- Add privacy-safe, bounded in-app diagnostics export, API request correlation,
+  authenticated Prometheus metrics, and documented operational alert thresholds.
 - Exercise concurrent final-blow submissions against PostgreSQL in CI and verify
   that only one completion, victory, and payout can commit.
 - Apply non-coercing, closed request schemas to adult registration/login and

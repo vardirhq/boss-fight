@@ -1,3 +1,5 @@
+import { recordDiagnostic } from './diagnostics';
+
 const API_BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '')
   ?? 'https://boss-kamp.vardir.no';
 
@@ -260,11 +262,17 @@ async function request<T>(path: string, init: RequestInit = {}, token?: string |
       },
     });
   } catch (error) {
+    recordDiagnostic({ area: 'api', operation: path, outcome: 'offline', code: 'network' });
     throw new ApiError(error instanceof Error ? error.message : 'Network unavailable', 'network');
   }
 
   const payload = await response.json().catch(() => ({})) as { error?: unknown; code?: unknown };
   if (!response.ok) {
+    recordDiagnostic({
+      area: 'api', operation: path, outcome: 'error',
+      code: typeof payload.code === 'string' ? payload.code : `http_${response.status}`,
+      requestId: response.headers.get('x-request-id') ?? undefined,
+    });
     throw new ApiError(
       typeof payload.error === 'string' ? payload.error : `Request failed (${response.status})`,
       errorKind(response.status),

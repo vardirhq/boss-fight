@@ -35,6 +35,9 @@ Schema contract tests cover closed adult-authentication and synchronization inpu
 including bounded credentials, query maps, and mutation batches. They also cover
 closed bootstrap, household-administration, account-governance, pairing, boss,
 chore, and reward contracts with domain-specific collection and numeric limits.
+Observability contracts verify that diagnostic history is bounded and strips IDs
+and query strings, while server metrics expose route templates only and require a
+configured bearer secret.
 
 Tests use explicit local midday dates where calendar behavior matters. This
 avoids midnight and UTC-offset ambiguity while still exercising the same local
