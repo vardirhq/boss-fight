@@ -207,6 +207,7 @@ jobs:
           cp "$APK_PATH" boss-kamp-debug.apk
 
       - name: Exercise native offline, restart, upgrade, and accessibility journey
+        if: github.event_name == 'workflow_dispatch'
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
           api-level: 28

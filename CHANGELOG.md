@@ -9,6 +9,8 @@ increasing Android version codes for install/update compatibility.
 
 ### Added
 
+- Split native Android validation so pull requests build the debug APK quickly;
+  the slow emulator lifecycle/accessibility journey is dispatched separately.
 - Verify every pre-deploy database dump, automatically expire backups after a
   bounded retention window, and document isolated restore/erasure drills.
 - Add privacy-safe, bounded in-app diagnostics export, API request correlation,
