@@ -26,6 +26,8 @@ independent cursor advancement. The server suite covers synchronization conflict
 mutation processing, reward integrity, household governance, and migration
 verification. Request-validation tests cover strict booleans, object-only arrays,
 request fan-out limits, and bounded avatar encoding, MIME signatures, and hashes.
+Numeric coverage distinguishes strict JSON numbers from canonical integer query
+parameters and rejects negative, fractional, and padded sync positions.
 
 Tests use explicit local midday dates where calendar behavior matters. This
 avoids midnight and UTC-offset ambiguity while still exercising the same local
