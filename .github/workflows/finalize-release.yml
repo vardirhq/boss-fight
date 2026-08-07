@@ -6,6 +6,12 @@ on:
       - closed
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      pull_request:
+        description: 'Number of an already-merged release pull request, for example 89. Use this to finalize a release whose merge event never reached Actions.'
+        required: true
+        type: string
 
 permissions:
   actions: write
@@ -14,17 +20,63 @@ permissions:
 jobs:
   finalize:
     if: >-
-      github.event.pull_request.merged == true &&
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged == true &&
       startsWith(github.event.pull_request.head.ref, 'release/v') &&
-      github.event.pull_request.head.repo.full_name == github.repository
+      github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
     steps:
+      - name: Resolve release pull request
+        id: pull_request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event_name == 'workflow_dispatch' && inputs.pull_request || github.event.pull_request.number }}
+        shell: bash
+        run: |
+          FIELDS="$(gh pr view "$PR_NUMBER" \
+            --json merged,mergeCommit,headRefName,baseRefName,isCrossRepository)"
+
+          MERGED="$(jq -r '.merged' <<<"$FIELDS")"
+          MERGE_COMMIT="$(jq -r '.mergeCommit.oid // ""' <<<"$FIELDS")"
+          HEAD_BRANCH="$(jq -r '.headRefName' <<<"$FIELDS")"
+          BASE_BRANCH="$(jq -r '.baseRefName' <<<"$FIELDS")"
+          CROSS_REPOSITORY="$(jq -r '.isCrossRepository' <<<"$FIELDS")"
+
+          if [[ "$MERGED" != "true" ]]; then
+            echo "Pull request #$PR_NUMBER is not merged"
+            exit 1
+          fi
+
+          if [[ "$CROSS_REPOSITORY" != "false" ]]; then
+            echo "Pull request #$PR_NUMBER comes from a fork"
+            exit 1
+          fi
+
+          if [[ "$BASE_BRANCH" != "main" ]]; then
+            echo "Pull request #$PR_NUMBER targets $BASE_BRANCH, not main"
+            exit 1
+          fi
+
+          if [[ "$HEAD_BRANCH" != release/v* ]]; then
+            echo "Pull request #$PR_NUMBER is not a release branch, got $HEAD_BRANCH"
+            exit 1
+          fi
+
+          if [[ -z "$MERGE_COMMIT" ]]; then
+            echo "Pull request #$PR_NUMBER has no merge commit"
+            exit 1
+          fi
+
+          echo "head_branch=$HEAD_BRANCH" >> "$GITHUB_OUTPUT"
+          echo "merge_commit=$MERGE_COMMIT" >> "$GITHUB_OUTPUT"
+
       - name: Checkout release commit
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          ref: ${{ steps.pull_request.outputs.merge_commit }}
           fetch-depth: 0
 
       - name: Set up Node.js
@@ -39,7 +91,7 @@ jobs:
       - name: Resolve and validate release
         id: release
         env:
-          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+          HEAD_BRANCH: ${{ steps.pull_request.outputs.head_branch }}
         shell: bash
         run: |
           VERSION="$(node -p "require('./package.json').version")"
@@ -60,7 +112,7 @@ jobs:
       - name: Create release tag
         env:
           TAG: ${{ steps.release.outputs.tag }}
-          RELEASE_COMMIT: ${{ github.event.pull_request.merge_commit_sha }}
+          RELEASE_COMMIT: ${{ steps.pull_request.outputs.merge_commit }}
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
