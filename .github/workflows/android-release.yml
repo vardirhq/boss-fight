@@ -47,7 +47,7 @@ jobs:
             exit 1
           fi
           npm run release:check
-          npm run release:notes > release-notes.md
+          node scripts/release-metadata.mjs --notes > release-notes.md
           node scripts/release-metadata.mjs >> "$GITHUB_STEP_SUMMARY"
 
       - name: Install icon tooling

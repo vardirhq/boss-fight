@@ -50,6 +50,26 @@ test('release workflows use Node 22 and dispatch the signed build from its tag',
   assert.match(release, /GITHUB_REF_NAME.*RELEASE_TAG/);
 });
 
+test('release notes carry only the changelog, not npm lifecycle banners', async () => {
+  const release = await workflow('.github/workflows/android-release.yml');
+  assert.doesNotMatch(release, /npm run release:notes/);
+  assert.match(release, /node scripts\/release-metadata\.mjs --notes > release-notes\.md/);
+});
+
+test('finalize release can be replayed when a merge event never arrives', async () => {
+  const finalize = await workflow('.github/workflows/finalize-release.yml');
+  assert.match(finalize, /^ {2}workflow_dispatch:$/m);
+  assert.match(finalize, /^ {6}pull_request:$/m);
+  assert.match(finalize, /github\.event_name == 'workflow_dispatch' \|\|/);
+  assert.doesNotMatch(finalize, /github\.event\.pull_request\.(merge_commit_sha|head\.ref)\s*\}\}/);
+  assert.match(finalize, /ref: \$\{\{ steps\.pull_request\.outputs\.merge_commit \}\}/);
+  assert.match(finalize, /HEAD_BRANCH: \$\{\{ steps\.pull_request\.outputs\.head_branch \}\}/);
+  assert.match(finalize, /RELEASE_COMMIT: \$\{\{ steps\.pull_request\.outputs\.merge_commit \}\}/);
+  for (const guard of ['is not merged', 'comes from a fork', 'not main', 'is not a release branch', 'has no merge commit']) {
+    assert.ok(finalize.includes(guard), `finalize-release.yml must reject a pull request that ${guard}`);
+  }
+});
+
 test('debug APK installs beside release with a distinct identity and label', async () => {
   const debug = await workflow('.github/workflows/android-debug.yml');
   const release = await workflow('.github/workflows/android-release.yml');
